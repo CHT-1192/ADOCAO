@@ -1,0 +1,172 @@
+cmake_minimum_required(VERSION 3.20)
+project(ADOCAO VERSION 0.1.0 LANGUAGES CXX C)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ---- Dependencies via FetchContent ----
+include(FetchContent)
+
+# GLFW
+FetchContent_Declare(
+    glfw
+    GIT_REPOSITORY https://github.com/glfw/glfw.git
+    GIT_TAG 3.4
+    GIT_SHALLOW TRUE
+)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(glfw)
+
+# glm
+FetchContent_Declare(
+    glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG 1.0.1
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(glm)
+
+# nlohmann/json
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
+# Dear ImGui
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.91.9
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(imgui)
+
+# stb_image (single-header)
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG master
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(stb)
+
+# miniaudio (single-header)
+FetchContent_Declare(
+    miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG 0.11.22
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(miniaudio)
+
+# tinyfiledialogs (single-header C library)
+FetchContent_Declare(
+    tinyfiledialogs
+    GIT_REPOSITORY https://github.com/native-toolkit/tinyfiledialogs.git
+    GIT_TAG 2.9.3
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(tinyfiledialogs)
+
+# ---- Source files ----
+set(SOURCES
+    # Application layer
+    src/app/main.cpp
+    src/app/Application.h
+    src/app/Application.cpp
+    src/app/LauncherWindow.h
+    src/app/LauncherWindow.cpp
+    src/app/LoadingWindow.h
+    src/app/LoadingWindow.cpp
+    src/app/LevelLoader.h
+    src/app/LevelLoader.cpp
+    src/app/GameWindow.h
+    src/app/GameWindow.cpp
+
+    # OpenGL loader
+    src/glad/gl_core.h
+    src/glad/gl_core.cpp
+
+    # Level parser
+    src/level/LevelData.h
+    src/level/LevelData.cpp
+
+    # Easing
+    src/util/Easing.h
+
+    # Logger
+    src/util/Logger.h
+    src/util/Logger.cpp
+
+    # Render
+    src/render/Shader.h
+    src/render/Shader.cpp
+
+    # Camera
+    src/camera/Camera.h
+    src/camera/Camera.cpp
+
+    # Track
+    src/track/TileMesh.h
+    src/track/TileMesh.cpp
+)
+
+# ImGui sources
+set(IMGUI_SOURCES
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+)
+
+# stb_image (header-only, implementation in src/util/stb_impl.cpp)
+add_library(stb_image STATIC src/util/stb_impl.cpp)
+target_include_directories(stb_image PUBLIC ${stb_SOURCE_DIR})
+
+# tinyfiledialogs
+add_library(tinyfiledialogs STATIC ${tinyfiledialogs_SOURCE_DIR}/tinyfiledialogs.c)
+target_include_directories(tinyfiledialogs PUBLIC ${tinyfiledialogs_SOURCE_DIR})
+
+# ---- Main executable ----
+add_executable(adocao ${SOURCES} ${IMGUI_SOURCES})
+
+target_include_directories(adocao PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+    ${miniaudio_SOURCE_DIR}
+)
+
+target_link_libraries(adocao PRIVATE
+    glfw
+    glm::glm
+    nlohmann_json::nlohmann_json
+    stb_image
+    tinyfiledialogs
+)
+
+# Platform-specific
+if(WIN32)
+    target_link_libraries(adocao PRIVATE opengl32)
+    target_compile_definitions(adocao PRIVATE NOMINMAX)
+elseif(UNIX)
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(adocao PRIVATE OpenGL::GL)
+endif()
+
+# ---- Install ----
+install(TARGETS adocao RUNTIME DESTINATION bin)
+
+# ---- Copy example level ----
+file(COPY ${CMAKE_SOURCE_DIR}/../re_adojas/src/lib/example/level.adofai
+     DESTINATION ${CMAKE_BINARY_DIR})

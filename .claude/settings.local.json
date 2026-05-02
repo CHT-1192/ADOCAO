@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(winget search *)",
+      "Bash(git ls-remote *)"
+    ]
+  }
+}

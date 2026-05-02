@@ -1,0 +1,138 @@
+#pragma once
+
+// Minimal OpenGL 3.3 Core loader using MinGW/mesa glcorearb.h types.
+// On Linux, GL/glcorearb.h is provided by mesa.
+// On Windows (MinGW), it comes with the MinGW-w64 distribution.
+#include <GL/glcorearb.h>
+
+// Shader
+extern PFNGLCREATESHADERPROC  glad_CreateShader;
+extern PFNGLSHADERSOURCEPROC  glad_ShaderSource;
+extern PFNGLCOMPILESHADERPROC glad_CompileShader;
+extern PFNGLGETSHADERIVPROC   glad_GetShaderiv;
+extern PFNGLGETSHADERINFOLOGPROC glad_GetShaderInfoLog;
+extern PFNGLDELETESHADERPROC  glad_DeleteShader;
+extern PFNGLCREATEPROGRAMPROC glad_CreateProgram;
+extern PFNGLATTACHSHADERPROC  glad_AttachShader;
+extern PFNGLLINKPROGRAMPROC   glad_LinkProgram;
+extern PFNGLGETPROGRAMIVPROC  glad_GetProgramiv;
+extern PFNGLGETPROGRAMINFOLOGPROC glad_GetProgramInfoLog;
+extern PFNGLUSEPROGRAMPROC    glad_UseProgram;
+extern PFNGLDELETEPROGRAMPROC glad_DeleteProgram;
+
+// Uniforms
+extern PFNGLGETUNIFORMLOCATIONPROC glad_GetUniformLocation;
+extern PFNGLUNIFORM1IPROC     glad_Uniform1i;
+extern PFNGLUNIFORM1FPROC     glad_Uniform1f;
+extern PFNGLUNIFORM2FPROC     glad_Uniform2f;
+extern PFNGLUNIFORM3FPROC     glad_Uniform3f;
+extern PFNGLUNIFORM4FPROC     glad_Uniform4f;
+extern PFNGLUNIFORMMATRIX4FVPROC glad_UniformMatrix4fv;
+
+// VAO / VBO
+extern PFNGLGENVERTEXARRAYSPROC    glad_GenVertexArrays;
+extern PFNGLBINDVERTEXARRAYPROC    glad_BindVertexArray;
+extern PFNGLDELETEVERTEXARRAYSPROC glad_DeleteVertexArrays;
+extern PFNGLGENBUFFERSPROC         glad_GenBuffers;
+extern PFNGLBINDBUFFERPROC         glad_BindBuffer;
+extern PFNGLBUFFERDATAPROC         glad_BufferData;
+extern PFNGLDELETEBUFFERSPROC      glad_DeleteBuffers;
+extern PFNGLVERTEXATTRIBPOINTERPROC glad_VertexAttribPointer;
+extern PFNGLENABLEVERTEXATTRIBARRAYPROC  glad_EnableVertexAttribArray;
+extern PFNGLDISABLEVERTEXATTRIBARRAYPROC glad_DisableVertexAttribArray;
+
+// Textures
+extern PFNGLGENTEXTURESPROC    glad_GenTextures;
+extern PFNGLBINDTEXTUREPROC    glad_BindTexture;
+extern PFNGLTEXIMAGE2DPROC     glad_TexImage2D;
+extern PFNGLTEXPARAMETERIPROC  glad_TexParameteri;
+extern PFNGLGENERATEMIPMAPPROC glad_GenerateMipmap;
+extern PFNGLDELETETEXTURESPROC glad_DeleteTextures;
+extern PFNGLACTIVETEXTUREPROC  glad_ActiveTexture;
+
+// Framebuffers
+extern PFNGLGENFRAMEBUFFERSPROC        glad_GenFramebuffers;
+extern PFNGLBINDFRAMEBUFFERPROC        glad_BindFramebuffer;
+extern PFNGLFRAMEBUFFERTEXTURE2DPROC   glad_FramebufferTexture2D;
+extern PFNGLCHECKFRAMEBUFFERSTATUSPROC glad_CheckFramebufferStatus;
+extern PFNGLDELETEFRAMEBUFFERSPROC     glad_DeleteFramebuffers;
+
+// Rendering
+extern PFNGLVIEWPORTPROC     glad_Viewport;
+extern PFNGLCLEARPROC        glad_Clear;
+extern PFNGLCLEARCOLORPROC   glad_ClearColor;
+extern PFNGLDRAWARRAYSPROC   glad_DrawArrays;
+extern PFNGLDRAWELEMENTSPROC glad_DrawElements;
+extern PFNGLENABLEPROC       glad_Enable;
+extern PFNGLDISABLEPROC      glad_Disable;
+extern PFNGLBLENDFUNCPROC    glad_BlendFunc;
+extern PFNGLLINEWIDTHPROC    glad_LineWidth;
+extern PFNGLDEPTHFUNCPROC    glad_DepthFunc;
+
+// Misc
+extern PFNGLGETSTRINGPROC glad_GetString;
+extern PFNGLGETERRORPROC  glad_GetError;
+
+bool loadGLCore();
+
+// Map standard GL names to glad_ prefixed pointers
+#define glCreateShader          glad_CreateShader
+#define glShaderSource          glad_ShaderSource
+#define glCompileShader         glad_CompileShader
+#define glGetShaderiv           glad_GetShaderiv
+#define glGetShaderInfoLog      glad_GetShaderInfoLog
+#define glDeleteShader          glad_DeleteShader
+#define glCreateProgram         glad_CreateProgram
+#define glAttachShader          glad_AttachShader
+#define glLinkProgram           glad_LinkProgram
+#define glGetProgramiv          glad_GetProgramiv
+#define glGetProgramInfoLog     glad_GetProgramInfoLog
+#define glUseProgram            glad_UseProgram
+#define glDeleteProgram         glad_DeleteProgram
+
+#define glGetUniformLocation    glad_GetUniformLocation
+#define glUniform1i             glad_Uniform1i
+#define glUniform1f             glad_Uniform1f
+#define glUniform2f             glad_Uniform2f
+#define glUniform3f             glad_Uniform3f
+#define glUniform4f             glad_Uniform4f
+#define glUniformMatrix4fv      glad_UniformMatrix4fv
+
+#define glGenVertexArrays       glad_GenVertexArrays
+#define glBindVertexArray       glad_BindVertexArray
+#define glDeleteVertexArrays    glad_DeleteVertexArrays
+#define glGenBuffers            glad_GenBuffers
+#define glBindBuffer            glad_BindBuffer
+#define glBufferData            glad_BufferData
+#define glDeleteBuffers         glad_DeleteBuffers
+#define glVertexAttribPointer   glad_VertexAttribPointer
+#define glEnableVertexAttribArray    glad_EnableVertexAttribArray
+#define glDisableVertexAttribArray   glad_DisableVertexAttribArray
+
+#define glGenTextures           glad_GenTextures
+#define glBindTexture           glad_BindTexture
+#define glTexImage2D            glad_TexImage2D
+#define glTexParameteri         glad_TexParameteri
+#define glGenerateMipmap        glad_GenerateMipmap
+#define glDeleteTextures        glad_DeleteTextures
+#define glActiveTexture         glad_ActiveTexture
+
+#define glGenFramebuffers       glad_GenFramebuffers
+#define glBindFramebuffer       glad_BindFramebuffer
+#define glFramebufferTexture2D  glad_FramebufferTexture2D
+#define glCheckFramebufferStatus glad_CheckFramebufferStatus
+#define glDeleteFramebuffers    glad_DeleteFramebuffers
+
+#define glViewport              glad_Viewport
+#define glClear                 glad_Clear
+#define glClearColor            glad_ClearColor
+#define glDrawArrays            glad_DrawArrays
+#define glDrawElements          glad_DrawElements
+#define glEnable                glad_Enable
+#define glDisable               glad_Disable
+#define glBlendFunc             glad_BlendFunc
+#define glLineWidth             glad_LineWidth
+#define glDepthFunc             glad_DepthFunc
+
+#define glGetString             glad_GetString
+#define glGetError              glad_GetError
