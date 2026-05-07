@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(ADOCAO VERSION 0.1.0 LANGUAGES CXX C)
 
+option(ADOCAO_PORTABLE "Build a static-linked portable executable" OFF)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -182,7 +184,6 @@ if(WIN32)
 elseif(UNIX AND NOT APPLE)
     find_package(OpenGL REQUIRED)
     target_link_libraries(adocao PRIVATE OpenGL::GL ${CMAKE_DL_LIBS})
-    # Ensure Wayland is available (GLFW auto-detects)
     find_package(PkgConfig QUIET)
     if(PKG_CONFIG_FOUND)
         pkg_check_modules(WAYLAND wayland-client wayland-egl IMPORTED_TARGET QUIET)
@@ -190,6 +191,16 @@ elseif(UNIX AND NOT APPLE)
     if(WAYLAND_FOUND)
         message(STATUS "Wayland found — GLFW will support Wayland")
     endif()
+endif()
+
+# Static linking for portable builds
+if(ADOCAO_PORTABLE)
+    if(MINGW)
+        target_link_options(adocao PRIVATE -static -static-libgcc -static-libstdc++)
+    elseif(MSVC)
+        set_property(TARGET adocao PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+    set_target_properties(adocao PROPERTIES OUTPUT_NAME "ADOCAO-Portable")
 endif()
 
 # ---- Install ----

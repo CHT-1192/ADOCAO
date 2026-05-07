@@ -185,6 +185,7 @@ void showGameWindow(const LauncherConfig& cfg, std::unique_ptr<LevelData> level)
 
     // ---- Main loop ----
     double lastFrameTime = glfwGetTime();
+    constexpr double targetFrameTime = 1.0 / 120.0;  // 120 FPS cap
     bool wasSpacePressed = false;
 
     while (!glfwWindowShouldClose(window)) {
@@ -192,9 +193,15 @@ void showGameWindow(const LauncherConfig& cfg, std::unique_ptr<LevelData> level)
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, GLFW_TRUE);
 
-        // Delta time
+        // Delta time with FPS cap
         double now = glfwGetTime();
-        float deltaMs = (float)((now - lastFrameTime) * 1000.0);
+        double elapsed = now - lastFrameTime;
+        if (elapsed < targetFrameTime && elapsed > 0) {
+            Sleep((DWORD)((targetFrameTime - elapsed) * 1000.0));
+            now = glfwGetTime();
+            elapsed = now - lastFrameTime;
+        }
+        float deltaMs = (float)(elapsed * 1000.0);
         lastFrameTime = now;
         if (deltaMs > 100.0f) deltaMs = 100.0f;  // cap for tab-out
 

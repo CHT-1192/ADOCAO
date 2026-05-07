@@ -5,6 +5,11 @@
 #include <cmath>
 #include <map>
 #include <tuple>
+#include <unordered_map>
+
+// Geometry cache (persists across builds)
+struct CachedGeo { std::vector<float> interleaved; std::vector<unsigned> indices; unsigned idxCount=0; };
+static std::unordered_map<std::string, CachedGeo> s_geoCache;
 
 // ---- TileMesh ----
 
@@ -66,34 +71,54 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         auto [sa, ea, mid] = key;
         float startAngle = sa / 100.0f, endAngle = ea / 100.0f;
 
-        // Generate local-space geometry for this shape (once)
-        sc.clear();
-        if (mid)
-            createMidSpinMesh(endAngle, sc);
-        else
-            createTileMesh(startAngle, endAngle, sc);
+        // Cache key = shape params + colors
+        char kbuf[64];
+        snprintf(kbuf, sizeof(kbuf), "tile_%d_%d_%d_%s_%s", sa, ea, (int)mid,
+                 fillColorHex.c_str(), strokeColorHex.c_str());
+        std::string cacheKey(kbuf);
 
-        // Remap colors + offset outline Z
-        for (size_t ci = 0, vi = 0; ci < sc.colors.size(); ci += 3, vi += 3) {
-            if (sc.colors[ci] == 0.0f) {
-                sc.colors[ci]=outR; sc.colors[ci+1]=outG; sc.colors[ci+2]=outB;
-                sc.verts[vi + 2] -= 0.001f;
-            } else {
-                sc.colors[ci]=fillR; sc.colors[ci+1]=fillG; sc.colors[ci+2]=fillB;
-            }
-        }
-
-        // Interleave vertex position + color: [x,y,z, r,g,b, ...]
-        size_t vc = sc.verts.size() / 3;
         std::vector<float> interleaved;
-        interleaved.reserve(vc * 6);
-        for (size_t vi = 0; vi < vc; vi++) {
-            interleaved.push_back(sc.verts[vi*3]);
-            interleaved.push_back(sc.verts[vi*3+1]);
-            interleaved.push_back(sc.verts[vi*3+2]);
-            interleaved.push_back(sc.colors[vi*3]);
-            interleaved.push_back(sc.colors[vi*3+1]);
-            interleaved.push_back(sc.colors[vi*3+2]);
+        std::vector<unsigned> idxCopy;
+        unsigned idxCount;
+
+        auto cit = s_geoCache.find(cacheKey);
+        if (cit != s_geoCache.end()) {
+            interleaved = cit->second.interleaved;
+            idxCopy     = cit->second.indices;
+            idxCount    = cit->second.idxCount;
+        } else {
+            // Generate local-space geometry for this shape (once)
+            sc.clear();
+            if (mid)
+                createMidSpinMesh(endAngle, sc);
+            else
+                createTileMesh(startAngle, endAngle, sc);
+
+            // Remap colors + offset outline Z
+            for (size_t ci = 0, vi = 0; ci < sc.colors.size(); ci += 3, vi += 3) {
+                if (sc.colors[ci] == 0.0f) {
+                    sc.colors[ci]=outR; sc.colors[ci+1]=outG; sc.colors[ci+2]=outB;
+                    sc.verts[vi + 2] -= 0.001f;
+                } else {
+                    sc.colors[ci]=fillR; sc.colors[ci+1]=fillG; sc.colors[ci+2]=fillB;
+                }
+            }
+
+            // Interleave vertex position + color: [x,y,z, r,g,b, ...]
+            size_t vc = sc.verts.size() / 3;
+            interleaved.reserve(vc * 6);
+            for (size_t vi = 0; vi < vc; vi++) {
+                interleaved.push_back(sc.verts[vi*3]);
+                interleaved.push_back(sc.verts[vi*3+1]);
+                interleaved.push_back(sc.verts[vi*3+2]);
+                interleaved.push_back(sc.colors[vi*3]);
+                interleaved.push_back(sc.colors[vi*3+1]);
+                interleaved.push_back(sc.colors[vi*3+2]);
+            }
+
+            idxCopy.assign(sc.indices.begin(), sc.indices.end());
+            idxCount = (unsigned)sc.indices.size();
+            s_geoCache[cacheKey] = {interleaved, idxCopy, idxCount};
         }
 
         // Collect instance data (vec3: x, y, z)
@@ -110,9 +135,10 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
             instOffsets.push_back(wy);
             instOffsets.push_back(wz);
             float minX=1e9f,minY=1e9f,maxX=-1e9f,maxY=-1e9f;
-            for (size_t vi = 0; vi < vc; vi++) {
-                float lx = sc.verts[vi*3] + wx;
-                float ly = sc.verts[vi*3+1] + wy;
+            size_t vertCount = interleaved.size() / 6;  // 6 floats per vertex
+            for (size_t vi = 0; vi < vertCount; vi++) {
+                float lx = interleaved[vi*6] + wx;
+                float ly = interleaved[vi*6+1] + wy;
                 if (lx<minX)minX=lx; if (lx>maxX)maxX=lx;
                 if (ly<minY)minY=ly; if (ly>maxY)maxY=ly;
             }
@@ -121,7 +147,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
 
         // Upload GPU buffers
         ShapeGroup& sg = m_shapes[shapeIdx];
-        sg.indexCount = (unsigned)sc.indices.size();
+        sg.indexCount = idxCount;
         sg.instances  = std::move(instances);
 
         glGenVertexArrays(1, &sg.vao);
@@ -139,7 +165,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         // Element buffer
         glGenBuffers(1, &sg.ebo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sg.ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sc.indices.size()*sizeof(unsigned), sc.indices.data(), GL_STATIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, idxCopy.size()*sizeof(unsigned), idxCopy.data(), GL_STATIC_DRAW);
 
         // Instance VBO (vec2 offsets, dynamic for visibility filtering)
         glGenBuffers(1, &sg.instVbo);
@@ -155,7 +181,16 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
 
     LOG_I("Built track: %d tiles → %zu shape groups", n, m_shapes.size());
 
+    // Init visibility cache per shape group
+    m_visCaches.resize(m_shapes.size());
+
     buildIcons(level);
+}
+
+bool TileMesh::frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt) {
+    if (!cache.valid) return true;
+    return std::abs(cache.viewL - vl) > 0.5f || std::abs(cache.viewR - vr) > 0.5f
+        || std::abs(cache.viewB - vb) > 0.5f || std::abs(cache.viewT - vt) > 0.5f;
 }
 
 void TileMesh::draw(float viewL, float viewR, float viewB, float viewT) const {
@@ -163,27 +198,42 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT) const {
     float vl = viewL - margin, vr = viewR + margin;
     float vb = viewB - margin, vt = viewT + margin;
 
-    for (const auto& sg : m_shapes) {
-        // Collect visible instance offsets
-        std::vector<float> visOffsets;
-        visOffsets.reserve(sg.instances.size() * 3);
+    for (size_t si = 0; si < m_shapes.size(); si++) {
+        const auto& sg = m_shapes[si];
+        auto& cache = m_visCaches[si];
 
+        // Use cached visibility when camera is nearly stationary
+        if (!frustumChanged(cache, vl, vr, vb, vt) && !cache.offsets.empty()) {
+            glBindVertexArray(sg.vao);
+            glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
+            glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
+                                    nullptr, (GLsizei)(cache.offsets.size() / 3));
+            glBindVertexArray(0);
+            continue;
+        }
+
+        // Recompute visible set
+        cache.offsets.clear();
+        cache.offsets.reserve(sg.instances.size() * 3);
         for (const auto& inst : sg.instances) {
             if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
                 continue;
-            visOffsets.push_back(inst.offX);
-            visOffsets.push_back(inst.offY);
-            visOffsets.push_back(inst.offZ);
+            cache.offsets.push_back(inst.offX);
+            cache.offsets.push_back(inst.offY);
+            cache.offsets.push_back(inst.offZ);
         }
+        cache.viewL = vl; cache.viewR = vr; cache.viewB = vb; cache.viewT = vt;
+        cache.valid = true;
 
-        if (visOffsets.empty()) continue;
+        if (cache.offsets.empty()) continue;
 
         glBindVertexArray(sg.vao);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, visOffsets.size()*sizeof(float), visOffsets.data());
+        glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
 
         glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
-                                nullptr, (GLsizei)(visOffsets.size() / 3));
+                                nullptr, (GLsizei)(cache.offsets.size() / 3));
 
         glBindVertexArray(0);
     }
@@ -191,15 +241,14 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT) const {
 
 // ---- Event icons ----
 
-static constexpr float ICON_RADIUS = 0.18f;    // 1.6x reference size for visibility
+static constexpr float ICON_RADIUS = 0.18f;
 static constexpr int   ICON_SEGMENTS = 16;
-static constexpr float DECO_Z = 0.002f;        // Z offset above tile
-static constexpr float DECO_Z_EXTRA = 0.001f;  // extra Z for SetSpeed when Twirl also present
+static constexpr float DECO_Z = 0.002f;
+static constexpr float DECO_Z_EXTRA = 0.001f;
 
-// Colors match re_adojas
-static const float TWIRL_COLOR[3]      = {0.502f, 0.0f, 0.502f}; // purple 0x800080
-static const float SPEED_UP_COLOR[3]   = {1.0f, 0.0f, 0.0f};     // red 0xFF0000
-static const float SPEED_DOWN_COLOR[3] = {0.0f, 0.0f, 1.0f};     // blue 0x0000FF
+static const float TWIRL_COLOR[3]      = {0.502f, 0.0f, 0.502f};
+static const float SPEED_UP_COLOR[3]   = {1.0f, 0.0f, 0.0f};
+static const float SPEED_DOWN_COLOR[3] = {0.0f, 0.0f, 1.0f};
 
 void TileMesh::buildIcons(const LevelData& level) {
     // Destroy existing icon groups
@@ -333,16 +382,13 @@ void TileMesh::drawIcons(float viewL, float viewR, float viewB, float viewT) con
             visOffsets.push_back(inst.offY);
             visOffsets.push_back(inst.offZ);
         }
-
         if (visOffsets.empty()) continue;
 
         glBindVertexArray(sg.vao);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
         glBufferSubData(GL_ARRAY_BUFFER, 0, visOffsets.size()*sizeof(float), visOffsets.data());
-
         glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
                                 nullptr, (GLsizei)(visOffsets.size() / 3));
-
         glBindVertexArray(0);
     }
 }

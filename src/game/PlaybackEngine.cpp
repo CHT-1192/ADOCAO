@@ -19,10 +19,12 @@ void PlaybackEngine::init(const LevelData& level, bool showTrail) {
     m_bluePlanet = std::make_unique<Planet>(glm::vec3(0.0f, 0.0f, 1.0f), showTrail);
 }
 
+// Precalculate per-tile timing arrays from absolute angleData (ADOFAI-JS _parseAngle algorithm).
+// Computes relative rotation, duration, start times, and processes events (Twirl/SetSpeed/Pause).
 void PlaybackEngine::precalculateTiming() {
     const auto& tiles = m_level->tiles;
     const auto& angleData = m_level->angleData;
-    int n = (int)tiles.size(); // includes extra tile
+    int n = (int)tiles.size();
     if (n < 2) return;
 
     m_tileStartTimes.resize(n);
@@ -69,7 +71,7 @@ void PlaybackEngine::precalculateTiming() {
         m_tileIsCW[i] = isCW;
         m_tileBPM[i] = currentBPM;
 
-        // Start angle
+        // --- Geometry: start angle from tile positions ---
         float startAngle;
         if (i == 0) {
             startAngle = (m_level->settings.rotation + 180.0f) * 3.14159265f / 180.0f;
@@ -80,7 +82,7 @@ void PlaybackEngine::precalculateTiming() {
         }
         m_tileStartAngles[i] = startAngle;
 
-        // Compute relative rotation from absolute direction (ADOFAI-JS _parseAngle)
+        // --- Relative angle: absolute direction → rotation amount (ADOFAI-JS _parseAngle) ---
         float rawAngleData = (i < (int)angleData.size()) ? angleData[i] : 180.0f;
         float relAngle;
         if (rawAngleData == 999.0f) {

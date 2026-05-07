@@ -6,6 +6,9 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <unordered_map>
+
+static std::unordered_map<std::string, std::vector<float>> s_wavCache;
 
 #ifdef _WIN32
 #include <windows.h>
@@ -87,6 +90,14 @@ void HitsoundManager::setEnabled(bool enabled) {
 bool HitsoundManager::readWav(const std::string& filepath,
                                std::vector<float>& samples,
                                int& sampleRate, int& channels) {
+    // Check cache first
+    auto it = s_wavCache.find(filepath);
+    if (it != s_wavCache.end()) {
+        sampleRate = 44100; channels = 1;  // cached data is always mono 44100
+        samples = it->second;
+        return true;
+    }
+
     FILE* f = fopen(filepath.c_str(), "rb");
     if (!f) { LOG_E("Hitsound: Cannot open %s", filepath.c_str()); return false; }
 
@@ -117,6 +128,7 @@ bool HitsoundManager::readWav(const std::string& filepath,
 
     samples.resize(raw.size());
     for (size_t i=0;i<raw.size();i++) samples[i]=(float)raw[i]/32768.0f;
+    s_wavCache[filepath] = samples;  // cache for later reuse
     return true;
 }
 

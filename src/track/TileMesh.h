@@ -46,7 +46,16 @@ private:
     std::vector<ShapeGroup> m_shapes;
     std::vector<ShapeGroup> m_iconGroups;
 
+    // Visibility cache: avoid recomputing visible set when camera hasn't moved
+    struct VisibilityCache {
+        std::vector<float> offsets;  // cached visible instance offsets
+        float viewL=0, viewR=0, viewB=0, viewT=0;
+        bool valid = false;
+    };
+    mutable std::vector<VisibilityCache> m_visCaches;  // per-shape-group
+
     void destroy();
     void buildIcons(const LevelData& level);
     static unsigned int hexToUInt(const std::string& hex);
+    static bool frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt);
 };
