@@ -97,6 +97,8 @@ set(SOURCES
     # Level parser
     src/level/LevelData.h
     src/level/LevelData.cpp
+    src/level/JsonCleaner.h
+    src/level/JsonCleaner.cpp
 
     # Easing
     src/util/Easing.h
@@ -108,6 +110,9 @@ set(SOURCES
     # Render
     src/render/Shader.h
     src/render/Shader.cpp
+    src/render/Shaders.h
+    src/render/PlanetTrail.h
+    src/render/PlanetTrail.cpp
 
     # Camera
     src/camera/Camera.h
@@ -116,6 +121,21 @@ set(SOURCES
     # Track
     src/track/TileMesh.h
     src/track/TileMesh.cpp
+    src/track/TileGeometry.h
+    src/track/TileGeometry.cpp
+
+    # Game
+    src/game/Planet.h
+    src/game/Planet.cpp
+    src/game/PlaybackEngine.h
+    src/game/PlaybackEngine.cpp
+
+    # Audio
+    src/audio/AudioEngine.h
+    src/audio/AudioEngine.cpp
+    src/audio/HitsoundManager.h
+    src/audio/HitsoundManager.cpp
+    src/audio/stb_vorbis_impl.cpp
 )
 
 # ImGui sources
@@ -157,15 +177,31 @@ target_link_libraries(adocao PRIVATE
 
 # Platform-specific
 if(WIN32)
-    target_link_libraries(adocao PRIVATE opengl32)
-    target_compile_definitions(adocao PRIVATE NOMINMAX)
-elseif(UNIX)
+    target_link_libraries(adocao PRIVATE opengl32 ole32)
+    target_compile_definitions(adocao PRIVATE NOMINMAX UNICODE _UNICODE)
+elseif(UNIX AND NOT APPLE)
     find_package(OpenGL REQUIRED)
-    target_link_libraries(adocao PRIVATE OpenGL::GL)
+    target_link_libraries(adocao PRIVATE OpenGL::GL ${CMAKE_DL_LIBS})
+    # Ensure Wayland is available (GLFW auto-detects)
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(WAYLAND wayland-client wayland-egl IMPORTED_TARGET QUIET)
+    endif()
+    if(WAYLAND_FOUND)
+        message(STATUS "Wayland found — GLFW will support Wayland")
+    endif()
 endif()
 
 # ---- Install ----
 install(TARGETS adocao RUNTIME DESTINATION bin)
+
+# ---- Copy assets to build directory ----
+add_custom_command(TARGET adocao POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/assets"
+    "${CMAKE_BINARY_DIR}/assets"
+    COMMENT "Copying assets to build directory"
+)
 
 # ---- Copy example level ----
 file(COPY ${CMAKE_SOURCE_DIR}/../re_adojas/src/lib/example/level.adofai

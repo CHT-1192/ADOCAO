@@ -5,18 +5,24 @@
 #include <glm/glm.hpp>
 #include <vector>
 #include <string>
+#include <map>
+#include <tuple>
 
-// A single tile mesh (quad segment connecting two consecutive tile positions)
-struct TileSegment {
-    glm::vec2 start;
-    glm::vec2 end;
-    glm::vec3 color;      // primary color
-    glm::vec3 color2;     // secondary / edge color
-    float     width = 0.4f;
-    int       index = 0;
+// Per-instance data (world position + bounding box for culling)
+struct TileInstance {
+    float offX, offY, offZ;   // world position
+    float minX, minY, maxX, maxY;  // world-space AABB
 };
 
-// Generates GPU buffers for track rendering
+struct ShapeGroup {
+    GLuint vao = 0;
+    GLuint vbo = 0;       // local-space vertex data (x,y,z, r,g,b)
+    GLuint ebo = 0;
+    GLuint instVbo = 0;   // per-instance vec2 offsets
+    unsigned indexCount = 0;
+    std::vector<TileInstance> instances;
+};
+
 class TileMesh {
 public:
     TileMesh() = default;
@@ -27,20 +33,20 @@ public:
     TileMesh(TileMesh&&) noexcept;
     TileMesh& operator=(TileMesh&&) noexcept;
 
-    // Build mesh from level data
-    void build(const LevelData& level);
+    void build(const LevelData& level,
+               const std::string& fillColorHex = "FFFFFF",
+               const std::string& strokeColorHex = "000000");
 
-    // Render
-    void draw() const;
+    void draw(float viewL, float viewR, float viewB, float viewT) const;
+    void drawIcons(float viewL, float viewR, float viewB, float viewT) const;
 
-    bool empty() const { return m_indexCount == 0; }
+    bool empty() const;
 
 private:
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
-    GLsizei m_indexCount = 0;
+    std::vector<ShapeGroup> m_shapes;
+    std::vector<ShapeGroup> m_iconGroups;
 
     void destroy();
-
+    void buildIcons(const LevelData& level);
     static unsigned int hexToUInt(const std::string& hex);
 };

@@ -1,455 +1,358 @@
 #include "TileMesh.h"
+#include "TileGeometry.h"
 #include "../glad/gl_core.h"
 #include "../util/Logger.h"
 #include <cmath>
-#include <cstring>
-#include <algorithm>
+#include <map>
+#include <tuple>
 
-namespace {
-
-constexpr float TILE_WIDTH = 0.275f;
-constexpr float TILE_LENGTH = 0.5f;
-constexpr float OUTLINE = 0.025f;
-
-float fmod(float x, float y) {
-    return x >= 0 ? std::fmod(x, y) : std::fmod(x, y) + y;
-}
-
-float lerp(float a, float b, float t) {
-    return a + (b - a) * t;
-}
-
-// Create a circle (fan of triangles) and append to vertices/indices/colors
-void createCircle(
-    float cx, float cy, float cz, float radius,
-    float r, float g, float b,
-    std::vector<float>& verts,
-    std::vector<unsigned int>& indices,
-    std::vector<float>& colors,
-    int resolution = 32)
-{
-    unsigned int centerIdx = static_cast<unsigned int>(verts.size() / 3);
-    verts.insert(verts.end(), {cx, cy, cz});
-    colors.insert(colors.end(), {r, g, b});
-
-    for (int i = 0; i < resolution; i++) {
-        float angle = (2.0f * 3.14159265f * i) / resolution;
-        float x = std::cos(angle) * radius + cx;
-        float y = std::sin(angle) * radius + cy;
-        verts.insert(verts.end(), {x, y, cz});
-        colors.insert(colors.end(), {r, g, b});
-    }
-
-    for (int i = 1; i < resolution; i++) {
-        indices.insert(indices.end(), {centerIdx, centerIdx + (unsigned int)i, centerIdx + (unsigned int)(i + 1)});
-    }
-    indices.insert(indices.end(), {centerIdx, centerIdx + (unsigned int)resolution, centerIdx + 1});
-}
-
-// Create a midspin (180°) tile mesh in local coords
-void createMidSpinMesh(
-    float angle, float r, float g, float b,
-    std::vector<float>& verts,
-    std::vector<unsigned int>& indices,
-    std::vector<float>& colors)
-{
-    float w = TILE_WIDTH + OUTLINE;
-    float l = TILE_WIDTH + OUTLINE;
-
-    float m1 = std::cos(angle * 3.14159265f / 180.0f);
-    float m2 = std::sin(angle * 3.14159265f / 180.0f);
-    float mx = -m1 * 0.04f, my = -m2 * 0.04f;
-
-    // Outer (outline)
-    unsigned int base = static_cast<unsigned int>(verts.size() / 3);
-    verts.insert(verts.end(), {
-        mx + l * m1 + w * m2, my + l * m2 - w * m1, 0,
-        mx + l * m1 - w * m2, my + l * m2 + w * m1, 0,
-        mx - w * m2,           my + w * m1,           0,
-        mx + w * m2,           my - w * m1,           0,
-        mx - w * m1,           my - w * m2,           0,
-        mx + w * m2,           my - w * m1,           0,
-        mx - w * m2,           my + w * m1,           0,
-    });
-    for (int i = 0; i < 7; i++) colors.insert(colors.end(), {0, 0, 0});  // black outline
-    indices.insert(indices.end(), {base, base+1, base+2, base+2, base+3, base, base+4, base+5, base+6});
-
-    // Inner (white)
-    float innerW = TILE_WIDTH;
-    float innerL = TILE_WIDTH;
-    unsigned int base2 = static_cast<unsigned int>(verts.size() / 3);
-    verts.insert(verts.end(), {
-        mx + innerL * m1 + innerW * m2, my + innerL * m2 - innerW * m1, 0,
-        mx + innerL * m1 - innerW * m2, my + innerL * m2 + innerW * m1, 0,
-        mx - innerW * m2,               my + innerW * m1,               0,
-        mx + innerW * m2,               my - innerW * m1,               0,
-        mx - innerW * m1,               my - innerW * m2,               0,
-        mx + innerW * m2,               my - innerW * m1,               0,
-        mx - innerW * m2,               my + innerW * m1,               0,
-    });
-    for (int i = 0; i < 7; i++) colors.insert(colors.end(), {r, g, b});
-    indices.insert(indices.end(), {base2, base2+1, base2+2, base2+2, base2+3, base2, base2+4, base2+5, base2+6});
-}
-
-// Main tile mesh creation — matches re_adojas createTileMesh exactly
-void createTileMesh(
-    float startAngle, float endAngle,
-    float r, float g, float b,
-    std::vector<float>& verts,
-    std::vector<unsigned int>& indices,
-    std::vector<float>& colors)
-{
-    float width  = TILE_WIDTH;
-    float length = TILE_LENGTH;
-
-    float m11 = std::cos(startAngle * 3.14159265f / 180.0f);
-    float m12 = std::sin(startAngle * 3.14159265f / 180.0f);
-    float m21 = std::cos(endAngle   * 3.14159265f / 180.0f);
-    float m22 = std::sin(endAngle   * 3.14159265f / 180.0f);
-
-    float a0, a1;
-    if (fmod(startAngle - endAngle, 360.0f) >= fmod(endAngle - startAngle, 360.0f)) {
-        a0 = fmod(startAngle, 360.0f) * 3.14159265f / 180.0f;
-        a1 = a0 + fmod(endAngle - startAngle, 360.0f) * 3.14159265f / 180.0f;
-    } else {
-        a0 = fmod(endAngle, 360.0f) * 3.14159265f / 180.0f;
-        a1 = a0 + fmod(startAngle - endAngle, 360.0f) * 3.14159265f / 180.0f;
-    }
-
-    float angle = a1 - a0;
-    float mid   = a0 + angle / 2.0f;
-
-    if (angle < 2.0943952f && angle > 0.0f) {
-        // Small angle — curved with circle at corner
-        float x;
-        if (angle < 0.08726646f) {
-            x = 1.0f;
-        } else if (angle < 0.5235988f) {
-            x = lerp(1.0f, 0.83f, std::pow((angle - 0.08726646f) / 0.43633235f, 0.5f));
-        } else if (angle < 0.7853982f) {
-            x = lerp(0.83f, 0.77f, std::pow((angle - 0.5235988f) / 0.2617994f, 1.0f));
-        } else if (angle < 1.5707964f) {
-            x = lerp(0.77f, 0.15f, std::pow((angle - 0.7853982f) / 0.7853982f, 0.7f));
-        } else {
-            x = lerp(0.15f, 0.0f, std::pow((angle - 1.5707964f) / 0.5235988f, 0.5f));
-        }
-
-        float distance, radius;
-        if (x == 1.0f) {
-            distance = 0.0f;
-            radius = width;
-        } else {
-            radius = lerp(0.0f, width, x);
-            distance = (width - radius) / std::sin(angle / 2.0f);
-        }
-
-        float circlex = -distance * std::cos(mid);
-        float circley = -distance * std::sin(mid);
-
-        // Outline
-        float ow = width + OUTLINE, ol = length + OUTLINE, orad = radius + OUTLINE;
-        float ocx = circlex, ocy = circley;
-
-        createCircle(ocx, ocy, 0, orad, 0, 0, 0, verts, indices, colors);
-        unsigned int cnt;
-
-        cnt = static_cast<unsigned int>(verts.size() / 3);
-        verts.insert(verts.end(), {
-            -orad * std::sin(a1) + ocx, orad * std::cos(a1) + ocy, 0,
-            ocx, ocy, 0,
-            orad * std::sin(a0) + ocx, -orad * std::cos(a0) + ocy, 0,
-            ow * std::sin(a0), -ow * std::cos(a0), 0,
-            0, 0, 0,
-            -ow * std::sin(a1), ow * std::cos(a1), 0,
-        });
-        for (int i = 0; i < 6; i++) colors.insert(colors.end(), {0, 0, 0});
-        indices.insert(indices.end(), {cnt, cnt+1, cnt+5, cnt+4, cnt+1, cnt+5, cnt+2, cnt+3, cnt+4, cnt+1, cnt+3, cnt+4});
-
-        cnt = static_cast<unsigned int>(verts.size() / 3);
-        verts.insert(verts.end(), {
-            ol * m11 + ow * m12, ol * m12 - ow * m11, 0,
-            ol * m11 - ow * m12, ol * m12 + ow * m11, 0,
-            -ow * m12, ow * m11, 0,
-            ow * m12, -ow * m11, 0,
-            ol * m21 + ow * m22, ol * m22 - ow * m21, 0,
-            ol * m21 - ow * m22, ol * m22 + ow * m21, 0,
-            -ow * m22, ow * m21, 0,
-            ow * m22, -ow * m21, 0,
-        });
-        for (int i = 0; i < 8; i++) colors.insert(colors.end(), {0, 0, 0});
-        indices.insert(indices.end(), {cnt, cnt+1, cnt+2, cnt+2, cnt+3, cnt, cnt+4, cnt+5, cnt+6, cnt+6, cnt+7, cnt+4});
-
-        // Inner
-        width -= OUTLINE * 2; length -= OUTLINE * 2; radius -= OUTLINE * 2;
-        if (radius < 0) {
-            radius = 0;
-            circlex = (-width / std::sin(angle / 2.0f)) * std::cos(mid);
-            circley = (-width / std::sin(angle / 2.0f)) * std::sin(mid);
-        }
-        createCircle(circlex, circley, 0, radius, r, g, b, verts, indices, colors);
-
-        cnt = static_cast<unsigned int>(verts.size() / 3);
-        verts.insert(verts.end(), {
-            -radius * std::sin(a1) + circlex, radius * std::cos(a1) + circley, 0,
-            circlex, circley, 0,
-            radius * std::sin(a0) + circlex, -radius * std::cos(a0) + circley, 0,
-            width * std::sin(a0), -width * std::cos(a0), 0,
-            0, 0, 0,
-            -width * std::sin(a1), width * std::cos(a1), 0,
-        });
-        for (int i = 0; i < 6; i++) colors.insert(colors.end(), {r, g, b});
-        indices.insert(indices.end(), {cnt, cnt+1, cnt+5, cnt+4, cnt+1, cnt+5, cnt+2, cnt+3, cnt+4, cnt+1, cnt+3, cnt+4});
-
-        cnt = static_cast<unsigned int>(verts.size() / 3);
-        verts.insert(verts.end(), {
-            length * m11 + width * m12, length * m12 - width * m11, 0,
-            length * m11 - width * m12, length * m12 + width * m11, 0,
-            -width * m12, width * m11, 0,
-            width * m12, -width * m11, 0,
-            length * m21 + width * m22, length * m22 - width * m21, 0,
-            length * m21 - width * m22, length * m22 + width * m21, 0,
-            -width * m22, width * m21, 0,
-            width * m22, -width * m21, 0,
-        });
-        for (int i = 0; i < 8; i++) colors.insert(colors.end(), {r, g, b});
-        indices.insert(indices.end(), {cnt, cnt+1, cnt+2, cnt+2, cnt+3, cnt, cnt+4, cnt+5, cnt+6, cnt+6, cnt+7, cnt+4});
-
-    } else if (angle > 0.0f) {
-        // Normal angle case
-        width += OUTLINE; length += OUTLINE;
-        float circlex = (-width / std::sin(angle / 2.0f)) * std::cos(mid);
-        float circley = (-width / std::sin(angle / 2.0f)) * std::sin(mid);
-
-        unsigned int cnt = static_cast<unsigned int>(verts.size() / 3);
-        verts.insert(verts.end(), {
-            circlex, circley, 0,
-            width * std::sin(a0), -width * std::cos(a0), 0,
-            0, 0, 0,
-            -width * std::sin(a1), width * std::cos(a1), 0,
-        });
-        for (int i = 0; i < 4; i++) colors.insert(colors.end(), {0, 0, 0});
-        indices.insert(indices.end(), {cnt, cnt+1, cnt+2, cnt+2, cnt+3, cnt});
-
-        cnt = static_cast<unsigned int>(verts.size() / 3);
-        verts.insert(verts.end(), {
-            length * m11 + width * m12, length * m12 - width * m11, 0,
-            length * m11 - width * m12, length * m12 + width * m11, 0,
-            -width * m12, width * m11, 0,
-            width * m12, -width * m11, 0,
-            length * m21 + width * m22, length * m22 - width * m21, 0,
-            length * m21 - width * m22, length * m22 + width * m21, 0,
-            -width * m22, width * m21, 0,
-            width * m22, -width * m21, 0,
-        });
-        for (int i = 0; i < 8; i++) colors.insert(colors.end(), {0, 0, 0});
-        indices.insert(indices.end(), {cnt, cnt+1, cnt+2, cnt+2, cnt+3, cnt, cnt+4, cnt+5, cnt+6, cnt+6, cnt+7, cnt+4});
-
-        // Inner
-        width -= OUTLINE * 2; length -= OUTLINE * 2;
-        circlex = (-width / std::sin(angle / 2.0f)) * std::cos(mid);
-        circley = (-width / std::sin(angle / 2.0f)) * std::sin(mid);
-
-        cnt = static_cast<unsigned int>(verts.size() / 3);
-        verts.insert(verts.end(), {
-            circlex, circley, 0,
-            width * std::sin(a0), -width * std::cos(a0), 0,
-            0, 0, 0,
-            -width * std::sin(a1), width * std::cos(a1), 0,
-        });
-        for (int i = 0; i < 4; i++) colors.insert(colors.end(), {r, g, b});
-        indices.insert(indices.end(), {cnt, cnt+1, cnt+2, cnt+2, cnt+3, cnt});
-
-        cnt = static_cast<unsigned int>(verts.size() / 3);
-        verts.insert(verts.end(), {
-            length * m11 + width * m12, length * m12 - width * m11, 0,
-            length * m11 - width * m12, length * m12 + width * m11, 0,
-            -width * m12, width * m11, 0,
-            width * m12, -width * m11, 0,
-            length * m21 + width * m22, length * m22 - width * m21, 0,
-            length * m21 - width * m22, length * m22 + width * m21, 0,
-            -width * m22, width * m21, 0,
-            width * m22, -width * m21, 0,
-        });
-        for (int i = 0; i < 8; i++) colors.insert(colors.end(), {r, g, b});
-        indices.insert(indices.end(), {cnt, cnt+1, cnt+2, cnt+2, cnt+3, cnt, cnt+4, cnt+5, cnt+6, cnt+6, cnt+7, cnt+4});
-
-    } else {
-        // angle == 0 — 180° case (straight line continuation)
-        length = width;
-        width += OUTLINE; length += OUTLINE;
-        float m1 = m11, m2 = m12;
-        float mx = -m1 * 0.04f, my = -m2 * 0.04f;
-
-        createCircle(mx, my, 0, width, 0, 0, 0, verts, indices, colors);
-
-        unsigned int cnt = static_cast<unsigned int>(verts.size() / 3);
-        verts.insert(verts.end(), {
-            mx + length * m1 + width * m2, my + length * m2 - width * m1, 0,
-            mx + length * m1 - width * m2, my + length * m2 + width * m1, 0,
-            mx - width * m2, my + width * m1, 0,
-            mx + width * m2, my - width * m1, 0,
-        });
-        for (int i = 0; i < 4; i++) colors.insert(colors.end(), {0, 0, 0});
-        indices.insert(indices.end(), {cnt, cnt+1, cnt+2, cnt+2, cnt+3, cnt});
-
-        // Inner
-        width -= OUTLINE * 2; length -= OUTLINE * 2;
-        createCircle(mx, my, 0, width, r, g, b, verts, indices, colors);
-
-        cnt = static_cast<unsigned int>(verts.size() / 3);
-        verts.insert(verts.end(), {
-            mx + length * m1 + width * m2, my + length * m2 - width * m1, 0,
-            mx + length * m1 - width * m2, my + length * m2 + width * m1, 0,
-            mx - width * m2, my + width * m1, 0,
-            mx + width * m2, my - width * m1, 0,
-        });
-        for (int i = 0; i < 4; i++) colors.insert(colors.end(), {r, g, b});
-        indices.insert(indices.end(), {cnt, cnt+1, cnt+2, cnt+2, cnt+3, cnt});
-    }
-}
-
-} // namespace
-
-// ---- TileMesh class ----
-
-struct Vertex {
-    float x, y, z;
-    float r, g, b;
-};
+// ---- TileMesh ----
 
 TileMesh::~TileMesh() { destroy(); }
 
-TileMesh::TileMesh(TileMesh&& other) noexcept
-    : m_vao(other.m_vao), m_vbo(other.m_vbo), m_indexCount(other.m_indexCount) {
-    other.m_vao = 0; other.m_vbo = 0; other.m_indexCount = 0;
-}
-
-TileMesh& TileMesh::operator=(TileMesh&& other) noexcept {
-    if (this != &other) { destroy(); m_vao = other.m_vao; m_vbo = other.m_vbo;
-        m_indexCount = other.m_indexCount; other.m_vao = 0; other.m_vbo = 0; other.m_indexCount = 0; }
-    return *this;
-}
+TileMesh::TileMesh(TileMesh&& o) noexcept : m_shapes(std::move(o.m_shapes)) {}
+TileMesh& TileMesh::operator=(TileMesh&& o) noexcept { if(this!=&o){destroy();m_shapes=std::move(o.m_shapes);} return *this; }
 
 void TileMesh::destroy() {
-    if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
-    if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
-    m_indexCount = 0;
+    for (auto& s : m_shapes) {
+        if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
+        if (s.ebo) glDeleteBuffers(1, &s.ebo);
+        if (s.vbo) glDeleteBuffers(1, &s.vbo);
+        if (s.vao) glDeleteVertexArrays(1, &s.vao);
+    }
+    m_shapes.clear();
+    for (auto& s : m_iconGroups) {
+        if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
+        if (s.ebo) glDeleteBuffers(1, &s.ebo);
+        if (s.vbo) glDeleteBuffers(1, &s.vbo);
+        if (s.vao) glDeleteVertexArrays(1, &s.vao);
+    }
+    m_iconGroups.clear();
 }
 
-void TileMesh::build(const LevelData& level) {
+bool TileMesh::empty() const { return m_shapes.empty(); }
+
+void TileMesh::build(const LevelData& level, const std::string& fillColorHex, const std::string& strokeColorHex) {
     destroy();
     const auto& tiles = level.tiles;
     if (tiles.size() < 2) return;
 
-    int n = static_cast<int>(tiles.size()) - 1; // skip extra tile
+    int n = (int)tiles.size() - 1;
 
-    // Build combined vertex/index/color arrays for all tiles
-    std::vector<Vertex> vertices;
-    std::vector<unsigned int> indices;
+    auto hexToColor = [](const std::string& hex) -> std::tuple<float,float,float> {
+        unsigned v = hexToUInt(hex);
+        return {((v>>16)&0xFF)/255.0f, ((v>>8)&0xFF)/255.0f, (v&0xFF)/255.0f};
+    };
+    auto [fillR, fillG, fillB] = hexToColor(fillColorHex);
+    auto [outR, outG, outB]   = hexToColor(strokeColorHex);
+
+    // Group tiles by shape key
+    std::map<std::tuple<int,int,bool>, std::vector<int>> shapeGroups;
 
     for (int i = 0; i < n; i++) {
-        const auto& tile = tiles[i];
+        float startAngle = (i == 0) ? -180.0f : tiles[i-1].direction - 180.0f;
+        float endAngle   = tiles[i].direction;
+        bool midspin = (i < (int)level.angleData.size() && level.angleData[i] == 999.0f);
 
-        // startAngle: direction from previous tile reversed (= enter this tile)
-        // endAngle: direction from this tile (= leave this tile)
-        float startAngle, endAngle;
-        bool isMidspin = false;
+        auto key = std::make_tuple((int)std::round(startAngle*100), (int)std::round(endAngle*100), midspin);
+        shapeGroups[key].push_back(i);
+    }
 
-        if (i == 0) {
-            startAngle = -180.0f;  // enter from left
-            endAngle = tile.direction;
-        } else {
-            const auto& prev = tiles[i - 1];
-            startAngle = prev.direction - 180.0f;
-            endAngle = tile.direction;
+    Scratch& sc = g_sc;
+    m_shapes.resize(shapeGroups.size());
+    size_t shapeIdx = 0;
+
+    for (auto& [key, tileIndices] : shapeGroups) {
+        auto [sa, ea, mid] = key;
+        float startAngle = sa / 100.0f, endAngle = ea / 100.0f;
+
+        // Generate local-space geometry for this shape (once)
+        sc.clear();
+        if (mid)
+            createMidSpinMesh(endAngle, sc);
+        else
+            createTileMesh(startAngle, endAngle, sc);
+
+        // Remap colors + offset outline Z
+        for (size_t ci = 0, vi = 0; ci < sc.colors.size(); ci += 3, vi += 3) {
+            if (sc.colors[ci] == 0.0f) {
+                sc.colors[ci]=outR; sc.colors[ci+1]=outG; sc.colors[ci+2]=outB;
+                sc.verts[vi + 2] -= 0.001f;
+            } else {
+                sc.colors[ci]=fillR; sc.colors[ci+1]=fillG; sc.colors[ci+2]=fillB;
+            }
         }
 
-        float diff = endAngle - startAngle;
-        if (std::abs(diff) < 0.01f || std::abs(diff - 360.0f) < 0.01f) {
-            isMidspin = true;
+        // Interleave vertex position + color: [x,y,z, r,g,b, ...]
+        size_t vc = sc.verts.size() / 3;
+        std::vector<float> interleaved;
+        interleaved.reserve(vc * 6);
+        for (size_t vi = 0; vi < vc; vi++) {
+            interleaved.push_back(sc.verts[vi*3]);
+            interleaved.push_back(sc.verts[vi*3+1]);
+            interleaved.push_back(sc.verts[vi*3+2]);
+            interleaved.push_back(sc.colors[vi*3]);
+            interleaved.push_back(sc.colors[vi*3+1]);
+            interleaved.push_back(sc.colors[vi*3+2]);
         }
 
-        // Use white for inner (like re_adojas), track color via shader uniform later
-        float cr = 1.0f, cg = 1.0f, cb = 1.0f;
+        // Collect instance data (vec3: x, y, z)
+        std::vector<float> instOffsets;
+        std::vector<TileInstance> instances;
+        instOffsets.reserve(tileIndices.size() * 3);
+        instances.reserve(tileIndices.size());
 
-        // Generate mesh for this tile in local coords
-        std::vector<float> localVerts;
-        std::vector<unsigned int> localIdx;
-        std::vector<float> localColors;
-
-        if (isMidspin) {
-            createMidSpinMesh(endAngle, cr, cg, cb, localVerts, localIdx, localColors);
-        } else {
-            createTileMesh(startAngle, endAngle, cr, cg, cb, localVerts, localIdx, localColors);
+        for (int i : tileIndices) {
+            float wx = tiles[i].position[0];
+            float wy = tiles[i].position[1];
+            float wz = (12.0f - i) * 0.1f;  // re_adojas Z layering
+            instOffsets.push_back(wx);
+            instOffsets.push_back(wy);
+            instOffsets.push_back(wz);
+            float minX=1e9f,minY=1e9f,maxX=-1e9f,maxY=-1e9f;
+            for (size_t vi = 0; vi < vc; vi++) {
+                float lx = sc.verts[vi*3] + wx;
+                float ly = sc.verts[vi*3+1] + wy;
+                if (lx<minX)minX=lx; if (lx>maxX)maxX=lx;
+                if (ly<minY)minY=ly; if (ly>maxY)maxY=ly;
+            }
+            instances.push_back({wx, wy, wz, minX, minY, maxX, maxY});
         }
 
-        // Translate to world position and append to global buffers
-        float wx = tile.position[0];
-        float wy = tile.position[1];
-        float z  = 0.0f;  // uniform Z: avoid tile N+1 outline covering tile N inner
+        // Upload GPU buffers
+        ShapeGroup& sg = m_shapes[shapeIdx];
+        sg.indexCount = (unsigned)sc.indices.size();
+        sg.instances  = std::move(instances);
 
-        unsigned int baseIdx = static_cast<unsigned int>(vertices.size());
-        unsigned int localVertCount = static_cast<unsigned int>(localVerts.size() / 3);
+        glGenVertexArrays(1, &sg.vao);
+        glBindVertexArray(sg.vao);
 
-        for (unsigned int vi = 0; vi < localVertCount; vi++) {
-            Vertex v;
-            v.x = localVerts[vi * 3]     + wx;
-            v.y = localVerts[vi * 3 + 1] + wy;
-            v.z = z;
-            v.r = localColors[vi * 3];
-            v.g = localColors[vi * 3 + 1];
-            v.b = localColors[vi * 3 + 2];
-            vertices.push_back(v);
+        // Vertex VBO (local space, interleaved)
+        glGenBuffers(1, &sg.vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, sg.vbo);
+        glBufferData(GL_ARRAY_BUFFER, interleaved.size()*sizeof(float), interleaved.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)(3*sizeof(float)));
+
+        // Element buffer
+        glGenBuffers(1, &sg.ebo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sg.ebo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sc.indices.size()*sizeof(unsigned), sc.indices.data(), GL_STATIC_DRAW);
+
+        // Instance VBO (vec2 offsets, dynamic for visibility filtering)
+        glGenBuffers(1, &sg.instVbo);
+        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
+        glBufferData(GL_ARRAY_BUFFER, instOffsets.size()*sizeof(float), instOffsets.data(), GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+        glVertexAttribDivisor(2, 1); // per-instance
+
+        glBindVertexArray(0);
+        shapeIdx++;
+    }
+
+    LOG_I("Built track: %d tiles → %zu shape groups", n, m_shapes.size());
+
+    buildIcons(level);
+}
+
+void TileMesh::draw(float viewL, float viewR, float viewB, float viewT) const {
+    float margin = 20.0f;
+    float vl = viewL - margin, vr = viewR + margin;
+    float vb = viewB - margin, vt = viewT + margin;
+
+    for (const auto& sg : m_shapes) {
+        // Collect visible instance offsets
+        std::vector<float> visOffsets;
+        visOffsets.reserve(sg.instances.size() * 3);
+
+        for (const auto& inst : sg.instances) {
+            if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
+                continue;
+            visOffsets.push_back(inst.offX);
+            visOffsets.push_back(inst.offY);
+            visOffsets.push_back(inst.offZ);
         }
 
-        for (unsigned int idx : localIdx) {
-            indices.push_back(baseIdx + idx);
+        if (visOffsets.empty()) continue;
+
+        glBindVertexArray(sg.vao);
+        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, visOffsets.size()*sizeof(float), visOffsets.data());
+
+        glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
+                                nullptr, (GLsizei)(visOffsets.size() / 3));
+
+        glBindVertexArray(0);
+    }
+}
+
+// ---- Event icons ----
+
+static constexpr float ICON_RADIUS = 0.18f;    // 1.6x reference size for visibility
+static constexpr int   ICON_SEGMENTS = 16;
+static constexpr float DECO_Z = 0.002f;        // Z offset above tile
+static constexpr float DECO_Z_EXTRA = 0.001f;  // extra Z for SetSpeed when Twirl also present
+
+// Colors match re_adojas
+static const float TWIRL_COLOR[3]      = {0.502f, 0.0f, 0.502f}; // purple 0x800080
+static const float SPEED_UP_COLOR[3]   = {1.0f, 0.0f, 0.0f};     // red 0xFF0000
+static const float SPEED_DOWN_COLOR[3] = {0.0f, 0.0f, 1.0f};     // blue 0x0000FF
+
+void TileMesh::buildIcons(const LevelData& level) {
+    // Destroy existing icon groups
+    for (auto& s : m_iconGroups) {
+        if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
+        if (s.ebo) glDeleteBuffers(1, &s.ebo);
+        if (s.vbo) glDeleteBuffers(1, &s.vbo);
+        if (s.vao) glDeleteVertexArrays(1, &s.vao);
+    }
+    m_iconGroups.clear();
+
+    const auto& tiles = level.tiles;
+    int n = (int)tiles.size() - 1;  // exclude extra tile
+    if (n <= 0) return;
+
+    // Collect icon instances by color: 0=twirl, 1=speedUp, 2=speedDown
+    struct IconInst { int tileIdx; float zOff; };
+    std::vector<IconInst> colorGroups[3];
+
+    for (int i = 0; i < n; i++) {
+        bool hasTwirl = i < (int)level.tileHasTwirl.size() && level.tileHasTwirl[i];
+        bool hasSetSpeed = i < (int)level.tileHasSetSpeed.size() && level.tileHasSetSpeed[i];
+
+        float tileZ = (12.0f - i) * 0.1f;
+
+        if (hasTwirl) {
+            colorGroups[0].push_back({i, tileZ + DECO_Z});
+        }
+        if (hasSetSpeed && i > 0 && i < (int)level.tileBPMs.size()) {
+            float ratio = level.tileBPMs[i] / level.tileBPMs[i - 1];
+            if (ratio > 1.05f || ratio < 0.95f) {
+                int cg = (ratio > 1.05f) ? 1 : 2;
+                float extraZ = hasTwirl ? DECO_Z_EXTRA : 0.0f;
+                colorGroups[cg].push_back({i, tileZ + DECO_Z + extraZ});
+            }
         }
     }
 
-    // Upload to GPU
-    glGenVertexArrays(1, &m_vao);
-    glBindVertexArray(m_vao);
+    const float* colors[3] = {TWIRL_COLOR, SPEED_UP_COLOR, SPEED_DOWN_COLOR};
+    Scratch& sc = g_sc;
 
-    glGenBuffers(1, &m_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+    for (int cg = 0; cg < 3; cg++) {
+        if (colorGroups[cg].empty()) continue;
 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, x));
+        auto& grp = colorGroups[cg];
+        float cr = colors[cg][0], cgv = colors[cg][1], cb = colors[cg][2];
 
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, r));
+        // Generate circle geometry with this color
+        sc.clear();
+        createCircle(0.0f, 0.0f, ICON_RADIUS, cr, cgv, cb, sc, ICON_SEGMENTS);
 
-    GLuint ebo;
-    glGenBuffers(1, &ebo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+        // Interleave vertex data: [x,y,z, r,g,b, ...]
+        size_t vc = sc.verts.size() / 3;
+        std::vector<float> interleaved;
+        interleaved.reserve(vc * 6);
+        for (size_t vi = 0; vi < vc; vi++) {
+            interleaved.push_back(sc.verts[vi*3]);
+            interleaved.push_back(sc.verts[vi*3+1]);
+            interleaved.push_back(sc.verts[vi*3+2]);
+            interleaved.push_back(sc.colors[vi*3]);
+            interleaved.push_back(sc.colors[vi*3+1]);
+            interleaved.push_back(sc.colors[vi*3+2]);
+        }
 
-    m_indexCount = static_cast<GLsizei>(indices.size());
+        // Instance offsets + AABBs
+        std::vector<float> instOffsets;
+        std::vector<TileInstance> instances;
+        instOffsets.reserve(grp.size() * 3);
+        instances.reserve(grp.size());
 
-    glBindVertexArray(0);
-    glDeleteBuffers(1, &ebo);
+        for (auto& icon : grp) {
+            float wx = tiles[icon.tileIdx].position[0];
+            float wy = tiles[icon.tileIdx].position[1];
+            float wz = icon.zOff;
+            instOffsets.push_back(wx);
+            instOffsets.push_back(wy);
+            instOffsets.push_back(wz);
+            instances.push_back({wx, wy, wz,
+                wx - ICON_RADIUS, wy - ICON_RADIUS,
+                wx + ICON_RADIUS, wy + ICON_RADIUS});
+        }
 
-    LOG_I("Built track mesh: %d tiles (%zu verts, %d indices)",
-           n, vertices.size(), m_indexCount);
+        // Upload GPU buffers
+        ShapeGroup sg;
+        sg.indexCount = (unsigned)sc.indices.size();
+        sg.instances = std::move(instances);
+
+        glGenVertexArrays(1, &sg.vao);
+        glBindVertexArray(sg.vao);
+
+        glGenBuffers(1, &sg.vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, sg.vbo);
+        glBufferData(GL_ARRAY_BUFFER, interleaved.size()*sizeof(float), interleaved.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)(3*sizeof(float)));
+
+        glGenBuffers(1, &sg.ebo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sg.ebo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sc.indices.size()*sizeof(unsigned), sc.indices.data(), GL_STATIC_DRAW);
+
+        glGenBuffers(1, &sg.instVbo);
+        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
+        glBufferData(GL_ARRAY_BUFFER, instOffsets.size()*sizeof(float), instOffsets.data(), GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+        glVertexAttribDivisor(2, 1);
+
+        glBindVertexArray(0);
+
+        m_iconGroups.push_back(std::move(sg));
+    }
+
+    LOG_I("Built event icons: %zu icon groups", m_iconGroups.size());
 }
 
-void TileMesh::draw() const {
-    if (m_indexCount == 0) return;
-    glBindVertexArray(m_vao);
-    glDrawElements(GL_TRIANGLES, m_indexCount, GL_UNSIGNED_INT, nullptr);
-    glBindVertexArray(0);
+void TileMesh::drawIcons(float viewL, float viewR, float viewB, float viewT) const {
+    float margin = 20.0f;
+    float vl = viewL - margin, vr = viewR + margin;
+    float vb = viewB - margin, vt = viewT + margin;
+
+    for (const auto& sg : m_iconGroups) {
+        std::vector<float> visOffsets;
+        visOffsets.reserve(sg.instances.size() * 3);
+
+        for (const auto& inst : sg.instances) {
+            if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
+                continue;
+            visOffsets.push_back(inst.offX);
+            visOffsets.push_back(inst.offY);
+            visOffsets.push_back(inst.offZ);
+        }
+
+        if (visOffsets.empty()) continue;
+
+        glBindVertexArray(sg.vao);
+        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, visOffsets.size()*sizeof(float), visOffsets.data());
+
+        glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
+                                nullptr, (GLsizei)(visOffsets.size() / 3));
+
+        glBindVertexArray(0);
+    }
 }
 
 unsigned int TileMesh::hexToUInt(const std::string& hex) {
-    unsigned int v = 0;
-    for (char c : hex) {
-        v <<= 4;
-        if (c >= '0' && c <= '9')      v |= c - '0';
-        else if (c >= 'a' && c <= 'f') v |= c - 'a' + 10;
-        else if (c >= 'A' && c <= 'F') v |= c - 'A' + 10;
-        else break;
-    }
+    unsigned v = 0;
+    for (char c : hex) { v<<=4;
+        if (c>='0'&&c<='9')v|=c-'0';
+        else if (c>='a'&&c<='f')v|=c-'a'+10;
+        else if (c>='A'&&c<='F')v|=c-'A'+10;
+        else break; }
     return v;
 }

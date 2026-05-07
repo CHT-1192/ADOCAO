@@ -31,10 +31,12 @@ PFNGLDELETEVERTEXARRAYSPROC  glad_DeleteVertexArrays;
 PFNGLGENBUFFERSPROC          glad_GenBuffers;
 PFNGLBINDBUFFERPROC          glad_BindBuffer;
 PFNGLBUFFERDATAPROC          glad_BufferData;
+PFNGLBUFFERSUBDATAPROC       glad_BufferSubData;
 PFNGLDELETEBUFFERSPROC       glad_DeleteBuffers;
 PFNGLVERTEXATTRIBPOINTERPROC glad_VertexAttribPointer;
 PFNGLENABLEVERTEXATTRIBARRAYPROC  glad_EnableVertexAttribArray;
 PFNGLDISABLEVERTEXATTRIBARRAYPROC glad_DisableVertexAttribArray;
+PFNGLVERTEXATTRIBDIVISORPROC     glad_VertexAttribDivisor;
 
 PFNGLGENTEXTURESPROC    glad_GenTextures;
 PFNGLBINDTEXTUREPROC    glad_BindTexture;
@@ -50,11 +52,13 @@ PFNGLFRAMEBUFFERTEXTURE2DPROC   glad_FramebufferTexture2D;
 PFNGLCHECKFRAMEBUFFERSTATUSPROC glad_CheckFramebufferStatus;
 PFNGLDELETEFRAMEBUFFERSPROC     glad_DeleteFramebuffers;
 
+PFNGLSCISSORPROC      glad_Scissor;
 PFNGLVIEWPORTPROC     glad_Viewport;
 PFNGLCLEARPROC        glad_Clear;
 PFNGLCLEARCOLORPROC   glad_ClearColor;
 PFNGLDRAWARRAYSPROC   glad_DrawArrays;
 PFNGLDRAWELEMENTSPROC glad_DrawElements;
+PFNGLDRAWELEMENTSINSTANCEDPROC glad_DrawElementsInstanced;
 PFNGLENABLEPROC       glad_Enable;
 PFNGLDISABLEPROC      glad_Disable;
 PFNGLBLENDFUNCPROC    glad_BlendFunc;
@@ -110,10 +114,12 @@ bool loadGLCore() {
     loadGL(glad_GenBuffers,           "glGenBuffers");
     loadGL(glad_BindBuffer,           "glBindBuffer");
     loadGL(glad_BufferData,           "glBufferData");
+    loadGL(glad_BufferSubData,        "glBufferSubData");
     loadGL(glad_DeleteBuffers,        "glDeleteBuffers");
     loadGL(glad_VertexAttribPointer,  "glVertexAttribPointer");
     loadGL(glad_EnableVertexAttribArray,  "glEnableVertexAttribArray");
     loadGL(glad_DisableVertexAttribArray, "glDisableVertexAttribArray");
+    loadGL(glad_VertexAttribDivisor,     "glVertexAttribDivisor");
 
     // Textures
     loadGL(glad_GenTextures,     "glGenTextures");
@@ -132,11 +138,13 @@ bool loadGLCore() {
     loadGL(glad_DeleteFramebuffers,     "glDeleteFramebuffers");
 
     // Rendering
+    loadGL(glad_Scissor,      "glScissor");
     loadGL(glad_Viewport,     "glViewport");
     loadGL(glad_Clear,        "glClear");
     loadGL(glad_ClearColor,   "glClearColor");
     loadGL(glad_DrawArrays,   "glDrawArrays");
     loadGL(glad_DrawElements, "glDrawElements");
+    loadGL(glad_DrawElementsInstanced, "glDrawElementsInstanced");
     loadGL(glad_Enable,       "glEnable");
     loadGL(glad_Disable,      "glDisable");
     loadGL(glad_BlendFunc,    "glBlendFunc");

@@ -1,4 +1,5 @@
 #include "LauncherWindow.h"
+#include "../util/Logger.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -7,37 +8,118 @@
 #include <cstdio>
 #include <array>
 #include <string>
+#include <codecvt>
+#include <locale>
 
 #ifdef _WIN32
-#include <windows.h>
+#include <shobjidl.h>
 
-// tinyfiledialogs returns paths in system ANSI codepage. Convert to UTF-8.
-static std::string ansiToUtf8(const char* ansi) {
-    int wlen = MultiByteToWideChar(CP_ACP, 0, ansi, -1, nullptr, 0);
-    if (wlen <= 0) return ansi;
-    std::wstring wstr(wlen, L'\0');
-    MultiByteToWideChar(CP_ACP, 0, ansi, -1, &wstr[0], wlen);
+static std::string win32OpenFileDialog(const wchar_t* title, const wchar_t* filters) {
+    bool comInitialized = (CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED) == S_OK);
 
-    int u8len = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, nullptr, 0, nullptr, nullptr);
-    if (u8len <= 0) return ansi;
-    std::string u8str(u8len, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &u8str[0], u8len, nullptr, nullptr);
-    // Strip trailing null from string
-    if (!u8str.empty() && u8str.back() == '\0') u8str.pop_back();
-    return u8str;
+    auto cleanup = [&](std::string r) {
+        if (comInitialized) CoUninitialize();
+        return r;
+    };
+
+    IFileOpenDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_ALL,
+                                 IID_IFileOpenDialog, (void**)&dlg)))
+        return cleanup({});
+
+    // Parse filter string "*.adofai\0*.json\0*.zip\0\0"
+    std::vector<COMDLG_FILTERSPEC> specs;
+    std::vector<std::wstring> specStrs;
+    {
+        std::wstring filterStr(filters);
+        size_t start = 0;
+        while (start < filterStr.length()) {
+            size_t end = filterStr.find(L'\0', start);
+            if (end == std::wstring::npos) break;
+            std::wstring pat = filterStr.substr(start, end - start);
+            std::wstring desc = pat + L" files";
+            specStrs.push_back(desc);
+            specStrs.push_back(pat);
+            specs.push_back({specStrs[specStrs.size()-2].c_str(),
+                             specStrs[specStrs.size()-1].c_str()});
+            start = end + 1;
+            if (filterStr[start] == L'\0') break;
+        }
+    }
+    if (!specs.empty())
+        dlg->SetFileTypes((UINT)specs.size(), specs.data());
+
+    dlg->SetTitle(title);
+
+    if (FAILED(dlg->Show(nullptr))) { dlg->Release(); return cleanup({}); }
+
+    IShellItem* item = nullptr;
+    if (FAILED(dlg->GetResult(&item))) { dlg->Release(); return cleanup({}); }
+
+    wchar_t* rawPath = nullptr;
+    if (FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &rawPath))) {
+        item->Release(); dlg->Release(); return cleanup({});
+    }
+
+    // Wide → UTF-8
+    int u8len = WideCharToMultiByte(CP_UTF8, 0, rawPath, -1, nullptr, 0, nullptr, nullptr);
+    std::string result(u8len ? u8len - 1 : 0, '\0');
+    if (u8len > 1)
+        WideCharToMultiByte(CP_UTF8, 0, rawPath, -1, &result[0], u8len, nullptr, nullptr);
+
+    CoTaskMemFree(rawPath);
+    item->Release();
+    dlg->Release();
+    return cleanup(result);
+}
+
+static std::string openFileDialog(const char* title, const char* filterStr) {
+    std::wstring wtitle(title, title + strlen(title));
+    std::wstring wfilter(filterStr, filterStr + strlen(filterStr));
+    return win32OpenFileDialog(wtitle.c_str(), wfilter.c_str());
+}
+#else
+static std::string openFileDialog(const char* title, const char* filterStr) {
+    const char* path = tinyfd_openFileDialog(title, "", 0, nullptr, filterStr, 0);
+    return path ? std::string(path) : std::string();
 }
 #endif
+
+static bool isValidHexColor(const char* buf) {
+    int len = 0;
+    while (buf[len]) len++;
+    if (len != 6) return false;
+    for (int i = 0; i < 6; i++) {
+        char c = buf[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')))
+            return false;
+    }
+    return true;
+}
 
 static constexpr int LAUNCHER_W = 520;
 static constexpr int LAUNCHER_H = 420;
 
 LauncherConfig showLauncher() {
+    // ---- DPI scale ----
+    float dpiScale = 1.0f;
+    {
+        GLFWmonitor* mon = glfwGetPrimaryMonitor();
+        if (mon) {
+            float sx, sy;
+            glfwGetMonitorContentScale(mon, &sx, &sy);
+            dpiScale = std::max(sx, sy);
+        }
+    }
+    int winW = (int)(LAUNCHER_W * dpiScale);
+    int winH = (int)(LAUNCHER_H * dpiScale);
+
     // ---- Create window ----
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
     glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 
-    GLFWwindow* window = glfwCreateWindow(LAUNCHER_W, LAUNCHER_H, "ADOCAO - Launcher", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(winW, winH, "ADOCAO - Launcher", nullptr, nullptr);
     if (!window) {
         fprintf(stderr, "Failed to create launcher window\n");
         return {.cancelled = true};
@@ -49,8 +131,8 @@ LauncherConfig showLauncher() {
         const GLFWvidmode* mode = glfwGetVideoMode(monitor);
         if (mode) {
             glfwSetWindowPos(window,
-                (mode->width  - LAUNCHER_W) / 2,
-                (mode->height - LAUNCHER_H) / 2);
+                (mode->width  - winW) / 2,
+                (mode->height - winH) / 2);
         }
     }
 
@@ -62,38 +144,65 @@ LauncherConfig showLauncher() {
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
 
+    // DPI-aware sizing: scale all UI elements, load fonts at native resolution
+    ImGui::GetStyle().ScaleAllSizes(dpiScale);
+    float fontSize = 16.0f * dpiScale;
+
     // Load CJK font (try multiple system fonts)
     {
         ImGuiIO& io = ImGui::GetIO();
         const char* cjkFonts[] = {
-            "C:/Windows/Fonts/msyh.ttc",      // Microsoft YaHei (Chinese)
-            "C:/Windows/Fonts/malgun.ttf",    // Malgun Gothic (Korean)
-            "C:/Windows/Fonts/msgothic.ttc",  // MS Gothic (Japanese)
-            "C:/Windows/Fonts/simhei.ttf",    // SimHei (Chinese)
-            "C:/Windows/Fonts/gulim.ttc",     // Gulim (Korean)
+#ifdef _WIN32
+            "C:/Windows/Fonts/malgun.ttf",
+            "C:/Windows/Fonts/NanumGothic.ttf",
+            "C:/Windows/Fonts/gulim.ttc",
+            "C:/Windows/Fonts/batang.ttc",
+            "C:/Windows/Fonts/msyh.ttc",
+            "C:/Windows/Fonts/msgothic.ttc",
+            "C:/Windows/Fonts/simhei.ttf",
+#else
+            "/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            "/usr/share/fonts/nanum/NanumGothic.ttf",
+            "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+#endif
         };
 
-        // Build CJK glyph ranges
+        // Glyph ranges: separate Latin from CJK so backslash stays as '\' not '₩'
+        static const ImWchar latinRange[] = { 0x0020, 0x00FF, 0 };
         static const ImWchar cjkRanges[] = {
-            0x0020, 0x00FF,   // Basic Latin + Latin Supplement
-            0x2000, 0x206F,   // General Punctuation
-            0x3000, 0x303F,   // CJK Symbols
-            0x3040, 0x309F,   // Hiragana
-            0x30A0, 0x30FF,   // Katakana
-            0x3130, 0x318F,   // Hangul Compatibility Jamo
-            0x4E00, 0x9FFF,   // CJK Unified Ideographs
-            0xAC00, 0xD7AF,   // Hangul Syllables
-            0xFF00, 0xFFEF,   // Half-width / Full-width forms
-            0,
+            0x2000, 0x206F, 0x3000, 0x303F, 0x3040, 0x309F,
+            0x30A0, 0x30FF, 0x3130, 0x318F, 0x4E00, 0x9FFF,
+            0xAC00, 0xD7AF, 0xFF00, 0xFFEF, 0,
         };
 
-        bool loaded = false;
+        // Load default font at DPI-aware size (replaces tiny 13px built-in)
+        {
+            const char* latinFonts[] = {
+#ifdef _WIN32
+                "C:/Windows/Fonts/segoeui.ttf",
+                "C:/Windows/Fonts/arial.ttf",
+#endif
+            };
+            bool latinLoaded = false;
+            for (const char* path : latinFonts) {
+                FILE* f = fopen(path, "rb");
+                if (f) { fclose(f); io.Fonts->AddFontFromFileTTF(path, fontSize); latinLoaded = true; break; }
+            }
+            if (!latinLoaded) io.Fonts->AddFontDefault();
+        }
+
+        // Merge CJK font at DPI-aware size (only for non-Latin ranges)
+        ImFontConfig cfg;
+        cfg.MergeMode = true;
+        bool cjkLoaded = false;
         for (const char* path : cjkFonts) {
             FILE* f = fopen(path, "rb");
-            if (f) { fclose(f); io.Fonts->AddFontFromFileTTF(path, 16.0f, nullptr, cjkRanges); loaded = true; break; }
-        }
-        if (!loaded) {
-            io.Fonts->AddFontDefault();
+            if (f) { fclose(f); io.Fonts->AddFontFromFileTTF(path, fontSize, &cfg, cjkRanges); cjkLoaded = true; break; }
         }
     }
 
@@ -107,10 +216,14 @@ LauncherConfig showLauncher() {
 
     char levelBuf[1024] = {};
     char musicBuf[1024] = {};
-    int  resoIdx = 0; // 0=1920x1080, 1=2560x1440, 2=3840x2160, 3=1280x720
-    const std::array<const char*, 4> resoNames = {"1920x1080", "2560x1440", "3840x2160", "1280x720"};
-    const std::array<int, 4> resoW = {1920, 2560, 3840, 1280};
-    const std::array<int, 4> resoH = {1080, 1440, 2160, 720};
+    char fillBuf[8]   = "DEBB7B";
+    char strokeBuf[8] = "6F5D3D";
+    char bgBuf[8]     = "000000";
+    bool autoStroke = true;
+    int  resoIdx = 0;
+    const std::array<const char*, 4> resoNames = {"1280x720", "1920x1080", "2560x1440", "3840x2160"};
+    const std::array<int, 4> resoW = {1280, 1920, 2560, 3840};
+    const std::array<int, 4> resoH = {720, 1080, 1440, 2160};
 
     bool done = false;
 
@@ -124,32 +237,31 @@ LauncherConfig showLauncher() {
 
         // Full-window panel
         ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImVec2((float)LAUNCHER_W, (float)LAUNCHER_H));
+        ImGui::SetNextWindowSize(ImVec2((float)winW, (float)winH));
         ImGui::Begin("Launcher", nullptr,
             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
 
+        float S = dpiScale;  // scale factor for all hardcoded sizes
+
         ImGui::Spacing();
-        ImGui::SetCursorPosX(60);
+        ImGui::SetCursorPosX(60 * S);
         ImGui::Text("ADOCAO - A Dance of Fire and Ice Level Player");
         ImGui::Separator();
         ImGui::Spacing();
 
         // Level file
         ImGui::Text("Level file (.adofai):");
-        ImGui::SetNextItemWidth(380);
+        ImGui::SetNextItemWidth(380 * S);
         ImGui::InputText("##level", levelBuf, sizeof(levelBuf));
         ImGui::SameLine();
         if (ImGui::Button("Browse##lvl")) {
-            const char* filters[] = {"*.adofai", "*.json", "*.zip"};
-            const char* path = tinyfd_openFileDialog(
-                "Select level file", "", 3, filters, "ADOFAI files", 0);
-            if (path) {
-    #ifdef _WIN32
-            snprintf(levelBuf, sizeof(levelBuf), "%s", ansiToUtf8(path).c_str());
-#else
-            snprintf(levelBuf, sizeof(levelBuf), "%s", path);
-#endif
+            auto result = openFileDialog("Select level file", "*.adofai");
+            if (!result.empty()) {
+                snprintf(levelBuf, sizeof(levelBuf), "%s", result.c_str());
+                LOG_I("Browse level: %s", result.c_str());
+            } else {
+                LOG_I("Browse level: cancelled or failed");
             }
         }
 
@@ -157,20 +269,13 @@ LauncherConfig showLauncher() {
 
         // Music file
         ImGui::Text("Music file:");
-        ImGui::SetNextItemWidth(380);
+        ImGui::SetNextItemWidth(380 * S);
         ImGui::InputText("##music", musicBuf, sizeof(musicBuf));
         ImGui::SameLine();
         if (ImGui::Button("Browse##mus")) {
-            const char* filters[] = {"*.ogg", "*.mp3", "*.wav", "*.flac", "*.aac"};
-            const char* path = tinyfd_openFileDialog(
-                "Select music file", "", 5, filters, "Audio files", 0);
-            if (path) {
-#ifdef _WIN32
-                snprintf(musicBuf, sizeof(musicBuf), "%s", ansiToUtf8(path).c_str());
-#else
-                snprintf(musicBuf, sizeof(musicBuf), "%s", path);
-#endif
-            }
+            auto result = openFileDialog("Select music file", "*.ogg");
+            if (!result.empty())
+                snprintf(musicBuf, sizeof(musicBuf), "%s", result.c_str());
         }
 
         ImGui::Spacing();
@@ -180,7 +285,7 @@ LauncherConfig showLauncher() {
         // Resolution
         ImGui::Text("Resolution:");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(200);
+        ImGui::SetNextItemWidth(200 * S);
         ImGui::Combo("##reso", &resoIdx, resoNames.data(), (int)resoNames.size());
 
         // Fullscreen
@@ -188,20 +293,70 @@ LauncherConfig showLauncher() {
         ImGui::Spacing(); ImGui::SameLine();
         ImGui::Checkbox("Fullscreen", &cfg.fullscreen);
 
+        // Show trail
+        ImGui::SameLine();
+        ImGui::Spacing(); ImGui::SameLine();
+        ImGui::Checkbox("Trail", &cfg.showTrail);
+
+        ImGui::Spacing();
+
+        // Track colors
+        bool fillOk   = isValidHexColor(fillBuf);
+        bool strokeOk = isValidHexColor(strokeBuf);
+        bool bgOk     = isValidHexColor(bgBuf);
+
+        ImGui::Text("Fill: #");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80 * S);
+        ImGui::InputText("##fill", fillBuf, 7, ImGuiInputTextFlags_CharsUppercase);
+        if (!fillOk && fillBuf[0]) { ImGui::SameLine(); ImGui::TextColored(ImVec4(1,0.3f,0.3f,1),"6 hex"); }
+        ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
+        ImGui::Text("Stroke: #");
+        ImGui::SameLine();
+        if (autoStroke) ImGui::BeginDisabled();
+        ImGui::SetNextItemWidth(80 * S);
+        ImGui::InputText("##stroke", strokeBuf, 7, ImGuiInputTextFlags_CharsUppercase);
+        if (autoStroke) ImGui::EndDisabled();
+        if (!strokeOk && strokeBuf[0]) { ImGui::SameLine(); ImGui::TextColored(ImVec4(1,0.3f,0.3f,1),"6 hex"); }
+        ImGui::SameLine();
+        ImGui::Checkbox("Auto", &autoStroke);
+        ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
+        ImGui::Text("BG: #");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80 * S);
+        ImGui::InputText("##bg", bgBuf, 7, ImGuiInputTextFlags_CharsUppercase);
+        if (!bgOk && bgBuf[0]) { ImGui::SameLine(); ImGui::TextColored(ImVec4(1,0.3f,0.3f,1),"6 hex"); }
+
         ImGui::Spacing();
         ImGui::Spacing();
 
+        // Auto-calculate stroke from fill when enabled
+        if (autoStroke && fillOk) {
+            unsigned r,g,b; sscanf(fillBuf,"%02x%02x%02x",&r,&g,&b);
+            r=(unsigned)(r*0.5f); g=(unsigned)(g*0.5f); b=(unsigned)(b*0.5f);
+            snprintf(strokeBuf,sizeof(strokeBuf),"%02x%02x%02x",r,g,b);
+            strokeOk = true;
+        }
+
+        bool valid = (levelBuf[0] != '\0') && fillOk && strokeOk && bgOk;
+
         // Start button (centered at bottom)
-        ImGui::SetCursorPosY((float)LAUNCHER_H - 60);
-        ImGui::SetCursorPosX((float)(LAUNCHER_W - 120) / 2.0f);
-        if (ImGui::Button("Start", ImVec2(120, 36))) {
-            cfg.levelPath    = levelBuf;
-            cfg.musicPath    = musicBuf;
-            cfg.resolutionW  = resoW[resoIdx];
-            cfg.resolutionH  = resoH[resoIdx];
-            cfg.cancelled    = false;
+        ImGui::SetCursorPosY((float)winH - 60 * S);
+        ImGui::SetCursorPosX((float)(winW - 120 * S) / 2.0f);
+        if (!valid) ImGui::BeginDisabled();
+        if (ImGui::Button("Start", ImVec2(120 * S, 36 * S))) {
+            cfg.levelPath        = levelBuf;
+            cfg.musicPath        = musicBuf;
+            cfg.trackFillColor   = fillBuf;
+            cfg.trackStrokeColor = strokeBuf;
+            cfg.backgroundColor  = bgBuf;
+            cfg.autoStroke       = autoStroke;
+            cfg.resolutionW      = resoW[resoIdx];
+            cfg.resolutionH      = resoH[resoIdx];
+            cfg.cancelled        = false;
             done = true;
         }
+        if (!valid) ImGui::EndDisabled();
 
         ImGui::End();
 

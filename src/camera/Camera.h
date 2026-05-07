@@ -18,6 +18,7 @@ public:
     glm::mat4 view()    const { return m_view; }
 
     float zoom() const { return m_zoom; }
+    void frustumBounds(float& left, float& right, float& bottom, float& top) const;
 
 private:
     float m_zoom   = 100.0f;

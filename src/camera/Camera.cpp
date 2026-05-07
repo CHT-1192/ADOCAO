@@ -22,7 +22,7 @@ void Camera::update() {
     float halfH = 6.0f / (m_zoom / 100.0f);
     float halfW = halfH * m_aspect;
 
-    m_proj = glm::ortho(-halfW, halfW, -halfH, halfH, 0.1f, 100.0f);
+    m_proj = glm::ortho(-halfW, halfW, -halfH, halfH, 0.1f, 5000.0f);
 
     // Camera looks from +Z toward origin, centered on target
     m_view = glm::lookAt(
@@ -33,4 +33,13 @@ void Camera::update() {
 
 glm::mat4 Camera::viewProj() const {
     return m_proj * m_view;
+}
+
+void Camera::frustumBounds(float& left, float& right, float& bottom, float& top) const {
+    float halfH = 6.0f / (m_zoom / 100.0f);
+    float halfW = halfH * m_aspect;
+    left   = m_targetX - halfW;
+    right  = m_targetX + halfW;
+    bottom = m_targetY - halfH;
+    top    = m_targetY + halfH;
 }

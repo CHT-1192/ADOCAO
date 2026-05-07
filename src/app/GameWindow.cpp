@@ -1,44 +1,65 @@
 #include "GameWindow.h"
 #include "../glad/gl_core.h"
 #include "../render/Shader.h"
+#include "../render/Shaders.h"
 #include "../camera/Camera.h"
 #include "../track/TileMesh.h"
+#include "../game/PlaybackEngine.h"
+#include "../game/Planet.h"
+#include "../render/PlanetTrail.h"
+#include "../audio/AudioEngine.h"
+#include "../audio/HitsoundManager.h"
 #include "../util/Logger.h"
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-static const char* kVertSrc = R"(
-#version 330 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aColor;
-uniform mat4 uMVP;
-out vec3 vColor;
-void main() {
-    gl_Position = uMVP * vec4(aPos, 1.0);
-    vColor = aColor;
-}
-)";
+namespace {
 
-static const char* kFragSrc = R"(
-#version 330 core
-in vec3 vColor;
-out vec4 fragColor;
-void main() {
-    fragColor = vec4(vColor, 1.0);
+struct GameInput {
+    bool   dragActive = false;
+    double dragStartX = 0.0;
+    double dragStartY = 0.0;
+    double cursorX    = 0.0;
+    double cursorY    = 0.0;
+    float  baseTargetX = 0.0f;
+    float  baseTargetY = 0.0f;
+    float  offsetX = 0.0f;
+    float  offsetY = 0.0f;
+    Camera* camera = nullptr;
+};
+
+struct Viewport { int x=0, y=0, w=0, h=0; };
+
+Viewport computeLetterbox(int fbW, int fbH, float targetAspect) {
+    float fbAspect = (float)fbW / (float)fbH;
+    Viewport vp;
+    if (targetAspect > fbAspect) {
+        vp.w = fbW;
+        vp.h = (int)(fbW / targetAspect);
+        vp.x = 0;
+        vp.y = (fbH - vp.h) / 2;
+    } else {
+        vp.h = fbH;
+        vp.w = (int)(fbH * targetAspect);
+        vp.x = (fbW - vp.w) / 2;
+        vp.y = 0;
+    }
+    return vp;
 }
-)";
+
+} // namespace
 
 void showGameWindow(const LauncherConfig& cfg, std::unique_ptr<LevelData> level) {
-    // Create window
     GLFWmonitor* targetMonitor = cfg.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
+    float targetAspect = (float)cfg.resolutionW / (float)cfg.resolutionH;
 
     GLFWwindow* window;
     if (targetMonitor) {
         const GLFWvidmode* mode = glfwGetVideoMode(targetMonitor);
         window = glfwCreateWindow(mode->width, mode->height, "ADOCAO", targetMonitor, nullptr);
     } else {
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
         glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
         window = glfwCreateWindow(cfg.resolutionW, cfg.resolutionH, "ADOCAO", nullptr, nullptr);
 
@@ -53,77 +74,236 @@ void showGameWindow(const LauncherConfig& cfg, std::unique_ptr<LevelData> level)
         }
     }
 
-    if (!window) {
-        LOG_E("Failed to create game window");
-        return;
-    }
+    if (!window) { LOG_E("Failed to create game window"); return; }
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
-    if (!loadGLCore()) {
-        LOG_E("Failed to load OpenGL functions");
-        glfwDestroyWindow(window);
-        return;
-    }
+    if (!loadGLCore()) { LOG_E("Failed to load OpenGL functions"); glfwDestroyWindow(window); return; }
 
     LOG_I("OpenGL %s | GLSL %s", glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-    // Compile shader
-    Shader shader;
-    if (!shader.compile(kVertSrc, kFragSrc)) {
-        LOG_E("Shader compilation failed");
-        glfwDestroyWindow(window);
-        return;
+    // ---- Shaders ----
+    Shader tileShader;
+    if (!tileShader.compile(Shaders::kTileVertSrc, Shaders::kTileFragSrc)) {
+        LOG_E("Tile shader failed"); glfwDestroyWindow(window); return;
+    }
+    Shader planetShader;
+    if (!planetShader.compile(Shaders::kPlanetVertSrc, Shaders::kPlanetFragSrc)) {
+        LOG_E("Planet shader failed"); glfwDestroyWindow(window); return;
+    }
+    Shader trailShader;
+    if (!trailShader.compile(Shaders::kTrailVertSrc, Shaders::kTrailFragSrc)) {
+        LOG_E("Trail shader failed"); glfwDestroyWindow(window); return;
     }
 
-    // Build track mesh
+    // ---- Track ----
     TileMesh tileMesh;
-    tileMesh.build(*level);
+    tileMesh.build(*level, cfg.trackFillColor, cfg.trackStrokeColor);
 
-    // Camera
+    // ---- Camera ----
     Camera camera;
-    float bgR = 0.0f, bgG = 0.0f, bgB = 0.0f;
+    GameInput input; input.camera = &camera;
+    float bgR=0, bgG=0, bgB=0;
     {
-        auto& hex = level->settings.backgroundColor;
-        if (hex.length() >= 6) {
-            unsigned int r, g, b;
-            sscanf(hex.c_str(), "%02x%02x%02x", &r, &g, &b);
-            bgR = r / 255.0f; bgG = g / 255.0f; bgB = b / 255.0f;
+        std::string hex = cfg.backgroundColor;
+        if (hex.length()>=6) {
+            unsigned r,g,b; sscanf(hex.c_str(),"%02x%02x%02x",&r,&g,&b);
+            bgR=r/255.0f;bgG=g/255.0f;bgB=b/255.0f;
         }
     }
-
     camera.setZoom(level->settings.zoom);
     if (!level->tiles.empty()) {
         auto& t = level->tiles[0];
         camera.setTarget(t.position[0], t.position[1]);
+        input.baseTargetX = t.position[0];
+        input.baseTargetY = t.position[1];
     }
+
+    // ---- Playback engine ----
+    PlaybackEngine playback;
+    playback.init(*level, cfg.showTrail);
+    if (playback.redPlanet()) {
+        playback.redPlanet()->buildGPU();
+        playback.bluePlanet()->buildGPU();
+    }
+
+    // ---- Audio engine ----
+    AudioEngine audioEngine;
+    if (!audioEngine.init()) {
+        LOG_E("Audio engine failed to initialize");
+    }
+
+    if (!cfg.musicPath.empty()) {
+        audioEngine.loadMusic(cfg.musicPath);
+    }
+
+    // ---- Hitsound manager (synthesis only, no device) ----
+    HitsoundManager hitsoundMgr;
+    hitsoundMgr.init();
+    hitsoundMgr.setHitsoundType(level->settings.hitsound);
+    hitsoundMgr.setVolume(level->settings.hitsoundVolume);
+
+    LOG_I("Pre-synthesizing hitsounds...");
+    auto timestamps = playback.getHitsoundTimestamps();
+    hitsoundMgr.preSynthesize(timestamps, playback.totalDuration());
+    LOG_I("Hitsounds ready");
+
+    // Attach hitsound buffer to audio engine for mixed playback
+    if (hitsoundMgr.isSynthesized()) {
+        audioEngine.attachExternal(hitsoundMgr.buffer(), hitsoundMgr.totalFrames(),
+                                   hitsoundMgr.channels(), hitsoundMgr.sampleRate(),
+                                   hitsoundMgr.cursor(), hitsoundMgr.playing());
+    }
+
+    // ---- Input callbacks ----
+    glfwSetMouseButtonCallback(window, [](GLFWwindow* w, int button, int action, int) {
+        auto* in = static_cast<GameInput*>(glfwGetWindowUserPointer(w));
+        if (button == GLFW_MOUSE_BUTTON_LEFT) {
+            if (action == GLFW_PRESS) {
+                in->dragActive=true; in->dragStartX=in->cursorX; in->dragStartY=in->cursorY;
+            } else {
+                in->dragActive=false; in->baseTargetX+=in->offsetX; in->baseTargetY+=in->offsetY;
+                in->offsetX=0; in->offsetY=0;
+            }
+        }
+    });
+    glfwSetCursorPosCallback(window, [](GLFWwindow* w, double x, double y) {
+        auto* in = static_cast<GameInput*>(glfwGetWindowUserPointer(w));
+        in->cursorX=x; in->cursorY=y;
+    });
+    glfwSetScrollCallback(window, [](GLFWwindow* w, double, double dy) {
+        auto* in = static_cast<GameInput*>(glfwGetWindowUserPointer(w));
+        float z = in->camera->zoom() * (1.0f + (float)dy * 0.1f);
+        if (z<5)z=5; if (z>500)z=500;
+        in->camera->setZoom(z);
+    });
+    glfwSetWindowUserPointer(window, &input);
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Main render loop
+    // ---- Main loop ----
+    double lastFrameTime = glfwGetTime();
+    bool wasSpacePressed = false;
+
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
-
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, GLFW_TRUE);
 
-        int w, h;
-        glfwGetFramebufferSize(window, &w, &h);
-        camera.setAspect((float)w, (float)h);
+        // Delta time
+        double now = glfwGetTime();
+        float deltaMs = (float)((now - lastFrameTime) * 1000.0);
+        lastFrameTime = now;
+        if (deltaMs > 100.0f) deltaMs = 100.0f;  // cap for tab-out
 
-        glViewport(0, 0, w, h);
+        // Space toggles playback
+        bool spacePressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
+        if (spacePressed && !wasSpacePressed) {
+            if (!playback.isPlaying()) {
+                playback.start();
+
+                const auto& bpmArr = playback.tileBPMPerTile();
+                float bpm = bpmArr.size() > 0 ? bpmArr[0] : level->settings.bpm;
+                float offsetSec = level->settings.offset / 1000.0f;
+
+                // Reset hitsound cursor and start playback via mixer
+                hitsoundMgr.reset();
+                *hitsoundMgr.playing() = true;
+
+                if (audioEngine.hasMusic()) {
+                    audioEngine.seek(offsetSec);
+                    audioEngine.play();
+                } else {
+                    // No music — start device for hitsounds only
+                    audioEngine.play();
+                }
+            } else {
+                playback.stop();
+                audioEngine.pause();
+                *hitsoundMgr.playing() = false;
+            }
+        }
+        wasSpacePressed = spacePressed;
+
+        // Update playback
+        if (playback.isPlaying()) {
+            playback.update(deltaMs);
+        }
+
+        // Camera: follow pivot during playback, allow drag when stopped
+        if (playback.isPlaying()) {
+            int tileIdx = playback.currentTileIndex();
+            int pivotIdx = (tileIdx >= 0) ? tileIdx : 0;
+            if (pivotIdx < (int)level->tiles.size()) {
+                auto& p = level->tiles[pivotIdx].position;
+                camera.setTarget(p[0], p[1]);
+                input.baseTargetX = p[0];
+                input.baseTargetY = p[1];
+                input.offsetX = 0;
+                input.offsetY = 0;
+            }
+        }
+
+        // Letterbox viewport
+        int fbW, fbH, winW, winH;
+        glfwGetFramebufferSize(window, &fbW, &fbH);
+        glfwGetWindowSize(window, &winW, &winH);
+        Viewport vp = computeLetterbox(fbW, fbH, targetAspect);
+
+        // Drag (only when not playing)
+        if (!playback.isPlaying() && input.dragActive && vp.w>0 && vp.h>0) {
+            float halfH = 6.0f/(camera.zoom()/100.0f);
+            float halfW = halfH*(float)vp.w/(float)vp.h;
+            float pxToWorldX = (2.0f*halfW)/(float)vp.w;
+            float pxToWorldY = (2.0f*halfH)/(float)vp.h;
+            input.offsetX = -(float)(input.cursorX-input.dragStartX)*pxToWorldX;
+            input.offsetY =  (float)(input.cursorY-input.dragStartY)*pxToWorldY;
+        }
+        if (!playback.isPlaying()) {
+            camera.setTarget(input.baseTargetX+input.offsetX, input.baseTargetY+input.offsetY);
+        }
+
+        glViewport(0, 0, fbW, fbH);
+        glClearColor(0, 0, 0, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glViewport(vp.x, vp.y, vp.w, vp.h);
+        glScissor(vp.x, vp.y, vp.w, vp.h);
+        glEnable(GL_SCISSOR_TEST);
         glClearColor(bgR, bgG, bgB, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glDisable(GL_SCISSOR_TEST);
 
-        shader.use();
-        shader.setMat4("uMVP", glm::value_ptr(camera.viewProj()));
-        tileMesh.draw();
+        camera.setAspect((float)vp.w, (float)vp.h);
+
+        // Draw tiles + icons (no depth test — all tiles visible regardless of Z)
+        glDisable(GL_DEPTH_TEST);
+        tileShader.use();
+        tileShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
+        float vl,vr,vb,vt; camera.frustumBounds(vl,vr,vb,vt);
+        tileMesh.draw(vl, vr, vb, vt);
+        tileMesh.drawIcons(vl, vr, vb, vt);
+        glEnable(GL_DEPTH_TEST);
+
+        // Draw planets (only when playing or after first start)
+        if (playback.isPlaying() && playback.redPlanet() && playback.redPlanet()->gpuBuilt()) {
+            playback.redPlanet()->draw(planetShader, camera);
+            playback.bluePlanet()->draw(planetShader, camera);
+        }
+
+        // Draw trails
+        if (playback.isPlaying() && playback.redPlanet() && playback.redPlanet()->trail) {
+            playback.redPlanet()->trail->draw(trailShader, camera);
+            playback.bluePlanet()->trail->draw(trailShader, camera);
+        }
+
         glfwSwapBuffers(window);
     }
 
+    // Cleanup
+    audioEngine.detachExternal();
+    audioEngine.shutdown();
     glfwDestroyWindow(window);
 }

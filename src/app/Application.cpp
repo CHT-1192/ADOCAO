@@ -6,12 +6,38 @@
 #include "../util/Logger.h"
 #include <GLFW/glfw3.h>
 
+#ifdef _WIN32
+#include <windows.h>
+
+static void enableDPIAwareness() {
+    HMODULE shcore = LoadLibraryA("shcore.dll");
+    if (shcore) {
+        auto SetProcessDpiAwareness = (HRESULT(WINAPI*)(int))
+            GetProcAddress(shcore, "SetProcessDpiAwareness");
+        if (SetProcessDpiAwareness) SetProcessDpiAwareness(2); // PerMonitor
+        FreeLibrary(shcore);
+    } else {
+        HMODULE user32 = LoadLibraryA("user32.dll");
+        if (user32) {
+            auto SetProcessDPIAware = (BOOL(WINAPI*)())
+                GetProcAddress(user32, "SetProcessDPIAware");
+            if (SetProcessDPIAware) SetProcessDPIAware();
+            FreeLibrary(user32);
+        }
+    }
+}
+#endif
+
 int runApplication(bool debugConsole) {
     // Determine log path next to executable
     std::string logPath = "ADOCAO.log";
     Logger::instance().init(logPath, debugConsole);
 
     LOG_I("ADOCAO starting...");
+
+#ifdef _WIN32
+    enableDPIAwareness();
+#endif
 
     if (!glfwInit()) {
         LOG_E("Failed to initialize GLFW");

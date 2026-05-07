@@ -8,6 +8,19 @@ A native C++ / OpenGL "A Dance of Fire and Ice" (冰与火之舞) level viewer. 
 
 ## Build & Run
 
+**Windows (MinGW):**
+```bash
+build.bat
+```
+
+**Linux (Wayland):**
+```bash
+sudo apt install libwayland-dev libxkbcommon-dev libgl-dev fonts-noto-cjk zenity
+chmod +x build.sh
+./build.sh
+```
+
+Or manually:
 ```bash
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
@@ -15,101 +28,187 @@ cmake --build . --parallel
 ./adocao
 ```
 
-No command-line arguments. All configuration (level file, music, resolution, fullscreen) is selected in the launcher window.
+No command-line arguments. All configuration (level file, music, resolution, fullscreen, trail toggle) is selected in the launcher window.
 
 Minimum CMake version 3.20. Uses C++20.
 
-## Dependencies (planned)
+## Dependencies
 
 | Library | Purpose |
 |---------|---------|
-| GLFW 3.x | Window creation, input, OpenGL context (supports Wayland via `GLFW_PLATFORM_WAYLAND`) |
+| GLFW 3.4 | Window creation, input, OpenGL context |
 | glad | OpenGL 3.3+ Core profile loader |
-| glm | Vector/matrix math (replaces Three.js) |
+| glm | Vector/matrix math |
 | nlohmann/json | Parse `.adofai` JSON level files |
-| stb_image | Texture loading for decorations/backgrounds |
-| miniaudio (single-header) | Audio playback (music + hitsounds) |
-| Dear ImGui | **Required.** Launcher window and loading progress window UI |
-| tinyfiledialogs | **Required.** Native OS file open dialogs for level/music selection |
-| libnyquist (optional) | OGG/MP3 decoding support for music |
+| stb_image | Texture loading (unused currently) |
+| miniaudio | Audio playback (music + hitsounds) |
+| Dear ImGui | Launcher + loading window UI |
+| tinyfiledialogs | Native OS file open dialogs |
 
-## Simplified Feature Scope
+## Feature Scope
 
-This is a **level viewer**, not a full game engine. Supported vs unsupported features:
-
-**Supported:**
-- `SetSpeed` — BPM changes (multiplier or absolute), affects planet speed
+**Implemented:**
+- Track tile rendering (instanced, frustum-culled, colored fill/stroke)
+- Event icons on tiles: Twirl (purple), SetSpeed-up (red), SetSpeed-down (blue)
+- Planet movement (red & blue spheres, pivot alternation)
+- Planet trail (Catmull-Rom ribbon, 0.4s duration, tapered width)
+- Space key to start/stop playback
+- **Audio playback** — music (.ogg/.mp3/.wav) + pre-synthesized hitsounds
+- `SetSpeed` — BPM changes (multiplier or absolute)
 - `Twirl` — flips CW/CCW rotation direction
-- `Pause` — adds extra rotation (duration/2 degrees) to the current tile
-- `PositionTrack` — **only positionOffset** (rotation, scale, opacity, relativeTo, justThisTile, stickToFloors are ignored)
+- `Pause` — adds extra rotation (duration/2 full turns) to current tile
+- `PositionTrack` — **only positionOffset with justThisTile** (cumulative offsets)
+- Camera: orbit follows current pivot planet during playback, free drag/zoom when stopped
+- High-DPI window scaling (per-monitor awareness, ImGui font scaling)
+- Launcher: level/music browse, resolution, fullscreen, track colors, trail toggle
 
-**Ignored:**
-- `MoveCamera` — camera is fixed: relativeTo=Player, position=(0,0), follows current pivot planet
-- `MoveTrack`, `ColorTrack`, `RecolorTrack`, `Bloom`, `Flash` — visual effects not implemented
-- `AddDecoration` / `MoveDecorations` — decorations ignored
+**Not yet implemented:**
+- `MoveCamera`, `MoveTrack`, `ColorTrack`, `RecolorTrack`, `Bloom`, `Flash`
+- `AddDecoration` / `MoveDecorations`
+- PositionTrack: relativeTo, rotation, scale, opacity, stickToFloors
 
-## Architecture
+## File Structure
 
-### Layer 0: Level Parser (`src/level/`)
-- `LevelData.h/.cpp` — Parses `.adofai` JSON. Stores `settings`, `angleData[]`, `tiles[]` (with computed positions). Processes SetSpeed, Twirl, Pause events for tile timing. Parses PositionTrack.positionOffset. All other event types are ignored.
+```
+src/
+  app/
+    main.cpp               — Entry point (--debug flag)
+    Application.h/.cpp     — 3-stage window flow + DPI awareness init
+    LauncherWindow.h/.cpp  — ImGui launcher (file browse, reso, fullscreen, trail, colors)
+    LoadingWindow.h/.cpp   — ImGui loading progress bar
+    LevelLoader.h/.cpp     — Async loading pipeline
+    GameWindow.h/.cpp      — OpenGL game window (rendering + playback + audio start/stop)
+  audio/
+    AudioEngine.h/.cpp     — Music playback via miniaudio (load, play, pause, seek, volume)
+    HitsoundManager.h/.cpp — Hitsound synthesis (pre-mixed buffer from timestamps) + playback
+  camera/
+    Camera.h/.cpp          — Orthographic camera
+  game/
+    Planet.h/.cpp          — Planet sphere mesh (radius 0.25), GPU resources, trail link
+    PlaybackEngine.h/.cpp  — Timing precalculation, planet movement, pivot logic, hitsound timestamps
+  glad/
+    gl_core.h/.cpp         — OpenGL core profile loader
+  level/
+    LevelData.h/.cpp       — ADOFAI JSON parser, tile position calc, action processing
+    JsonCleaner.h/.cpp     — JSON fixup (missing commas, trailing commas) + parseBool helper
+  render/
+    Shader.h/.cpp          — OpenGL shader compilation + uniform setters
+    Shaders.h              — All embedded GLSL source strings (tile, planet, trail)
+    PlanetTrail.h/.cpp     — Catmull-Rom ribbon trail (200 max pts, 0.4s, semi-transparent)
+  track/
+    TileMesh.h/.cpp        — Instanced tile + icon rendering, frustum culling, GPU upload
+    TileGeometry.h/.cpp    — Geometry generators (createCircle, createTileMesh, createMidSpinMesh)
+  util/
+    Easing.h               — Standard ADOFAI easing functions
+    Logger.h/.cpp          — File + console logger
+    stb_impl.cpp           — stb_image implementation unit
+assets/
+  sounds/                  — 27 .wav hit sound files (copied from re_adojas)
+```
 
-### Layer 1: Track Geometry (`src/track/`)
-- `TileMesh.h/.cpp` — Generates tile quad meshes from angleData positions.
-- `TrackManager.h/.cpp` — Visibility culling, instanced rendering of visible tiles.
+## Playback Engine
 
-### Layer 2: Planet Movement (`src/game/`)
-- `Planet.h/.cpp` — Single planet sphere. Two instances (red & blue).
+### Timing Model
 
-**Core movement algorithm** (must match reference):
-- BPM starts from `settings.bpm`, changes per tile via SetSpeed events
-- `secPerBeat = 60 / currentBPM`
-- For tile `i` (the pivot), `startAngle` = vector from pivot to previous tile
-- `totalAngle = (abs(tile.angle) + extraRotation) * π / 180`
-- At elapsed time `t`, `progress = (t - tileStartTimes[i]) / duration_i`, `currentAngle = startAngle + totalAngle * progress`
-- Moving planet position: `pivotPos + (cos(currentAngle), sin(currentAngle)) * dist`
-- Direction flips on Twirl events
-- Pivot alternates: tile 0 → red is pivot, tile 1 → blue is pivot, etc.
-- After the last tile: infinite rotation at constant BPM.
-
-### Layer 3: Camera (`src/camera/`)
-- `Camera.h/.cpp` — Orthographic camera, always follows the current pivot planet. Fixed relativeTo=Player, position=(0,0), zoom from settings.
-
-### Layer 4: Rendering (`src/render/`)
-- `Renderer.h/.cpp` — OpenGL state setup, viewport, render loop.
-- `Shader.h/.cpp` — GLSL shader compilation and uniform management.
-- `PlanetTrail.h/.cpp` — Ribbon/line trail behind moving planet.
-
-### Layer 5: Audio (`src/audio/`)
-- `AudioEngine.h/.cpp` — miniaudio music playback with seek.
-- `HitsoundManager.h/.cpp` — Pre-synthesized hitsound buffer.
-
-### Layer 6: Application (`src/app/`)
-- `main.cpp` — Entry point.
-- `Application.h/.cpp` — Three-window sequence: launcher → loading → game.
-- `LauncherWindow.h/.cpp` — ImGui launcher. File selectors, resolution, fullscreen, Start.
-- `LoadingWindow.h/.cpp` — ImGui progress bar + status text.
-- `LevelLoader.h/.cpp` — Async multi-step loader with progress reporting.
-- `GameWindow.h/.cpp` — Pure OpenGL game window. No ImGui. Space=pause, Esc=quit.
-
-### Shared / Utilities (`src/util/`)
-- `Easing.h` — All standard easing functions. Constants must match `Easing.ts` exactly.
-
-## Key ADOFAI Level Format (.adofai)
-
-JSON with these top-level keys:
-- `angleData: number[]` — Angle for each tile (999 = midspin, treated as previous+180°). 180° = straight line.
-- `settings: { bpm, offset, countdownTicks, hitsound, hitsoundVolume, trackColor, backgroundColor, zoom, ... }`
-- `actions: [{ floor, eventType, ... }]` — Supported: `SetSpeed`, `Twirl`, `Pause`, `PositionTrack` (positionOffset only). Ignored: MoveCamera, MoveTrack, ColorTrack, RecolorTrack, Bloom, Flash, AddDecoration.
-- `decorations: [...]` — **Ignored.**
-
-## Timing Model
+Precalculated in `PlaybackEngine::precalculateTiming()` (matches `Player.ts::calculateCumulativeRotations()`):
 
 - `secPerBeat = 60 / currentBPM` (BPM starts from `settings.bpm`, changes via SetSpeed events)
-- Countdown: `countdownTicks * secPerBeat` at initial BPM
-- Music offset: `settings.offset` (ms), applied as `music.currentTime = offset/1000` at start
-- `tileStartTimes[i]` = cumulative time from tile 0 to tile i. For tile i: `abs(angle_i + extraRotation) / 180 * secPerBeat_i`
-- Planet hits tile i exactly when `timeInLevel == tileStartTimes[i]`
+- For tile `i`: `rawAngle = angleData[i]` (999 for midspin), `totalAngle = rawAngle * PI / 180`
+- CW flip: if Twirl toggles isCW, `totalAngle = -totalAngle`
+- Pause: `extraRotation += event.duration / 2.0` (in full 360° units)
+- `rotationAmount = abs(totalAngle) / (2*PI)` (number of full rotations)
+- `tileDurations[i] = rotationAmount * 2 * (60 / currentBPM)` (seconds to traverse tile i)
+- `tileStartTimes[i]` = cumulative time, shifted so `tileStartTimes[1] = 0` (planet hits tile 1 at t=0)
+- Countdown: `countdownTicks * (60 / settings.bpm)` seconds before tile 1
+- `timeInLevel = elapsedSec - countdownDuration`
+
+### Planet Movement
+
+- Pivot tile index alternates: even index → red pivot, odd index → blue pivot
+- Pivot planet sits at tile position, moving planet orbits around it
+- Normal: `progress = (timeInLevel - tileStartTimes[i]) / tileDurations[i]`
+  `currentAngle = tileStartAngles[i] + tileTotalAngles[i] * progress`
+  `movingPos = pivotPos + (cos(angle)*dist, sin(angle)*dist)`
+- Past last tile: infinite rotation at `(BPM/60)*PI` rad/s
+- Planet Z = 1.0 (above tiles), trail Z = 0
+
+### Input
+
+- **Space**: start/stop playback (edge-triggered, one press = toggle)
+- **Esc**: close game window
+- **Mouse drag**: pan camera (only when not playing)
+- **Mouse scroll**: zoom (5–500 range)
+
+## Audio System
+
+### Music (AudioEngine)
+
+Wraps miniaudio `ma_engine` + `ma_sound` for OGG/MP3/WAV music playback.
+- `init()` creates the audio engine; `loadMusic(path)` loads a file
+- `play()` / `playScheduled(delaySeconds)` / `pause()` / `stop()` / `seek(seconds)`
+- `position()` returns cursor in seconds; `volume` is 0.0-1.0
+- On space press: music is seeked to `offset/1000`, then started with a scheduled delay:
+  - `musicStartDelay = countdownDuration - musicDelaySeconds`
+  - `musicDelaySeconds = (firstTileAngle - 180) / 180 * secPerBeat`
+  - If delay negative, music starts immediately at the calculated offset
+
+### Hitsounds (HitsoundManager)
+
+Pre-synthesizes all hits into a single WAV buffer (matches reference `HitsoundManager.ts`):
+- `preSynthesize(timestamps, totalDuration)` — mixes the selected hitsound .wav at each timestamp
+- Soft-clip normalization (polynomial tanh approximation, threshold 0.5)
+- Writes temp WAV via manual RIFF header + int16 PCM
+- `start(delaySeconds)` — plays the synthesized track (delayed start for countdown sync)
+- `stop()` / `dispose()` — stops playback, deletes temp WAV
+
+**Hitsound timestamps**: `PlaybackEngine::getHitsoundTimestamps()` collects `tileStartTimes[i]` for i ≥ 1 (skipping tiles with raw angleData == 0). Timestamps represent when planet reaches each tile relative to tile 1.
+
+**Type mapping** (matching reference `hitsoundKeyMap`):
+- `Kick` → sndKick.wav, `Snare` → sndSnareAcoustic2.wav, `Hat` → sndHat.wav, etc.
+- 27 hitsound types supported (all .wav files in `assets/sounds/`)
+
+### Audio Sync on Space Press
+
+```
+countdownDuration = countdownTicks * (60 / initialBPM)
+musicDelaySeconds = (firstTileAngle - 180) / 180 * secPerBeat
+musicStartDelay = countdownDuration - musicDelaySeconds
+hitsoundStartDelay = countdownDuration
+
+music.seek(offset / 1000)
+if musicStartDelay > 0: music.playScheduled(musicStartDelay)
+else: music.seek(offset/1000 + |musicStartDelay|); music.play()
+hitsounds.start(hitsoundStartDelay)
+```
+
+## Event Icons
+
+Painted on track tiles during `TileMesh::buildIcons()`. Match re_adojas visual:
+- Icon circle radius: 0.18 world units (16 segments)
+- Z offset: +0.002 above tile (+0.001 extra for SetSpeed when Twirl also present)
+- Colors: Twirl = purple (0x800080), SpeedUp = red (0xFF0000), SpeedDown = blue (0x0000FF)
+- SetSpeed icon only shown when BPM ratio > 1.05 (up) or < 0.95 (down)
+
+## Midspin Detection
+
+Midspin = `angleData[i] == 999.0f` (matches reference `angleData[index] === 999`).
+The shape key in `TileMesh::build()` uses raw angleData, not a heuristic.
 
 ## Coordinate System
 
-OpenGL world space: X right, Y up, Z toward camera (orthographic). Tile indices increase away from the camera (Z = (12 - index) * 0.1). Camera looks along -Z.
+OpenGL world space: X right, Y up, Z toward camera (orthographic). Tile Z = (12 - index) * 0.1. Camera looks along -Z.
+
+## High DPI
+
+Windows: `SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)` called in `Application.cpp`.
+Launcher + loading windows scale by `glfwGetMonitorContentScale()`. ImGui `FontGlobalScale` set to DPI scale.
+Game window uses user-requested resolution directly.
+
+## Key ADOFAI Level Format
+
+JSON with these top-level keys:
+- `angleData: number[]` — Angle per tile (999 = midspin, 180 = straight)
+- `settings: { bpm, offset, countdownTicks, zoom, rotation, ... }`
+- `actions: [{ floor, eventType, ... }]` — Supported: SetSpeed, Twirl, Pause, PositionTrack (positionOffset + justThisTile only)
+- `pathData: string` — Alternative to angleData (R=0°, L=180°, !=midspin, etc.)
+- `decorations: [...]` — Ignored

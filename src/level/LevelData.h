@@ -40,11 +40,25 @@ struct LevelData {
     nlohmann::json     actions;       // raw JSON array
     nlohmann::json     decorations;   // raw JSON array
 
+    struct TilePositionOffset {
+        float offsetX = 0.0f;
+        float offsetY = 0.0f;
+        bool  justThisTile = false;
+    };
+
+    // Per-tile event data (computed from actions)
+    std::vector<float> tileBPMs;      // BPM for each tile (after SetSpeed events)
+    std::vector<bool>  tileHasTwirl;  // true if tile has a Twirl event
+    std::vector<bool>  tileHasSetSpeed; // true if tile has a SetSpeed event
+    std::vector<TilePositionOffset> tilePositionOffsets;
+
     bool loadFromFile(const std::string& filepath);
     bool loadFromString(const std::string& jsonStr);
 
 private:
     void calculateTilePositions();
     void convertPathToAngles();
+    void processActions();
+    void applyPositionTrackOffsets();
     static float pathCharToAngle(char c);
 };

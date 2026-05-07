@@ -36,10 +36,12 @@ extern PFNGLDELETEVERTEXARRAYSPROC glad_DeleteVertexArrays;
 extern PFNGLGENBUFFERSPROC         glad_GenBuffers;
 extern PFNGLBINDBUFFERPROC         glad_BindBuffer;
 extern PFNGLBUFFERDATAPROC         glad_BufferData;
+extern PFNGLBUFFERSUBDATAPROC      glad_BufferSubData;
 extern PFNGLDELETEBUFFERSPROC      glad_DeleteBuffers;
 extern PFNGLVERTEXATTRIBPOINTERPROC glad_VertexAttribPointer;
 extern PFNGLENABLEVERTEXATTRIBARRAYPROC  glad_EnableVertexAttribArray;
 extern PFNGLDISABLEVERTEXATTRIBARRAYPROC glad_DisableVertexAttribArray;
+extern PFNGLVERTEXATTRIBDIVISORPROC     glad_VertexAttribDivisor;
 
 // Textures
 extern PFNGLGENTEXTURESPROC    glad_GenTextures;
@@ -58,11 +60,13 @@ extern PFNGLCHECKFRAMEBUFFERSTATUSPROC glad_CheckFramebufferStatus;
 extern PFNGLDELETEFRAMEBUFFERSPROC     glad_DeleteFramebuffers;
 
 // Rendering
+extern PFNGLSCISSORPROC      glad_Scissor;
 extern PFNGLVIEWPORTPROC     glad_Viewport;
 extern PFNGLCLEARPROC        glad_Clear;
 extern PFNGLCLEARCOLORPROC   glad_ClearColor;
 extern PFNGLDRAWARRAYSPROC   glad_DrawArrays;
 extern PFNGLDRAWELEMENTSPROC glad_DrawElements;
+extern PFNGLDRAWELEMENTSINSTANCEDPROC glad_DrawElementsInstanced;
 extern PFNGLENABLEPROC       glad_Enable;
 extern PFNGLDISABLEPROC      glad_Disable;
 extern PFNGLBLENDFUNCPROC    glad_BlendFunc;
@@ -104,10 +108,12 @@ bool loadGLCore();
 #define glGenBuffers            glad_GenBuffers
 #define glBindBuffer            glad_BindBuffer
 #define glBufferData            glad_BufferData
+#define glBufferSubData         glad_BufferSubData
 #define glDeleteBuffers         glad_DeleteBuffers
 #define glVertexAttribPointer   glad_VertexAttribPointer
 #define glEnableVertexAttribArray    glad_EnableVertexAttribArray
 #define glDisableVertexAttribArray   glad_DisableVertexAttribArray
+#define glVertexAttribDivisor        glad_VertexAttribDivisor
 
 #define glGenTextures           glad_GenTextures
 #define glBindTexture           glad_BindTexture
@@ -123,11 +129,13 @@ bool loadGLCore();
 #define glCheckFramebufferStatus glad_CheckFramebufferStatus
 #define glDeleteFramebuffers    glad_DeleteFramebuffers
 
+#define glScissor               glad_Scissor
 #define glViewport              glad_Viewport
 #define glClear                 glad_Clear
 #define glClearColor            glad_ClearColor
 #define glDrawArrays            glad_DrawArrays
 #define glDrawElements          glad_DrawElements
+#define glDrawElementsInstanced glad_DrawElementsInstanced
 #define glEnable                glad_Enable
 #define glDisable               glad_Disable
 #define glBlendFunc             glad_BlendFunc

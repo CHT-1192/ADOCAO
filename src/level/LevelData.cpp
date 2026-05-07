@@ -1,4 +1,5 @@
 #include "LevelData.h"
+#include "JsonCleaner.h"
 #include "../util/Logger.h"
 #include <fstream>
 #include <sstream>
@@ -9,82 +10,22 @@
 #include <windows.h>
 #endif
 
-static std::string cleanJson(const std::string& raw) {
-    std::string out;
-    out.reserve(raw.size());
-
-    bool inString = false;
-    bool escaped = false;
-    char lastOut = 0;  // last non-whitespace char written to output
-
-    for (size_t i = 0; i < raw.size(); i++) {
-        char c = raw[i];
-
-        if (inString) {
-            if (escaped) {
-                escaped = false;
-            } else if (c == '\\') {
-                escaped = true;
-            } else if (c == '"') {
-                inString = false;
-            }
-            if (c == '\r') continue;
-            lastOut = c;
-            out.push_back(c);
-            continue;
-        }
-
-        if (c == '"') {
-            inString = true;
-            // Insert missing comma: ...}" or ...]" or ...""  →  ...,"
-            if (lastOut == '}' || lastOut == ']' || lastOut == '"' || (lastOut >= '0' && lastOut <= '9')) {
-                out.push_back(',');
-            }
-            lastOut = '"';
-            out.push_back(c);
-            continue;
-        }
-
-        if (c == '\r') continue;
-
-        // Insert missing comma: ...}{...  or  ...]{...  or  ..."[...
-        if ((c == '{' || c == '[') && (lastOut == '}' || lastOut == ']' || lastOut == '"' || (lastOut >= '0' && lastOut <= '9'))) {
-            out.push_back(',');
-        }
-
-        // Remove trailing comma: ",\n  }" or ",\n  ]"
-        if (c == ',') {
-            size_t j = i + 1;
-            while (j < raw.size() && (raw[j] == ' ' || raw[j] == '\t' || raw[j] == '\n')) j++;
-            if (j < raw.size() && (raw[j] == '}' || raw[j] == ']')) continue;
-        }
-
-        if (c != ' ' && c != '\t' && c != '\n') lastOut = c;
-        out.push_back(c);
-    }
-
-    return out;
-}
-
-// ADOFAI uses both booleans and "Enabled"/"Disabled" strings for bool fields
-static bool parseBool(const nlohmann::json& obj, const char* key, bool def = false) {
-    if (!obj.contains(key)) return def;
-    auto& v = obj[key];
-    if (v.is_boolean()) return v.get<bool>();
-    if (v.is_string()) {
-        std::string s = v.get<std::string>();
-        return s == "Enabled" || s == "true";
-    }
-    return def;
-}
-
 static std::string readFileUtf8(const std::string& filepath) {
 #ifdef _WIN32
-    // Convert UTF-8 → UTF-16 and use _wfopen for Unicode paths
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, filepath.c_str(), -1, nullptr, 0);
-    if (wlen <= 0) return {};
-    std::wstring wpath(wlen, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, filepath.c_str(), -1, &wpath[0], wlen);
+    // Detect encoding: try UTF-8 first, fall back to ACP (system codepage)
+    std::wstring wpath;
+    int wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                   filepath.c_str(), -1, nullptr, 0);
+    if (wlen > 0) {
+        wpath.resize(wlen);
+        MultiByteToWideChar(CP_UTF8, 0, filepath.c_str(), -1, &wpath[0], wlen);
+    } else {
+        // Not valid UTF-8 — try ACP (e.g., EUC-KR from legacy dialogs)
+        wlen = MultiByteToWideChar(CP_ACP, 0, filepath.c_str(), -1, nullptr, 0);
+        if (wlen <= 0) return {};
+        wpath.resize(wlen);
+        MultiByteToWideChar(CP_ACP, 0, filepath.c_str(), -1, &wpath[0], wlen);
+    }
 
     FILE* f = _wfopen(wpath.c_str(), L"rb");
     if (!f) return {};
@@ -107,17 +48,6 @@ static std::string readFileUtf8(const std::string& filepath) {
 }
 
 bool LevelData::loadFromFile(const std::string& filepath) {
-    // Debug: hex dump path bytes
-    {
-        std::string hex;
-        for (unsigned char c : filepath) {
-            char buf[4];
-            snprintf(buf, sizeof(buf), "%02X ", c);
-            hex += buf;
-        }
-        LOG_I("Path hex: %s", hex.c_str());
-    }
-
     std::string content = readFileUtf8(filepath);
     if (content.empty()) {
         LOG_E("Cannot open level file: %s", filepath.c_str());
@@ -178,6 +108,8 @@ bool LevelData::loadFromString(const std::string& jsonStr) {
         }
 
         calculateTilePositions();
+        processActions();
+        applyPositionTrackOffsets();
         return true;
     } catch (const std::exception& e) {
         LOG_E("JSON parse error: %s", e.what());
@@ -282,6 +214,91 @@ float LevelData::pathCharToAngle(char c) {
         case '8': return 888;   // multi-hit stack 8
         case '!': return 999;   // midspin
         default:  return 0;
+    }
+}
+
+void LevelData::processActions() {
+    int n = (int)tiles.size();
+    tileBPMs.assign(n, settings.bpm);
+    tileHasTwirl.assign(n, false);
+    tileHasSetSpeed.assign(n, false);
+    tilePositionOffsets.assign(n, {});
+
+    if (actions.is_null() || !actions.is_array()) return;
+
+    float currentBPM = settings.bpm;
+
+    for (size_t i = 0; i < actions.size(); i++) {
+        auto& a = actions[i];
+        if (!a.is_object()) continue;
+        if (!a.contains("floor") || !a.contains("eventType")) continue;
+
+        int floor = a["floor"].get<int>();
+        if (floor < 0 || floor >= n) continue;
+
+        std::string etype = a["eventType"].get<std::string>();
+
+        if (etype == "Twirl") {
+            tileHasTwirl[floor] = true;
+        } else if (etype == "SetSpeed") {
+            tileHasSetSpeed[floor] = true;
+            std::string stype = a.value("speedType", std::string("Bpm"));
+            if (stype == "Multiplier") {
+                currentBPM *= a.value("bpmMultiplier", 1.0f);
+            } else {
+                currentBPM = a.value("beatsPerMinute", currentBPM);
+            }
+        } else if (etype == "PositionTrack") {
+            if (a.contains("positionOffset") && a["positionOffset"].is_array() && a["positionOffset"].size() >= 2) {
+                tilePositionOffsets[floor].offsetX = a["positionOffset"][0].get<float>();
+                tilePositionOffsets[floor].offsetY = a["positionOffset"][1].get<float>();
+                tilePositionOffsets[floor].justThisTile = parseBool(a, "justThisTile", false);
+            }
+        }
+    }
+
+    // Propagate BPM forward: each tile's BPM is the BPM after applying
+    // SetSpeed events on floors <= that tile
+    float runningBPM = settings.bpm;
+    for (int i = 0; i < n; i++) {
+        // Check for SetSpeed on this floor to update running BPM
+        for (size_t j = 0; j < actions.size(); j++) {
+            auto& a = actions[j];
+            if (!a.is_object() || !a.contains("floor") || !a.contains("eventType")) continue;
+            int floor = a["floor"].get<int>();
+            if (floor != i) continue;
+            if (a["eventType"].get<std::string>() != "SetSpeed") continue;
+
+            std::string stype = a.value("speedType", std::string("Bpm"));
+            if (stype == "Multiplier") {
+                runningBPM *= a.value("bpmMultiplier", 1.0f);
+            } else {
+                runningBPM = a.value("beatsPerMinute", runningBPM);
+            }
+        }
+        tileBPMs[i] = runningBPM;
+    }
+}
+
+void LevelData::applyPositionTrackOffsets() {
+    if (tilePositionOffsets.empty()) return;
+
+    float cumX = 0.0f, cumY = 0.0f;
+    int n = (int)tiles.size();
+
+    for (int i = 0; i < n; i++) {
+        if (i < (int)tilePositionOffsets.size()) {
+            cumX += tilePositionOffsets[i].offsetX;
+            cumY += tilePositionOffsets[i].offsetY;
+        }
+
+        tiles[i].position[0] += cumX;
+        tiles[i].position[1] += cumY;
+
+        if (i < (int)tilePositionOffsets.size() && tilePositionOffsets[i].justThisTile) {
+            cumX = 0.0f;
+            cumY = 0.0f;
+        }
     }
 }
 
