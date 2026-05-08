@@ -56,21 +56,21 @@ int runApplication(bool debugConsole) {
           cfg.resolutionW, cfg.resolutionH, cfg.fullscreen);
 
     // Stage 2: Loading
-    std::unique_ptr<LevelData> level;
+    LoadResult loadResult;
     showLoadingWindow([&](LoadingProgress& progress) {
-        level = runLevelLoading(cfg, progress);
+        runLevelLoading(cfg, progress, loadResult);
     });
 
-    if (!level) {
+    if (!loadResult.level) {
         LOG_E("Failed to load level");
         glfwTerminate();
         return 1;
     }
 
-    LOG_I("Level loaded: %zu tiles, BPM=%.1f", level->tiles.size(), level->settings.bpm);
+    LOG_I("Level loaded: %zu tiles, BPM=%.1f", loadResult.level->tiles.size(), loadResult.level->settings.bpm);
 
     // Stage 3: Game
-    showGameWindow(cfg, std::move(level));
+    showGameWindow(cfg, loadResult);
 
     LOG_I("Game window closed, exiting.");
     glfwTerminate();

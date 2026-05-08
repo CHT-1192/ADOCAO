@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <functional>
 #include <nlohmann/json.hpp>
 
 // Parsed .adofai level file
@@ -52,8 +53,10 @@ struct LevelData {
     std::vector<bool>  tileHasSetSpeed; // true if tile has a SetSpeed event
     std::vector<TilePositionOffset> tilePositionOffsets;
 
-    bool loadFromFile(const std::string& filepath);
-    bool loadFromString(const std::string& jsonStr);
+    using ProgressCb = std::function<void(float pct, const char* stage)>;
+
+    bool loadFromFile(const std::string& filepath, ProgressCb onProgress = nullptr);
+    bool loadFromString(const std::string& jsonStr, ProgressCb onProgress = nullptr);
 
 private:
     void calculateTilePositions();

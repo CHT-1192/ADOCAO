@@ -47,19 +47,22 @@ static std::string readFileUtf8(const std::string& filepath) {
 #endif
 }
 
-bool LevelData::loadFromFile(const std::string& filepath) {
+bool LevelData::loadFromFile(const std::string& filepath, ProgressCb onProgress) {
+    if (onProgress) onProgress(0.05f, "Reading file...");
     std::string content = readFileUtf8(filepath);
     if (content.empty()) {
         LOG_E("Cannot open level file: %s", filepath.c_str());
         return false;
     }
-    return loadFromString(cleanJson(content));
+    return loadFromString(cleanJson(content), onProgress);
 }
 
-bool LevelData::loadFromString(const std::string& jsonStr) {
+bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress) {
     try {
+        if (onProgress) onProgress(0.10f, "Parsing JSON...");
         auto root = nlohmann::json::parse(cleanJson(jsonStr));
 
+        if (onProgress) onProgress(0.15f, "Extracting level data...");
         // angleData
         if (root.contains("angleData") && root["angleData"].is_array()) {
             angleData = root["angleData"].get<std::vector<float>>();
@@ -102,12 +105,16 @@ bool LevelData::loadFromString(const std::string& jsonStr) {
             decorations = root["decorations"];
         }
 
+        if (onProgress) onProgress(0.20f, "Processing level data...");
+
         // Convert pathData → angleData if needed
         if (!pathData.empty() && angleData.empty()) {
             convertPathToAngles();
         }
 
+        if (onProgress) onProgress(0.30f, "Calculating tile positions...");
         calculateTilePositions();
+        if (onProgress) onProgress(0.40f, "Processing actions...");
         processActions();
         applyPositionTrackOffsets();
         return true;

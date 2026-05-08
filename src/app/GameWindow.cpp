@@ -4,11 +4,8 @@
 #include "../render/Shaders.h"
 #include "../camera/Camera.h"
 #include "../track/TileMesh.h"
-#include "../game/PlaybackEngine.h"
 #include "../game/Planet.h"
 #include "../render/PlanetTrail.h"
-#include "../audio/AudioEngine.h"
-#include "../audio/HitsoundManager.h"
 #include "../util/Logger.h"
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -50,7 +47,12 @@ Viewport computeLetterbox(int fbW, int fbH, float targetAspect) {
 
 } // namespace
 
-void showGameWindow(const LauncherConfig& cfg, std::unique_ptr<LevelData> level) {
+void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
+    auto& level = result.level;
+    auto& playback = result.playback;
+    auto& hitsoundMgr = result.hitsounds;
+    auto& audioEngine = result.audio;
+
     GLFWmonitor* targetMonitor = cfg.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
     float targetAspect = (float)cfg.resolutionW / (float)cfg.resolutionH;
 
@@ -120,34 +122,11 @@ void showGameWindow(const LauncherConfig& cfg, std::unique_ptr<LevelData> level)
         input.baseTargetY = t.position[1];
     }
 
-    // ---- Playback engine ----
-    PlaybackEngine playback;
-    playback.init(*level, cfg.showTrail);
+    // ---- Build planet GPU resources ----
     if (playback.redPlanet()) {
         playback.redPlanet()->buildGPU();
         playback.bluePlanet()->buildGPU();
     }
-
-    // ---- Audio engine ----
-    AudioEngine audioEngine;
-    if (!audioEngine.init()) {
-        LOG_E("Audio engine failed to initialize");
-    }
-
-    if (!cfg.musicPath.empty()) {
-        audioEngine.loadMusic(cfg.musicPath);
-    }
-
-    // ---- Hitsound manager (synthesis only, no device) ----
-    HitsoundManager hitsoundMgr;
-    hitsoundMgr.init();
-    hitsoundMgr.setHitsoundType(level->settings.hitsound);
-    hitsoundMgr.setVolume(level->settings.hitsoundVolume);
-
-    LOG_I("Pre-synthesizing hitsounds...");
-    auto timestamps = playback.getHitsoundTimestamps();
-    hitsoundMgr.preSynthesize(timestamps, playback.totalDuration());
-    LOG_I("Hitsounds ready");
 
     // Attach hitsound buffer to audio engine for mixed playback
     if (hitsoundMgr.isSynthesized()) {

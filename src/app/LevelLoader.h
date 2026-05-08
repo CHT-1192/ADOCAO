@@ -3,10 +3,16 @@
 #include "LoadingWindow.h"
 #include "LauncherWindow.h"
 #include "../level/LevelData.h"
+#include "../game/PlaybackEngine.h"
+#include "../audio/HitsoundManager.h"
+#include "../audio/AudioEngine.h"
 #include <memory>
 
-// Orchestrates the multi-step loading process, reporting progress.
-// Takes ownership of parsed level data.
-std::unique_ptr<LevelData> runLevelLoading(
-    const LauncherConfig& cfg,
-    LoadingProgress& progress);
+struct LoadResult {
+    std::unique_ptr<LevelData> level;
+    PlaybackEngine playback;
+    HitsoundManager hitsounds;
+    AudioEngine audio;
+};
+
+void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadResult& result);
