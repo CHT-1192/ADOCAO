@@ -264,25 +264,30 @@ void LevelData::processActions() {
         }
     }
 
-    // Propagate BPM forward: each tile's BPM is the BPM after applying
-    // SetSpeed events on floors <= that tile
+    // Pre-index SetSpeed events by floor (O(m) instead of O(n*m) per-tile scan)
+    struct SS { float multiplier; float bpm; bool isMultiplier; };
+    std::vector<SS> setSpeedByFloor(n);  // 0 = no event
+    for (size_t j = 0; j < actions.size(); j++) {
+        auto& a = actions[j];
+        if (!a.is_object() || !a.contains("floor") || !a.contains("eventType")) continue;
+        int floor = a["floor"].get<int>();
+        if (floor < 0 || floor >= n) continue;
+        if (a["eventType"].get<std::string>() != "SetSpeed") continue;
+        std::string st = a.value("speedType", std::string("Bpm"));
+        SS ev;
+        ev.isMultiplier = (st == "Multiplier");
+        ev.multiplier = ev.isMultiplier ? a.value("bpmMultiplier", 1.0f) : 0.0f;
+        ev.bpm = ev.isMultiplier ? 0.0f : a.value("beatsPerMinute", 0.0f);
+        setSpeedByFloor[floor] = ev;
+    }
+
+    // Propagate BPM forward in O(n)
     float runningBPM = settings.bpm;
     for (int i = 0; i < n; i++) {
-        // Check for SetSpeed on this floor to update running BPM
-        for (size_t j = 0; j < actions.size(); j++) {
-            auto& a = actions[j];
-            if (!a.is_object() || !a.contains("floor") || !a.contains("eventType")) continue;
-            int floor = a["floor"].get<int>();
-            if (floor != i) continue;
-            if (a["eventType"].get<std::string>() != "SetSpeed") continue;
-
-            std::string stype = a.value("speedType", std::string("Bpm"));
-            if (stype == "Multiplier") {
-                runningBPM *= a.value("bpmMultiplier", 1.0f);
-            } else {
-                runningBPM = a.value("beatsPerMinute", runningBPM);
-            }
-        }
+        if (setSpeedByFloor[i].isMultiplier)
+            runningBPM *= setSpeedByFloor[i].multiplier;
+        else if (setSpeedByFloor[i].bpm > 0.0f)
+            runningBPM = setSpeedByFloor[i].bpm;
         tileBPMs[i] = runningBPM;
     }
 }

@@ -7,6 +7,8 @@
 #include <cstring>
 #include <cstdint>
 #include <unordered_map>
+#include <thread>
+#include <future>
 
 static std::unordered_map<std::string, std::vector<float>> s_wavCache;
 
@@ -159,27 +161,56 @@ bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
     float pad = hitLenFrames>0 ? (float)hitLenFrames/(float)sr+1.0f : 2.0f;
     int totalFrames = (int)((totalDuration+pad)*(float)sr);
 
-    m_buffer.assign((size_t)totalFrames*2, 0.0f);
     std::vector<float> sorted=timestamps;
     std::sort(sorted.begin(),sorted.end());
     int totalHits=(int)sorted.size();
-    float peak=0.0f;
 
-    for (int idx=0; idx<totalHits; idx++) {
-        float t=sorted[idx];
-        if (t<0.0f) continue;
-        int sf=(int)(t*(float)sr);
-        int cl=hitLenFrames;
-        if (sf+cl>totalFrames) cl=totalFrames-sf;
-        if (cl<=0) continue;
-        for (int i=0; i<cl; i++) {
-            float hv=hitSamples[(size_t)i*(size_t)ch];
-            m_buffer[(size_t)(sf+i)*2]   += hv;
-            m_buffer[(size_t)(sf+i)*2+1] += hv;
-            float a=hv<0?-hv:hv;
-            if (a>peak) peak=a;
-        }
+    // Parallel mixing: split timestamps across threads, each writes to own buffer
+    unsigned numThreads = std::max(1u, std::thread::hardware_concurrency());
+    numThreads = std::min(numThreads, (unsigned)(totalHits / 50 + 1));  // don't over-split small jobs
+    size_t bufSize = (size_t)totalFrames * 2;
+
+    std::vector<std::future<std::pair<std::vector<float>, float>>> futures;
+    int chunkSize = (totalHits + (int)numThreads - 1) / (int)numThreads;
+
+    for (unsigned t = 0; t < numThreads; t++) {
+        int start = (int)t * chunkSize;
+        int end = std::min(start + chunkSize, totalHits);
+        if (start >= end) continue;
+
+        futures.push_back(std::async(std::launch::async, [&, start, end, bufSize]() {
+            std::vector<float> localBuf(bufSize, 0.0f);
+            float localPeak = 0.0f;
+            for (int idx = start; idx < end; idx++) {
+                float ts = sorted[idx];
+                if (ts < 0.0f) continue;
+                int sf = (int)(ts * (float)sr);
+                int cl = hitLenFrames;
+                if (sf + cl > totalFrames) cl = totalFrames - sf;
+                if (cl <= 0) continue;
+                for (int i = 0; i < cl; i++) {
+                    float hv = hitSamples[(size_t)i * (size_t)ch];
+                    localBuf[(size_t)(sf + i) * 2]     += hv;
+                    localBuf[(size_t)(sf + i) * 2 + 1] += hv;
+                    float a = hv < 0 ? -hv : hv;
+                    if (a > localPeak) localPeak = a;
+                }
+            }
+            return std::make_pair(std::move(localBuf), localPeak);
+        }));
     }
+
+    // Merge results
+    m_buffer.assign(bufSize, 0.0f);
+    float peak = 0.0f;
+    for (auto& fut : futures) {
+        auto [localBuf, localPeak] = fut.get();
+        if (localPeak > peak) peak = localPeak;
+        for (size_t i = 0; i < bufSize; i++)
+            m_buffer[i] += localBuf[i];
+    }
+
+    if (onProgress) onProgress(90.0f);
 
     float gain=(peak>0.9f)?0.9f/peak:1.0f;
     for (size_t i=0; i<m_buffer.size(); i++)

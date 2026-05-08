@@ -39,32 +39,38 @@ void PlaybackEngine::precalculateTiming() {
     bool isCW = true;
     float currentBPM = m_level->settings.bpm;
     float totalTime = 0.0f;
-    float angleDir = 180.0f;  // entry direction tracker (ADOFAI-JS _parseAngle)
+    float angleDir = 180.0f;
+
+    // Pre-index actions by floor (O(m) instead of O(n*m) per-tile scan)
+    std::vector<std::vector<size_t>> actionsByFloor(n);
+    if (!m_level->actions.is_null() && m_level->actions.is_array()) {
+        for (size_t j = 0; j < m_level->actions.size(); j++) {
+            auto& a = m_level->actions[j];
+            if (!a.is_object() || !a.contains("floor") || !a.contains("eventType")) continue;
+            int floor = a["floor"].get<int>();
+            if (floor >= 0 && floor < n) actionsByFloor[floor].push_back(j);
+        }
+    }
 
     for (int i = 0; i < n - 1; i++) {
         float extraRotation = 0.0f;
 
-        // Process events on this floor
-        if (!m_level->actions.is_null() && m_level->actions.is_array()) {
-            for (size_t j = 0; j < m_level->actions.size(); j++) {
-                auto& a = m_level->actions[j];
-                if (!a.is_object() || !a.contains("floor") || !a.contains("eventType")) continue;
-                if (a["floor"].get<int>() != i) continue;
-
-                std::string etype = a["eventType"].get<std::string>();
-                if (etype == "Twirl") {
-                    isCW = !isCW;
-                } else if (etype == "SetSpeed") {
-                    std::string stype = a.value("speedType", std::string("Bpm"));
-                    if (stype == "Multiplier") {
-                        currentBPM *= a.value("bpmMultiplier", 1.0f);
-                    } else {
-                        currentBPM = a.value("beatsPerMinute", currentBPM);
-                    }
-                } else if (etype == "Pause") {
-                    float dur = a.value("duration", 0.0f);
-                    extraRotation += dur / 2.0f;
+        // Process events on this floor (O(1) lookup)
+        for (size_t j : actionsByFloor[i]) {
+            auto& a = m_level->actions[j];
+            std::string etype = a["eventType"].get<std::string>();
+            if (etype == "Twirl") {
+                isCW = !isCW;
+            } else if (etype == "SetSpeed") {
+                std::string stype = a.value("speedType", std::string("Bpm"));
+                if (stype == "Multiplier") {
+                    currentBPM *= a.value("bpmMultiplier", 1.0f);
+                } else {
+                    currentBPM = a.value("beatsPerMinute", currentBPM);
                 }
+            } else if (etype == "Pause") {
+                float dur = a.value("duration", 0.0f);
+                extraRotation += dur / 2.0f;
             }
         }
 
@@ -203,11 +209,11 @@ void PlaybackEngine::start() {
 
     const auto& tiles = m_level->tiles;
     if (m_redPlanet && !tiles.empty()) {
-        m_redPlanet->position = glm::vec3(tiles[0].position[0], tiles[0].position[1], 1.0f);
+        m_redPlanet->position = glm::vec3(tiles[0].position[0], tiles[0].position[1], 2.0f);
         m_redPlanet->clearTrail();
     }
     if (m_bluePlanet && tiles.size() > 1) {
-        m_bluePlanet->position = glm::vec3(tiles[1].position[0], tiles[1].position[1], 1.0f);
+        m_bluePlanet->position = glm::vec3(tiles[1].position[0], tiles[1].position[1], 2.0f);
         m_bluePlanet->clearTrail();
     }
 
@@ -306,12 +312,12 @@ void PlaybackEngine::updatePlanetPositions() {
         Planet* movingPlanet = isRedPivot ? m_bluePlanet.get() : m_redPlanet.get();
 
         if (pivotPlanet)
-            pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 1.0f);
+            pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 2.0f);
         if (movingPlanet) {
             movingPlanet->position = glm::vec3(
                 pivotPos[0] + std::cos(currentAngle) * dist,
                 pivotPos[1] + std::sin(currentAngle) * dist,
-                1.0f);
+                2.0f);
         }
         return;
     }
@@ -337,7 +343,7 @@ void PlaybackEngine::updatePlanetPositions() {
     float currentDist = startDist + (endDist - startDist) * progress;
 
     if (pivotPlanet)
-        pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 1.0f);
+        pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 2.0f);
 
     if (movingPlanet) {
         movingPlanet->position = glm::vec3(

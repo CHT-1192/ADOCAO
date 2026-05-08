@@ -182,7 +182,9 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         }
         float deltaMs = (float)(elapsed * 1000.0);
         lastFrameTime = now;
-        if (deltaMs > 100.0f) deltaMs = 100.0f;  // cap for tab-out
+        // If we lost focus for a long time, treat as resume (skip the spike)
+        if (deltaMs > 500.0f) deltaMs = 0.0f;
+        else if (deltaMs > 100.0f) deltaMs = 100.0f;
 
         // Space toggles playback
         bool spacePressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
@@ -264,13 +266,12 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
         camera.setAspect((float)vp.w, (float)vp.h);
 
-        // Draw tiles + icons (no depth test — all tiles visible regardless of Z)
+        // Draw tiles (no depth test — all visible regardless of Z)
         glDisable(GL_DEPTH_TEST);
         tileShader.use();
         tileShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
         float vl,vr,vb,vt; camera.frustumBounds(vl,vr,vb,vt);
         tileMesh.draw(vl, vr, vb, vt);
-        tileMesh.drawIcons(vl, vr, vb, vt);
         glEnable(GL_DEPTH_TEST);
 
         // Draw planets (only when playing or after first start)
@@ -284,6 +285,12 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
             playback.redPlanet()->trail->draw(trailShader, camera);
             playback.bluePlanet()->trail->draw(trailShader, camera);
         }
+
+        // Draw event icons on top of everything (no depth test)
+        glDisable(GL_DEPTH_TEST);
+        tileShader.use();
+        tileMesh.drawIcons(vl, vr, vb, vt);
+        glEnable(GL_DEPTH_TEST);
 
         glfwSwapBuffers(window);
     }

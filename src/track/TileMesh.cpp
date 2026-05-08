@@ -130,7 +130,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         for (int i : tileIndices) {
             float wx = tiles[i].position[0];
             float wy = tiles[i].position[1];
-            float wz = (12.0f - i) * 0.1f;  // re_adojas Z layering
+            float wz = 1.0f - (float)i / (float)n * 0.5f;  // tile 0 at Z=1.0, last at Z=0.5
             instOffsets.push_back(wx);
             instOffsets.push_back(wy);
             instOffsets.push_back(wz);
@@ -213,10 +213,11 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT) const {
             continue;
         }
 
-        // Recompute visible set
+        // Recompute visible set (reverse order: later tiles first/back, earlier last/front)
         cache.offsets.clear();
         cache.offsets.reserve(sg.instances.size() * 3);
-        for (const auto& inst : sg.instances) {
+        for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
+            const auto& inst = sg.instances[ii];
             if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
                 continue;
             cache.offsets.push_back(inst.offX);
@@ -241,10 +242,10 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT) const {
 
 // ---- Event icons ----
 
-static constexpr float ICON_RADIUS = 0.18f;
+static constexpr float ICON_RADIUS = 0.11f;     // matches Re_ADOJAS 0.275*0.8/2
 static constexpr int   ICON_SEGMENTS = 16;
-static constexpr float DECO_Z = 0.002f;
-static constexpr float DECO_Z_EXTRA = 0.001f;
+static constexpr float DECO_Z = 0.01f;         // Z offset above tile to prevent Z-fight
+static constexpr float DECO_Z_EXTRA = 0.005f;  // extra Z for SetSpeed when Twirl also present
 
 static const float TWIRL_COLOR[3]      = {0.502f, 0.0f, 0.502f};
 static const float SPEED_UP_COLOR[3]   = {1.0f, 0.0f, 0.0f};
@@ -272,7 +273,7 @@ void TileMesh::buildIcons(const LevelData& level) {
         bool hasTwirl = i < (int)level.tileHasTwirl.size() && level.tileHasTwirl[i];
         bool hasSetSpeed = i < (int)level.tileHasSetSpeed.size() && level.tileHasSetSpeed[i];
 
-        float tileZ = (12.0f - i) * 0.1f;
+        float tileZ = 1.0f - (float)i / (float)n * 0.5f;  // tile 0 at Z=1.0, last at Z=0.5
 
         if (hasTwirl) {
             colorGroups[0].push_back({i, tileZ + DECO_Z});
@@ -375,7 +376,8 @@ void TileMesh::drawIcons(float viewL, float viewR, float viewB, float viewT) con
         std::vector<float> visOffsets;
         visOffsets.reserve(sg.instances.size() * 3);
 
-        for (const auto& inst : sg.instances) {
+        for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
+            const auto& inst = sg.instances[ii];
             if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
                 continue;
             visOffsets.push_back(inst.offX);
