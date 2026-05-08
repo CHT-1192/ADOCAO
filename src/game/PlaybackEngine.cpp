@@ -38,7 +38,7 @@ void PlaybackEngine::precalculateTiming() {
 
     bool isCW = true;
     float currentBPM = m_level->settings.bpm;
-    float totalTime = 0.0f;
+    double totalTime = 0.0;
     float angleDir = 180.0f;
 
     // Pre-index actions by floor (O(m) instead of O(n*m) per-tile scan)
@@ -353,13 +353,24 @@ void PlaybackEngine::updatePlanetPositions() {
     }
 }
 
+void PlaybackEngine::syncToAudio(float audioPosSec, float offsetSec) {
+    if (!m_isPlaying) return;
+    m_elapsedTime = (audioPosSec - offsetSec) * 1000.0f;
+    if (m_elapsedTime < 0.0f) m_elapsedTime = 0.0f;
+
+    updatePlanetPositions();
+
+    float tSec = m_elapsedTime / 1000.0f;
+    if (m_redPlanet)  m_redPlanet->update(tSec);
+    if (m_bluePlanet) m_bluePlanet->update(tSec);
+}
+
 void PlaybackEngine::update(float deltaMs) {
     if (!m_isPlaying) return;
     m_elapsedTime += deltaMs;
 
     updatePlanetPositions();
 
-    // Trail time: elapsed seconds (levelTime + countdown = elapsed/1000)
     float tSec = m_elapsedTime / 1000.0f;
     if (m_redPlanet)
         m_redPlanet->update(tSec);

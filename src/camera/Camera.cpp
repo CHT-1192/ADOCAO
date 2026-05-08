@@ -22,7 +22,7 @@ void Camera::update() {
     float halfH = 6.0f / (m_zoom / 100.0f);
     float halfW = halfH * m_aspect;
 
-    m_proj = glm::ortho(-halfW, halfW, -halfH, halfH, 0.1f, 5000.0f);
+    m_proj = glm::ortho(-halfW, halfW, -halfH, halfH, 0.01f, 50.0f);
 
     // Camera looks from +Z toward origin, centered on target
     m_view = glm::lookAt(

@@ -42,7 +42,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
     const auto& tiles = level.tiles;
     if (tiles.size() < 2) return;
 
-    int n = (int)tiles.size() - 1;
+    int n = (int)tiles.size() - 1;  // number of real tiles (excludes extra)
 
     auto hexToColor = [](const std::string& hex) -> std::tuple<float,float,float> {
         unsigned v = hexToUInt(hex);
@@ -51,13 +51,22 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
     auto [fillR, fillG, fillB] = hexToColor(fillColorHex);
     auto [outR, outG, outB]   = hexToColor(strokeColorHex);
 
-    // Group tiles by shape key
+    // Group tiles by shape key (include extra tile at index n)
     std::map<std::tuple<int,int,bool>, std::vector<int>> shapeGroups;
 
-    for (int i = 0; i < n; i++) {
-        float startAngle = (i == 0) ? -180.0f : tiles[i-1].direction - 180.0f;
-        float endAngle   = tiles[i].direction;
-        bool midspin = (i < (int)level.angleData.size() && level.angleData[i] == 999.0f);
+    for (int i = 0; i <= n; i++) {
+        float startAngle, endAngle;
+        bool midspin;
+        if (i < n) {
+            startAngle = (i == 0) ? -180.0f : tiles[i-1].direction - 180.0f;
+            endAngle   = tiles[i].direction;
+            midspin = (i < (int)level.angleData.size() && level.angleData[i] == 999.0f);
+        } else {
+            // Extra tile: straight continuation from last real tile
+            startAngle = tiles[n-1].direction - 180.0f;
+            endAngle   = tiles[n-1].direction;
+            midspin = false;
+        }
 
         auto key = std::make_tuple((int)std::round(startAngle*100), (int)std::round(endAngle*100), midspin);
         shapeGroups[key].push_back(i);
@@ -130,7 +139,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         for (int i : tileIndices) {
             float wx = tiles[i].position[0];
             float wy = tiles[i].position[1];
-            float wz = 1.0f - (float)i / (float)n * 0.5f;  // tile 0 at Z=1.0, last at Z=0.5
+            float wz = 2.0f - (float)i * 0.01f;  // decent Z spacing between tiles
             instOffsets.push_back(wx);
             instOffsets.push_back(wy);
             instOffsets.push_back(wz);
@@ -179,7 +188,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         shapeIdx++;
     }
 
-    LOG_I("Built track: %d tiles → %zu shape groups", n, m_shapes.size());
+    LOG_I("Built track: %d tiles → %zu shape groups", n + 1, m_shapes.size());
 
     // Init visibility cache per shape group
     m_visCaches.resize(m_shapes.size());

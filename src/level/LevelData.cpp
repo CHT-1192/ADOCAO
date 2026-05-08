@@ -141,14 +141,14 @@ void LevelData::calculateTilePositions() {
     }
 
     tiles.resize(n);
-    float curX = 0.0f, curY = 0.0f;
+    double curX = 0.0, curY = 0.0;  // double for precision
 
     for (int i = 0; i < n; i++) {
         tiles[i].index = i;
-        tiles[i].position = {curX, curY};
-        tiles[i].direction = floats[i];  // outgoing angle to next tile
+        tiles[i].position = {(float)curX, (float)curY};
+        tiles[i].direction = floats[i];
 
-        float rad = floats[i] * 3.14159265f / 180.0f;
+        double rad = (double)floats[i] * 3.14159265358979323846 / 180.0;
         curX += std::cos(rad);
         curY += std::sin(rad);
     }
@@ -157,31 +157,27 @@ void LevelData::calculateTilePositions() {
     if (n > 0) {
         Tile extra;
         extra.index = n;
-        float dir = 0.0f;
-        // Use direction of last segment if possible
+        double dir = 0.0;
         if (n > 1) {
-            float dx = tiles[n-1].position[0] - tiles[n-2].position[0];
-            float dy = tiles[n-1].position[1] - tiles[n-2].position[1];
-            float dist = std::sqrt(dx*dx + dy*dy);
-            if (dist > 0.01f) {
-                dir = std::atan2(dy, dx) * 180.0f / 3.14159265f;
-            }
+            double dx = (double)tiles[n-1].position[0] - (double)tiles[n-2].position[0];
+            double dy = (double)tiles[n-1].position[1] - (double)tiles[n-2].position[1];
+            double dist = std::sqrt(dx*dx + dy*dy);
+            if (dist > 0.01) dir = std::atan2(dy, dx) * 180.0 / 3.14159265358979323846;
         }
-        float rad = dir * 3.14159265f / 180.0f;
-        float length = 1.0f;
-        // Use last segment distance
+        double rad = dir * 3.14159265358979323846 / 180.0;
+        double length = 1.0;
         if (n > 1) {
-            float dx = tiles[n-1].position[0] - tiles[n-2].position[0];
-            float dy = tiles[n-1].position[1] - tiles[n-2].position[1];
+            double dx = (double)tiles[n-1].position[0] - (double)tiles[n-2].position[0];
+            double dy = (double)tiles[n-1].position[1] - (double)tiles[n-2].position[1];
             length = std::sqrt(dx*dx + dy*dy);
-            if (length < 0.01f) length = 1.0f;
+            if (length < 0.01) length = 1.0;
         }
         extra.position = {
-            tiles[n-1].position[0] + std::cos(rad) * length,
-            tiles[n-1].position[1] + std::sin(rad) * length
+            (float)(tiles[n-1].position[0] + std::cos(rad) * length),
+            (float)(tiles[n-1].position[1] + std::sin(rad) * length)
         };
         extra.angle = 180.0f;
-        extra.direction = dir;
+        extra.direction = (float)dir;
         tiles.push_back(extra);
     }
 }
