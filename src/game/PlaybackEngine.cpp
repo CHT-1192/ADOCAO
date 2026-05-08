@@ -209,11 +209,11 @@ void PlaybackEngine::start() {
 
     const auto& tiles = m_level->tiles;
     if (m_redPlanet && !tiles.empty()) {
-        m_redPlanet->position = glm::vec3(tiles[0].position[0], tiles[0].position[1], 2.0f);
+        m_redPlanet->position = glm::vec3(tiles[0].position[0], tiles[0].position[1], 3.0f);
         m_redPlanet->clearTrail();
     }
     if (m_bluePlanet && tiles.size() > 1) {
-        m_bluePlanet->position = glm::vec3(tiles[1].position[0], tiles[1].position[1], 2.0f);
+        m_bluePlanet->position = glm::vec3(tiles[1].position[0], tiles[1].position[1], 3.0f);
         m_bluePlanet->clearTrail();
     }
 
@@ -312,12 +312,12 @@ void PlaybackEngine::updatePlanetPositions() {
         Planet* movingPlanet = isRedPivot ? m_bluePlanet.get() : m_redPlanet.get();
 
         if (pivotPlanet)
-            pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 2.0f);
+            pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 3.0f);
         if (movingPlanet) {
             movingPlanet->position = glm::vec3(
                 pivotPos[0] + std::cos(currentAngle) * dist,
                 pivotPos[1] + std::sin(currentAngle) * dist,
-                2.0f);
+                3.0f);
         }
         return;
     }
@@ -343,13 +343,13 @@ void PlaybackEngine::updatePlanetPositions() {
     float currentDist = startDist + (endDist - startDist) * progress;
 
     if (pivotPlanet)
-        pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 2.0f);
+        pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 3.0f);
 
     if (movingPlanet) {
         movingPlanet->position = glm::vec3(
             pivotPos[0] + std::cos(currentAngle) * currentDist,
             pivotPos[1] + std::sin(currentAngle) * currentDist,
-            1.0f);
+            3.0f);
     }
 }
 
