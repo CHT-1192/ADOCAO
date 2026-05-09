@@ -10,24 +10,21 @@ void Camera::setAspect(float width, float height) {
     update();
 }
 
-void Camera::setTarget(float x, float y) {
+void Camera::setTarget(double x, double y) {
     m_targetX = x;
     m_targetY = y;
     update();
 }
 
 void Camera::update() {
-    // Ortho height in world units: smaller zoom = zoomed in
-    // ADOFAI zoom 100 = ~6 units visible height (fits typical level)
     float halfH = 6.0f / (m_zoom / 100.0f);
     float halfW = halfH * m_aspect;
 
     m_proj = glm::ortho(-halfW, halfW, -halfH, halfH, 0.1f, 50000.0f);
 
-    // Camera looks from +Z toward origin, centered on target
     m_view = glm::lookAt(
-        glm::vec3(m_targetX, m_targetY, 10.0f),
-        glm::vec3(m_targetX, m_targetY, 0.0f),
+        glm::vec3((float)m_targetX, (float)m_targetY, 10.0f),
+        glm::vec3((float)m_targetX, (float)m_targetY, 0.0f),
         glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
@@ -38,8 +35,8 @@ glm::mat4 Camera::viewProj() const {
 void Camera::frustumBounds(float& left, float& right, float& bottom, float& top) const {
     float halfH = 6.0f / (m_zoom / 100.0f);
     float halfW = halfH * m_aspect;
-    left   = m_targetX - halfW;
-    right  = m_targetX + halfW;
-    bottom = m_targetY - halfH;
-    top    = m_targetY + halfH;
+    left   = (float)(m_targetX - (double)halfW);
+    right  = (float)(m_targetX + (double)halfW);
+    bottom = (float)(m_targetY - (double)halfH);
+    top    = (float)(m_targetY + (double)halfH);
 }

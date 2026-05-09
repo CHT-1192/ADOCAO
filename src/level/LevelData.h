@@ -29,9 +29,9 @@ struct LevelData {
 
     struct Tile {
         int   index = 0;
-        float angle = 180.0f;       // degrees
-        float direction = 0.0f;     // outgoing angle (degrees)
-        std::array<float, 2> position = {0.0f, 0.0f};
+        float angle = 180.0f;
+        float direction = 0.0f;
+        std::array<double, 2> position = {0.0, 0.0};
     };
 
     Settings settings;

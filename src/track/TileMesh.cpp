@@ -128,17 +128,17 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         instances.reserve(tileIndices.size());
 
         for (int i : tileIndices) {
-            float wx = tiles[i].position[0];
-            float wy = tiles[i].position[1];
-            float wz = 2.0f - (float)i * 0.001f;  // tile 0 Z=2.0, tile 1M Z=-998 (w/in far plane)
-            instOffsets.push_back(wx);
-            instOffsets.push_back(wy);
+            double wx = tiles[i].position[0];
+            double wy = tiles[i].position[1];
+            float wz = 2.0f - (float)i * 0.001f;
+            instOffsets.push_back((float)wx);
+            instOffsets.push_back((float)wy);
             instOffsets.push_back(wz);
-            float minX=1e9f,minY=1e9f,maxX=-1e9f,maxY=-1e9f;
-            size_t vertCount = interleaved.size() / 6;  // 6 floats per vertex
+            double minX=1e99,minY=1e99,maxX=-1e99,maxY=-1e99;
+            size_t vertCount = interleaved.size() / 6;
             for (size_t vi = 0; vi < vertCount; vi++) {
-                float lx = interleaved[vi*6] + wx;
-                float ly = interleaved[vi*6+1] + wy;
+                double lx = (double)interleaved[vi*6] + wx;
+                double ly = (double)interleaved[vi*6+1] + wy;
                 if (lx<minX)minX=lx; if (lx>maxX)maxX=lx;
                 if (ly<minY)minY=ly; if (ly>maxY)maxY=ly;
             }
@@ -193,49 +193,34 @@ bool TileMesh::frustumChanged(const VisibilityCache& cache, float vl, float vr, 
         || std::abs(cache.viewB - vb) > 0.5f || std::abs(cache.viewT - vt) > 0.5f;
 }
 
-void TileMesh::draw(float viewL, float viewR, float viewB, float viewT) const {
-    float margin = 20.0f;
-    float vl = viewL - margin, vr = viewR + margin;
-    float vb = viewB - margin, vt = viewT + margin;
+void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const {
+    double margin = 20.0;
+    double vl = viewL - margin, vr = viewR + margin;
+    double vb = viewB - margin, vt = viewT + margin;
 
     for (size_t si = 0; si < m_shapes.size(); si++) {
         const auto& sg = m_shapes[si];
         auto& cache = m_visCaches[si];
 
-        // Use cached visibility when camera is nearly stationary
-        if (!frustumChanged(cache, vl, vr, vb, vt) && !cache.offsets.empty()) {
-            glBindVertexArray(sg.vao);
-            glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-            glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
-            glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
-                                    nullptr, (GLsizei)(cache.offsets.size() / 3));
-            glBindVertexArray(0);
-            continue;
-        }
-
-        // Recompute visible set (reverse order: later tiles first/back, earlier last/front)
+        // Cull in world-space double, upload camera-relative float
         cache.offsets.clear();
         cache.offsets.reserve(sg.instances.size() * 3);
         for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
             const auto& inst = sg.instances[ii];
             if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
                 continue;
-            cache.offsets.push_back(inst.offX);
-            cache.offsets.push_back(inst.offY);
+            cache.offsets.push_back((float)(inst.offX - camX));
+            cache.offsets.push_back((float)(inst.offY - camY));
             cache.offsets.push_back(inst.offZ);
         }
-        cache.viewL = vl; cache.viewR = vr; cache.viewB = vb; cache.viewT = vt;
-        cache.valid = true;
 
         if (cache.offsets.empty()) continue;
 
         glBindVertexArray(sg.vao);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
         glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
-
         glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
                                 nullptr, (GLsizei)(cache.offsets.size() / 3));
-
         glBindVertexArray(0);
     }
 }
@@ -321,11 +306,11 @@ void TileMesh::buildIcons(const LevelData& level) {
         instances.reserve(grp.size());
 
         for (auto& icon : grp) {
-            float wx = tiles[icon.tileIdx].position[0];
-            float wy = tiles[icon.tileIdx].position[1];
+            double wx = tiles[icon.tileIdx].position[0];
+            double wy = tiles[icon.tileIdx].position[1];
             float wz = icon.zOff;
-            instOffsets.push_back(wx);
-            instOffsets.push_back(wy);
+            instOffsets.push_back((float)wx);
+            instOffsets.push_back((float)wy);
             instOffsets.push_back(wz);
             instances.push_back({wx, wy, wz,
                 wx - ICON_RADIUS, wy - ICON_RADIUS,
@@ -367,21 +352,20 @@ void TileMesh::buildIcons(const LevelData& level) {
     LOG_I("Built event icons: %zu icon groups", m_iconGroups.size());
 }
 
-void TileMesh::drawIcons(float viewL, float viewR, float viewB, float viewT) const {
-    float margin = 20.0f;
-    float vl = viewL - margin, vr = viewR + margin;
-    float vb = viewB - margin, vt = viewT + margin;
+void TileMesh::drawIcons(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const {
+    double margin = 20.0;
+    double vl = viewL - margin, vr = viewR + margin;
+    double vb = viewB - margin, vt = viewT + margin;
 
     for (const auto& sg : m_iconGroups) {
         std::vector<float> visOffsets;
         visOffsets.reserve(sg.instances.size() * 3);
-
         for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
             const auto& inst = sg.instances[ii];
             if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
                 continue;
-            visOffsets.push_back(inst.offX);
-            visOffsets.push_back(inst.offY);
+            visOffsets.push_back((float)(inst.offX - camX));
+            visOffsets.push_back((float)(inst.offY - camY));
             visOffsets.push_back(inst.offZ);
         }
         if (visOffsets.empty()) continue;

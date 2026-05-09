@@ -19,10 +19,10 @@ struct GameInput {
     double dragStartY = 0.0;
     double cursorX    = 0.0;
     double cursorY    = 0.0;
-    float  baseTargetX = 0.0f;
-    float  baseTargetY = 0.0f;
-    float  offsetX = 0.0f;
-    float  offsetY = 0.0f;
+    double baseTargetX = 0.0;
+    double baseTargetY = 0.0;
+    double offsetX = 0.0;
+    double offsetY = 0.0;
     Camera* camera = nullptr;
 };
 
@@ -246,12 +246,12 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
         // Drag (only when not playing)
         if (!playback.isPlaying() && input.dragActive && vp.w>0 && vp.h>0) {
-            float halfH = 6.0f/(camera.zoom()/100.0f);
-            float halfW = halfH*(float)vp.w/(float)vp.h;
-            float pxToWorldX = (2.0f*halfW)/(float)vp.w;
-            float pxToWorldY = (2.0f*halfH)/(float)vp.h;
-            input.offsetX = -(float)(input.cursorX-input.dragStartX)*pxToWorldX;
-            input.offsetY =  (float)(input.cursorY-input.dragStartY)*pxToWorldY;
+            double halfH = 6.0/(camera.zoom()/100.0);
+            double halfW = halfH*(double)vp.w/(double)vp.h;
+            double pxToWorldX = (2.0*halfW)/(double)vp.w;
+            double pxToWorldY = (2.0*halfH)/(double)vp.h;
+            input.offsetX = -(input.cursorX-input.dragStartX)*pxToWorldX;
+            input.offsetY =  (input.cursorY-input.dragStartY)*pxToWorldY;
         }
         if (!playback.isPlaying()) {
             camera.setTarget(input.baseTargetX+input.offsetX, input.baseTargetY+input.offsetY);
@@ -275,7 +275,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         tileShader.use();
         tileShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
         float vl,vr,vb,vt; camera.frustumBounds(vl,vr,vb,vt);
-        tileMesh.draw(vl, vr, vb, vt);
+        tileMesh.draw(vl, vr, vb, vt, camera.targetX(), camera.targetY());
         glEnable(GL_DEPTH_TEST);
 
         // Draw planets (only when playing or after first start)
@@ -293,7 +293,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         // Draw event icons on top of everything (no depth test)
         glDisable(GL_DEPTH_TEST);
         tileShader.use();
-        tileMesh.drawIcons(vl, vr, vb, vt);
+        tileMesh.drawIcons(vl, vr, vb, vt, camera.targetX(), camera.targetY());
         glEnable(GL_DEPTH_TEST);
 
         glfwSwapBuffers(window);

@@ -145,7 +145,7 @@ void LevelData::calculateTilePositions() {
 
     for (int i = 0; i < n; i++) {
         tiles[i].index = i;
-        tiles[i].position = {(float)curX, (float)curY};
+        tiles[i].position = {curX, curY};
         tiles[i].direction = floats[i];
 
         double rad = (double)floats[i] * 3.14159265358979323846 / 180.0;
@@ -291,7 +291,7 @@ void LevelData::processActions() {
 void LevelData::applyPositionTrackOffsets() {
     if (tilePositionOffsets.empty()) return;
 
-    float cumX = 0.0f, cumY = 0.0f;
+    double cumX = 0.0, cumY = 0.0;
     int n = (int)tiles.size();
 
     for (int i = 0; i < n; i++) {
@@ -304,8 +304,8 @@ void LevelData::applyPositionTrackOffsets() {
         tiles[i].position[1] += cumY;
 
         if (i < (int)tilePositionOffsets.size() && tilePositionOffsets[i].justThisTile) {
-            cumX = 0.0f;
-            cumY = 0.0f;
+            cumX = 0.0;
+            cumY = 0.0;
         }
     }
 }

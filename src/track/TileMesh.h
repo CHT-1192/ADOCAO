@@ -10,8 +10,9 @@
 
 // Per-instance data (world position + bounding box for culling)
 struct TileInstance {
-    float offX, offY, offZ;   // world position
-    float minX, minY, maxX, maxY;  // world-space AABB
+    double offX, offY;       // world position (double for precision)
+    float  offZ;
+    double minX, minY, maxX, maxY;  // world-space AABB (double for culling)
 };
 
 struct ShapeGroup {
@@ -37,8 +38,8 @@ public:
                const std::string& fillColorHex = "FFFFFF",
                const std::string& strokeColorHex = "000000");
 
-    void draw(float viewL, float viewR, float viewB, float viewT) const;
-    void drawIcons(float viewL, float viewR, float viewB, float viewT) const;
+    void draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const;
+    void drawIcons(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const;
 
     bool empty() const;
 
