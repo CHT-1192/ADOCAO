@@ -280,14 +280,14 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
         // Draw planets (only when playing or after first start)
         if (playback.isPlaying() && playback.redPlanet() && playback.redPlanet()->gpuBuilt()) {
-            playback.redPlanet()->draw(planetShader, camera);
-            playback.bluePlanet()->draw(planetShader, camera);
+            playback.redPlanet()->draw(planetShader, camera, camera.targetX(), camera.targetY());
+            playback.bluePlanet()->draw(planetShader, camera, camera.targetX(), camera.targetY());
         }
 
         // Draw trails
         if (playback.isPlaying() && playback.redPlanet() && playback.redPlanet()->trail) {
-            playback.redPlanet()->trail->draw(trailShader, camera);
-            playback.bluePlanet()->trail->draw(trailShader, camera);
+            playback.redPlanet()->trail->draw(trailShader, camera, camera.targetX(), camera.targetY());
+            playback.bluePlanet()->trail->draw(trailShader, camera, camera.targetX(), camera.targetY());
         }
 
         // Draw event icons on top of everything (no depth test)

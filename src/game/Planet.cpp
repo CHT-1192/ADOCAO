@@ -114,10 +114,11 @@ bool Planet::buildGPU() {
     return true;
 }
 
-void Planet::draw(Shader& shader, const Camera& camera) const {
+void Planet::draw(Shader& shader, const Camera& camera, double camX, double camY) const {
     if (!m_vao) return;
 
-    auto model = glm::translate(glm::mat4(1.0f), position);
+    glm::vec3 relPos((float)((double)position.x - camX), (float)((double)position.y - camY), position.z);
+    auto model = glm::translate(glm::mat4(1.0f), relPos);
     auto mvp = camera.viewProj() * model;
 
     shader.use();

@@ -178,13 +178,14 @@ void PlanetTrail::rebuildGeometry() {
     m_dirty = false;
 }
 
-void PlanetTrail::draw(Shader& shader, const Camera& camera) {
+void PlanetTrail::draw(Shader& shader, const Camera& camera, double camX, double camY) {
     if (m_points.size() < 2) return;
 
     if (m_dirty) rebuildGeometry();
     if (m_indexCount == 0) return;
 
-    auto mvp = camera.viewProj(); // identity model (verts already in world space at Z=0)
+    auto model = glm::translate(glm::mat4(1.0f), glm::vec3((float)-camX, (float)-camY, 0.0f));
+    auto mvp = camera.viewProj() * model;
 
     shader.use();
     shader.setMat4("uMVP", glm::value_ptr(mvp));

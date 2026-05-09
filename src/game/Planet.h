@@ -28,7 +28,7 @@ public:
     void clearTrail();
 
     bool buildGPU();
-    void draw(Shader& shader, const Camera& camera) const;
+    void draw(Shader& shader, const Camera& camera, double camX, double camY) const;
     bool gpuBuilt() const { return m_vao != 0; }
 
 private:

@@ -22,9 +22,10 @@ void Camera::update() {
 
     m_proj = glm::ortho(-halfW, halfW, -halfH, halfH, 0.1f, 50000.0f);
 
+    // View at origin — instance offsets handle camera-relative translation
     m_view = glm::lookAt(
-        glm::vec3((float)m_targetX, (float)m_targetY, 10.0f),
-        glm::vec3((float)m_targetX, (float)m_targetY, 0.0f),
+        glm::vec3(0.0f, 0.0f, 10.0f),
+        glm::vec3(0.0f, 0.0f, 0.0f),
         glm::vec3(0.0f, 1.0f, 0.0f));
 }
 

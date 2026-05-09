@@ -18,7 +18,7 @@ public:
     PlanetTrail& operator=(PlanetTrail&&) noexcept;
 
     void update(const glm::vec2& pos, float currentTime);
-    void draw(Shader& shader, const Camera& camera);
+    void draw(Shader& shader, const Camera& camera, double camX, double camY);
     void clear();
 
 private:
