@@ -130,7 +130,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         for (int i : tileIndices) {
             float wx = tiles[i].position[0];
             float wy = tiles[i].position[1];
-            float wz = 2.0f - (float)i * 0.01f;  // decent Z spacing between tiles
+            float wz = 2.0f - (float)i * 0.001f;  // tile 0 Z=2.0, tile 1M Z=-998 (w/in far plane)
             instOffsets.push_back(wx);
             instOffsets.push_back(wy);
             instOffsets.push_back(wz);

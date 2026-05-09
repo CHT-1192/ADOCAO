@@ -18,6 +18,7 @@ public:
     void start();
     void stop();
     void update(float deltaMs);
+    void syncToAudio(float audioPosSec, float offsetSec);  // drive from audio clock
 
     Planet* redPlanet()  { return m_redPlanet.get(); }
     Planet* bluePlanet() { return m_bluePlanet.get(); }

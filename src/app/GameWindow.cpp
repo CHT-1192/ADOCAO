@@ -79,7 +79,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
     if (!window) { LOG_E("Failed to create game window"); return; }
 
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
+    glfwSwapInterval(0);  // disable vsync for max framerate
 
     if (!loadGLCore()) { LOG_E("Failed to load OpenGL functions"); glfwDestroyWindow(window); return; }
 
@@ -164,7 +164,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
     // ---- Main loop ----
     double lastFrameTime = glfwGetTime();
-    constexpr double targetFrameTime = 1.0 / 120.0;  // 120 FPS cap
+    constexpr double targetFrameTime = 1.0 / 240.0;  // 240 FPS soft cap
     bool wasSpacePressed = false;
 
     while (!glfwWindowShouldClose(window)) {
@@ -172,17 +172,16 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, GLFW_TRUE);
 
-        // Delta time with FPS cap
+        // Delta time with precise busy-wait cap (microsecond accuracy)
         double now = glfwGetTime();
         double elapsed = now - lastFrameTime;
         if (elapsed < targetFrameTime && elapsed > 0) {
-            Sleep((DWORD)((targetFrameTime - elapsed) * 1000.0));
-            now = glfwGetTime();
-            elapsed = now - lastFrameTime;
+            double target = lastFrameTime + targetFrameTime;
+            while ((now = glfwGetTime()) < target) { /* busy-wait */ }
+            elapsed = targetFrameTime;
         }
         float deltaMs = (float)(elapsed * 1000.0);
         lastFrameTime = now;
-        // If we lost focus for a long time, treat as resume (skip the spike)
         if (deltaMs > 500.0f) deltaMs = 0.0f;
         else if (deltaMs > 100.0f) deltaMs = 100.0f;
 
@@ -215,9 +214,14 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         }
         wasSpacePressed = spacePressed;
 
-        // Update playback
+        // Update playback — sync to audio clock when music is playing to avoid drift
         if (playback.isPlaying()) {
-            playback.update(deltaMs);
+            if (audioEngine.hasMusic() && audioEngine.isPlaying()) {
+                float offsetSec = level->settings.offset / 1000.0f;
+                playback.syncToAudio(audioEngine.position(), offsetSec);
+            } else {
+                playback.update(deltaMs);
+            }
         }
 
         // Camera: follow pivot during playback, allow drag when stopped
