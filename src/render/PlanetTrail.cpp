@@ -107,10 +107,13 @@ void PlanetTrail::rebuildGeometry() {
     int n = (int)m_points.size();
     if (n < 2) { m_vertexCount = 0; m_indexCount = 0; return; }
 
+    // Center point: keep VBO values small for float precision
+    m_center = (m_points.front().pos + m_points.back().pos) * 0.5f;
+
     const int segsPerPoint = 4;
     int totalSegments = (n - 1) * segsPerPoint;
-    int vertCount = (totalSegments + 1) * 2; // left+right per segment point
-    int idxCount = totalSegments * 6;        // 2 triangles per segment
+    int vertCount = (totalSegments + 1) * 2;
+    int idxCount = totalSegments * 6;
 
     std::vector<float> verts(vertCount * 3);
     std::vector<unsigned> indices(idxCount);
@@ -124,7 +127,6 @@ void PlanetTrail::rebuildGeometry() {
         int i = (int)rawIdx;
         float localT = rawIdx - (float)i;
 
-        // Get control points for Catmull-Rom
         glm::vec2 p0 = m_points[std::max(0, i - 1)].pos;
         glm::vec2 p1 = m_points[i].pos;
         glm::vec2 p2 = m_points[std::min(n - 1, i + 1)].pos;
@@ -133,22 +135,20 @@ void PlanetTrail::rebuildGeometry() {
         glm::vec2 pt = catmullRom(p0, p1, p2, p3, localT);
         glm::vec2 tangent = catmullRomTangent(p0, p1, p2, p3, localT);
 
-        // Normal (perpendicular to tangent, rotate 90° CCW)
         float len = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
         glm::vec2 normal = (len > 0.001f) ? glm::vec2(-tangent.y / len, tangent.x / len) : glm::vec2(0.0f, 1.0f);
 
-        // Width tapers from 0 (tail) to maxWidth (head)
         float width = maxWidth * globalT;
 
-        // Left vertex
-        verts[vi * 3 + 0] = pt.x - normal.x * width * 0.5f;
-        verts[vi * 3 + 1] = pt.y - normal.y * width * 0.5f;
+        // Store relative to center (small numbers for float precision)
+        verts[vi * 3 + 0] = pt.x - m_center.x - normal.x * width * 0.5f;
+        verts[vi * 3 + 1] = pt.y - m_center.y - normal.y * width * 0.5f;
         verts[vi * 3 + 2] = 0.0f;
         vi++;
 
         // Right vertex
-        verts[vi * 3 + 0] = pt.x + normal.x * width * 0.5f;
-        verts[vi * 3 + 1] = pt.y + normal.y * width * 0.5f;
+        verts[vi * 3 + 0] = pt.x - m_center.x + normal.x * width * 0.5f;
+        verts[vi * 3 + 1] = pt.y - m_center.y + normal.y * width * 0.5f;
         verts[vi * 3 + 2] = 0.0f;
         vi++;
     }
@@ -184,7 +184,9 @@ void PlanetTrail::draw(Shader& shader, const Camera& camera, double camX, double
     if (m_dirty) rebuildGeometry();
     if (m_indexCount == 0) return;
 
-    auto model = glm::translate(glm::mat4(1.0f), glm::vec3((float)-camX, (float)-camY, 0.0f));
+    // VBO is relative to m_center, translate by (center - camTarget) → camera-relative
+    auto model = glm::translate(glm::mat4(1.0f),
+        glm::vec3(m_center.x - (float)camX, m_center.y - (float)camY, 0.0f));
     auto mvp = camera.viewProj() * model;
 
     shader.use();

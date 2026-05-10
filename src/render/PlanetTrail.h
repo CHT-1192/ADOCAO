@@ -24,6 +24,7 @@ public:
 private:
     struct Point { glm::vec2 pos; float time; };
     std::vector<Point> m_points;
+    glm::vec2 m_center{0.0f};  // trail VBO is relative to this (for precision)
 
     int m_maxPoints = 200;
     float m_trailDuration = 0.4f;
