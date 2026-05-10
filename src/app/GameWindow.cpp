@@ -278,16 +278,18 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         tileMesh.draw(vl, vr, vb, vt, camera.targetX(), camera.targetY());
         glEnable(GL_DEPTH_TEST);
 
-        // Draw planets (only when playing or after first start)
+        // Draw trails behind planets (no depth test)
+        if (playback.isPlaying() && playback.redPlanet() && playback.redPlanet()->trail) {
+            glDisable(GL_DEPTH_TEST);
+            playback.redPlanet()->trail->draw(trailShader, camera, camera.targetX(), camera.targetY());
+            playback.bluePlanet()->trail->draw(trailShader, camera, camera.targetX(), camera.targetY());
+            glEnable(GL_DEPTH_TEST);
+        }
+
+        // Draw planets on top
         if (playback.isPlaying() && playback.redPlanet() && playback.redPlanet()->gpuBuilt()) {
             playback.redPlanet()->draw(planetShader, camera, camera.targetX(), camera.targetY());
             playback.bluePlanet()->draw(planetShader, camera, camera.targetX(), camera.targetY());
-        }
-
-        // Draw trails
-        if (playback.isPlaying() && playback.redPlanet() && playback.redPlanet()->trail) {
-            playback.redPlanet()->trail->draw(trailShader, camera, camera.targetX(), camera.targetY());
-            playback.bluePlanet()->trail->draw(trailShader, camera, camera.targetX(), camera.targetY());
         }
 
         // Draw event icons on top of everything (no depth test)
