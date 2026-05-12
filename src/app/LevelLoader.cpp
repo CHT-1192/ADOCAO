@@ -43,13 +43,10 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
     report(progress, 0.45f, "Precalculating timeline...");
     result.playback.init(*result.level, cfg.showTrail);
 
-    // Wait for audio init to finish
+    // Wait for background audio init to finish (if started)
     if (audioFuture.valid()) {
         report(progress, 0.75f, "Finalizing audio...");
         audioFuture.get();
-    } else {
-        report(progress, 0.75f, "Initializing audio...");
-        result.audio.init();
     }
 
     report(progress, 0.80f, "Pre-synthesizing hitsounds...");

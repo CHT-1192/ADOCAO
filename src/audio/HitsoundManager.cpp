@@ -144,16 +144,23 @@ static inline float softClip(float x) {
 bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
                                      float totalDuration,
                                      HitsoundProgressCb onProgress) {
-    if (!m_enabled || m_hitsoundType=="None") {
-        if (onProgress) onProgress(100.0f);
+    if (!m_enabled) return false;
+    if (m_hitsoundType == "None" || m_hitsoundType.empty()) {
+        LOG_I("Hitsound: Disabled (type=%s)", m_hitsoundType.c_str());
         return false;
     }
     std::string hp = hitsoundPath(m_hitsoundType);
-    if (hp.empty()) return false;
+    if (hp.empty()) {
+        LOG_E("Hitsound: Unknown type '%s', no WAV mapping", m_hitsoundType.c_str());
+        return false;
+    }
 
     std::vector<float> hitSamples;
     int sr=0, ch=0;
-    if (!readWav(hp, hitSamples, sr, ch)) return false;
+    if (!readWav(hp, hitSamples, sr, ch)) {
+        LOG_E("Hitsound: Failed to read WAV: %s", hp.c_str());
+        return false;
+    }
     if (onProgress) onProgress(5.0f);
 
     m_sampleRate = sr;
