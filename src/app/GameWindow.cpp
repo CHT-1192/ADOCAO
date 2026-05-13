@@ -189,7 +189,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         bool spacePressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
         if (spacePressed && !wasSpacePressed) {
             if (!playback.isPlaying()) {
-                playback.start();
+                playback.start(glfwGetTime());
 
                 const auto& bpmArr = playback.tileBPMPerTile();
                 float bpm = bpmArr.size() > 0 ? bpmArr[0] : level->settings.bpm;
@@ -214,13 +214,13 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         }
         wasSpacePressed = spacePressed;
 
-        // Update playback — sync to audio clock when music is playing to avoid drift
+        // Update playback — sync to audio clock when music playing, else wall-clock
         if (playback.isPlaying()) {
             if (audioEngine.hasMusic() && audioEngine.isPlaying()) {
                 float offsetSec = level->settings.offset / 1000.0f;
                 playback.syncToAudio(audioEngine.position(), offsetSec);
             } else {
-                playback.update(deltaMs);
+                playback.updateWallClock(now);
             }
         }
 

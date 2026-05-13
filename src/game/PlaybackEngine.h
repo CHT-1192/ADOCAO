@@ -15,9 +15,10 @@ public:
 
     void init(const LevelData& level, bool showTrail = true);
 
-    void start();
+    void start(double wallClockSec);
     void stop();
     void update(float deltaMs);
+    void updateWallClock(double wallClockSec);  // jump to absolute time (window drag/sleep)
     void syncToAudio(float audioPosSec, float offsetSec);  // drive from audio clock
 
     Planet* redPlanet()  { return m_redPlanet.get(); }
@@ -52,6 +53,7 @@ private:
 
     bool   m_isPlaying = false;
     float  m_elapsedTime = 0.0f;
+    double m_startWallClock = 0.0;  // wall-clock time when playback started
     int    m_currentTileIndex = 0;
 
     void precalculateTiming();

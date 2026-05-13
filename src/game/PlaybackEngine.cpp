@@ -201,10 +201,11 @@ void PlaybackEngine::precalculateTiming() {
           *std::max_element(m_tileBPM.begin(), m_tileBPM.end()));
 }
 
-void PlaybackEngine::start() {
+void PlaybackEngine::start(double wallClockSec) {
     if (m_isPlaying) return;
     m_isPlaying = true;
     m_elapsedTime = 0.0f;
+    m_startWallClock = wallClockSec;
     m_currentTileIndex = 0;
 
     const auto& tiles = m_level->tiles;
@@ -356,6 +357,18 @@ void PlaybackEngine::updatePlanetPositions() {
 void PlaybackEngine::syncToAudio(float audioPosSec, float offsetSec) {
     if (!m_isPlaying) return;
     m_elapsedTime = (audioPosSec - offsetSec) * 1000.0f;
+    if (m_elapsedTime < 0.0f) m_elapsedTime = 0.0f;
+
+    updatePlanetPositions();
+
+    float tSec = m_elapsedTime / 1000.0f;
+    if (m_redPlanet)  m_redPlanet->update(tSec);
+    if (m_bluePlanet) m_bluePlanet->update(tSec);
+}
+
+void PlaybackEngine::updateWallClock(double wallClockSec) {
+    if (!m_isPlaying) return;
+    m_elapsedTime = (float)((wallClockSec - m_startWallClock) * 1000.0);
     if (m_elapsedTime < 0.0f) m_elapsedTime = 0.0f;
 
     updatePlanetPositions();
