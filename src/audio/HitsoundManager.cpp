@@ -134,13 +134,6 @@ bool HitsoundManager::readWav(const std::string& filepath,
     return true;
 }
 
-static inline float softClip(float x) {
-    float a=x<0?-x:x;
-    if (a<0.5f) return x;
-    if (a<1.5f) return x*(1.0f-x*x/3.0f);
-    return x<0?-1.0f:1.0f;
-}
-
 bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
                                      float totalDuration,
                                      HitsoundProgressCb onProgress) {
@@ -187,7 +180,6 @@ bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
 
         futures.push_back(std::async(std::launch::async, [&, start, end, bufSize]() {
             std::vector<float> localBuf(bufSize, 0.0f);
-            float localPeak = 0.0f;
             for (int idx = start; idx < end; idx++) {
                 float ts = sorted[idx];
                 if (ts < 0.0f) continue;
@@ -199,29 +191,25 @@ bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
                     float hv = hitSamples[(size_t)i * (size_t)ch];
                     localBuf[(size_t)(sf + i) * 2]     += hv;
                     localBuf[(size_t)(sf + i) * 2 + 1] += hv;
-                    float a = hv < 0 ? -hv : hv;
-                    if (a > localPeak) localPeak = a;
                 }
             }
-            return std::make_pair(std::move(localBuf), localPeak);
+            // Per-sample tanh limiting: no global gain, each sample independently saturated
+            for (size_t i = 0; i < bufSize; i++)
+                localBuf[i] = tanhf(localBuf[i]);
+            return std::make_pair(std::move(localBuf), 0.0f);
         }));
     }
 
-    // Merge results
+    // Merge per-sample-limited results (each thread already applied tanh)
     m_buffer.assign(bufSize, 0.0f);
-    float peak = 0.0f;
     for (auto& fut : futures) {
-        auto [localBuf, localPeak] = fut.get();
-        if (localPeak > peak) peak = localPeak;
+        auto [localBuf, _] = fut.get();
         for (size_t i = 0; i < bufSize; i++)
             m_buffer[i] += localBuf[i];
     }
-
-    if (onProgress) onProgress(90.0f);
-
-    float gain=(peak>0.9f)?0.9f/peak:1.0f;
-    for (size_t i=0; i<m_buffer.size(); i++)
-        m_buffer[i]=softClip(m_buffer[i]*gain);
+    // Final tanh pass to keep merged sum in [-1,1]
+    for (size_t i = 0; i < m_buffer.size(); i++)
+        m_buffer[i] = tanhf(m_buffer[i]);
 
     if (onProgress) onProgress(100.0f);
     LOG_I("Hitsound: Synthesized %d hits into %.1fs buffer", totalHits, totalDuration);
