@@ -7,8 +7,6 @@
 #include <cstring>
 #include <cstdint>
 #include <unordered_map>
-#include <thread>
-#include <future>
 
 static std::unordered_map<std::string, std::vector<float>> s_wavCache;
 
@@ -134,6 +132,13 @@ bool HitsoundManager::readWav(const std::string& filepath,
     return true;
 }
 
+static inline float softClip(float x) {
+    float a = x < 0 ? -x : x;
+    if (a < 0.5f) return x;
+    if (a < 1.5f) return x * (1.0f - x * x / 3.0f);
+    return x < 0 ? -1.0f : 1.0f;
+}
+
 bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
                                      float totalDuration,
                                      HitsoundProgressCb onProgress) {
@@ -165,51 +170,31 @@ bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
     std::sort(sorted.begin(),sorted.end());
     int totalHits=(int)sorted.size();
 
-    // Parallel mixing: split timestamps across threads, each writes to own buffer
-    unsigned numThreads = std::max(1u, std::thread::hardware_concurrency());
-    numThreads = std::min(numThreads, (unsigned)(totalHits / 50 + 1));  // don't over-split small jobs
+    // Single-threaded mixing with per-sample softClip (prevents amplitude explosion)
     size_t bufSize = (size_t)totalFrames * 2;
-
-    std::vector<std::future<std::pair<std::vector<float>, float>>> futures;
-    int chunkSize = (totalHits + (int)numThreads - 1) / (int)numThreads;
-
-    for (unsigned t = 0; t < numThreads; t++) {
-        int start = (int)t * chunkSize;
-        int end = std::min(start + chunkSize, totalHits);
-        if (start >= end) continue;
-
-        futures.push_back(std::async(std::launch::async, [&, start, end, bufSize]() {
-            std::vector<float> localBuf(bufSize, 0.0f);
-            for (int idx = start; idx < end; idx++) {
-                float ts = sorted[idx];
-                if (ts < 0.0f) continue;
-                int sf = (int)(ts * (float)sr);
-                int cl = hitLenFrames;
-                if (sf + cl > totalFrames) cl = totalFrames - sf;
-                if (cl <= 0) continue;
-                for (int i = 0; i < cl; i++) {
-                    float hv = hitSamples[(size_t)i * (size_t)ch];
-                    localBuf[(size_t)(sf + i) * 2]     += hv;
-                    localBuf[(size_t)(sf + i) * 2 + 1] += hv;
-                }
-            }
-            // Per-sample tanh limiting: no global gain, each sample independently saturated
-            for (size_t i = 0; i < bufSize; i++)
-                localBuf[i] = tanhf(localBuf[i]);
-            return std::make_pair(std::move(localBuf), 0.0f);
-        }));
-    }
-
-    // Merge per-sample-limited results (each thread already applied tanh)
     m_buffer.assign(bufSize, 0.0f);
-    for (auto& fut : futures) {
-        auto [localBuf, _] = fut.get();
-        for (size_t i = 0; i < bufSize; i++)
-            m_buffer[i] += localBuf[i];
+
+    for (int idx = 0; idx < totalHits; idx++) {
+        float ts = sorted[idx];
+        if (ts < 0.0f) continue;
+        int sf = (int)(ts * (float)sr);
+        int cl = hitLenFrames;
+        if (sf + cl > totalFrames) cl = totalFrames - sf;
+        if (cl <= 0) continue;
+
+        for (int i = 0; i < cl; i++) {
+            float hv = hitSamples[(size_t)i * (size_t)ch];
+            size_t pos = (size_t)(sf + i) * 2;
+            m_buffer[pos]     = softClip(m_buffer[pos]     + hv);
+            m_buffer[pos + 1] = softClip(m_buffer[pos + 1] + hv);
+        }
+
+        if (onProgress && (idx % 5000 == 0)) {
+            float pct = 5.0f + (float)idx / (float)totalHits * 85.0f;
+            if (pct > 90.0f) pct = 90.0f;
+            onProgress(pct);
+        }
     }
-    // Final tanh pass to keep merged sum in [-1,1]
-    for (size_t i = 0; i < m_buffer.size(); i++)
-        m_buffer[i] = tanhf(m_buffer[i]);
 
     if (onProgress) onProgress(100.0f);
     LOG_I("Hitsound: Synthesized %d hits into %.1fs buffer", totalHits, totalDuration);
