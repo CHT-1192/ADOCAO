@@ -89,11 +89,13 @@ void PlaybackEngine::precalculateTiming() {
         }
         m_tileStartAngles[i] = startAngle;
 
-        // --- Relative angle: absolute direction → rotation amount (ADOFAI-JS _parseAngle) ---
+        // --- Relative angle from absolute direction (ADOFAI-JS _parseAngle) ---
         float rawAngleData = (i < (int)angleData.size()) ? angleData[i] : 180.0f;
+        // Normalize to [0,360): handles overflow values (382, 427, 472 etc.)
+        if (rawAngleData != 999.0f)
+            rawAngleData = std::fmod(std::fmod(rawAngleData, 360.0f) + 360.0f, 360.0f);
         float relAngle;
         if (rawAngleData == 999.0f) {
-            // Midspin: continue in same direction, 0 rotation (instant pass-through)
             relAngle = 0.0f;
             float prevAbs = (i > 0) ? angleData[i - 1] : 0.0f;
             angleDir = std::fmod(prevAbs, 360.0f);
@@ -101,14 +103,13 @@ void PlaybackEngine::precalculateTiming() {
         } else {
             float delta = std::fmod(angleDir - rawAngleData, 360.0f);
             if (delta < 0) delta += 360.0f;
-            // Twirl (preEventCW=false): ADOFAI-JS twirl affects NEXT tile, use pre-event state
             if (!preEventCW) {
                 relAngle = 360.0f - delta;
                 if (relAngle >= 360.0f) relAngle -= 360.0f;
             } else {
                 relAngle = delta;
             }
-            if (relAngle < 0.01f) relAngle = 360.0f;  // delta==0 → full rotation
+            if (relAngle < 0.01f) relAngle = 360.0f;
             angleDir = std::fmod(rawAngleData + 180.0f, 360.0f);
             if (angleDir < 0) angleDir += 360.0f;
         }
