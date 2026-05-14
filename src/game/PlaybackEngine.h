@@ -29,7 +29,7 @@ public:
     float timeInLevel() const;
     int currentTileIndex() const { return m_currentTileIndex; }
 
-    const std::vector<float>& tileStartTimes() const { return m_tileStartTimes; }
+    const std::vector<double>& tileStartTimes() const { return m_tileStartTimes; }
     const std::vector<float>& tileBPMPerTile() const { return m_tileBPM; }
     float totalDuration() const;
     std::vector<float> getHitsoundTimestamps() const;
@@ -42,7 +42,7 @@ private:
     bool m_showTrail = true;
 
     // Precalculated timing arrays (size = n tiles including extra)
-    std::vector<float> m_tileStartTimes;
+    std::vector<double> m_tileStartTimes;  // double: prevents quantization at extreme BPM
     std::vector<float> m_tileDurations;
     std::vector<float> m_tileTotalAngles;
     std::vector<float> m_tileStartAngles;
