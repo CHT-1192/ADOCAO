@@ -50,16 +50,18 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
     }
 
     report(progress, 0.80f, "Pre-synthesizing hitsounds...");
-    result.hitsounds.init();
-    result.hitsounds.setHitsoundType(result.level->settings.hitsound);
-    result.hitsounds.setVolume(result.level->settings.hitsoundVolume);
+    if (cfg.enableHitsounds) {
+        result.hitsounds.init();
+        result.hitsounds.setHitsoundType(result.level->settings.hitsound);
+        result.hitsounds.setVolume(result.level->settings.hitsoundVolume);
 
-    auto timestamps = result.playback.getHitsoundTimestamps();
-    float duration = result.playback.totalDuration();
-    result.hitsounds.preSynthesize(timestamps, duration,
-        [&](float pct) {
-            report(progress, 0.80f + pct * 0.19f, "Synthesizing hitsounds...");
-        });
+        auto timestamps = result.playback.getHitsoundTimestamps();
+        float duration = result.playback.totalDuration();
+        result.hitsounds.preSynthesize(timestamps, duration,
+            [&](float pct) {
+                report(progress, 0.80f + pct * 0.19f, "Synthesizing hitsounds...");
+            });
+    }
 
     report(progress, 1.0f, "Ready!");
 }

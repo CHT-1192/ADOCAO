@@ -220,6 +220,7 @@ LauncherConfig showLauncher() {
     char strokeBuf[8] = "6F5D3D";
     char bgBuf[8]     = "000000";
     bool autoStroke = true;
+    bool enableHitsounds = true;
     int  resoIdx = 0;
     const std::array<const char*, 4> resoNames = {"1280x720", "1920x1080", "2560x1440", "3840x2160"};
     const std::array<int, 4> resoW = {1280, 1920, 2560, 3840};
@@ -297,6 +298,9 @@ LauncherConfig showLauncher() {
         ImGui::SameLine();
         ImGui::Spacing(); ImGui::SameLine();
         ImGui::Checkbox("Trail", &cfg.showTrail);
+        ImGui::SameLine();
+        ImGui::Spacing(); ImGui::SameLine();
+        ImGui::Checkbox("Hitsounds", &enableHitsounds);
 
         ImGui::Spacing();
 
@@ -351,6 +355,7 @@ LauncherConfig showLauncher() {
             cfg.trackStrokeColor = strokeBuf;
             cfg.backgroundColor  = bgBuf;
             cfg.autoStroke       = autoStroke;
+            cfg.enableHitsounds  = enableHitsounds;
             cfg.resolutionW      = resoW[resoIdx];
             cfg.resolutionH      = resoH[resoIdx];
             cfg.cancelled        = false;
