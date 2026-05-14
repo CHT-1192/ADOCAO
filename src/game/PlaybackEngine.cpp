@@ -231,8 +231,7 @@ void PlaybackEngine::stop() {
 }
 
 float PlaybackEngine::timeInLevel() const {
-    float bpm = (m_tileBPM.size() > 0) ? m_tileBPM[0] : m_level->settings.bpm;
-    float secPerBeat = 60.0f / bpm;
+    float secPerBeat = 60.0f / m_level->settings.bpm;  // always use initial BPM
     float countdown = m_level->settings.countdownTicks * secPerBeat;
     return m_elapsedTime / 1000.0f - countdown;
 }
