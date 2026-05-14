@@ -46,6 +46,7 @@ int runApplication(bool debugConsole) {
 
     // Stage 1: Launcher
     LauncherConfig cfg = showLauncher();
+    if (debugConsole) cfg.enableHitsounds = false;
     if (cfg.cancelled || cfg.levelPath.empty()) {
         LOG_I("Launcher cancelled, exiting.");
         glfwTerminate();

@@ -1,5 +1,6 @@
 #include "PlaybackEngine.h"
 #include "../util/Logger.h"
+#include <GLFW/glfw3.h>
 #include <cmath>
 #include <algorithm>
 
@@ -209,6 +210,10 @@ void PlaybackEngine::start(double wallClockSec) {
     m_elapsedTime = 0.0f;
     m_startWallClock = wallClockSec;
     m_currentTileIndex = 0;
+    m_reportedEnd = false;
+
+    LOG_I("Playback started at t=%.3fs, countdown=%.1f beats", wallClockSec,
+          m_level->settings.countdownTicks * (60.0f / m_level->settings.bpm));
 
     const auto& tiles = m_level->tiles;
     if (m_redPlanet && !tiles.empty()) {
@@ -289,8 +294,14 @@ void PlaybackEngine::updatePlanetPositions() {
     int tileIdx = findTileIndex(t);
     m_currentTileIndex = tileIdx;
 
-    // Past last tile: infinite rotation around the extra tile (reference line 2417)
+    // Past last tile: infinite rotation around the extra tile
     if (tileIdx >= n - 1) {
+        if (!m_reportedEnd) {
+            m_reportedEnd = true;
+            double wallNow = glfwGetTime();
+            LOG_I("Planet reached end: tileTime=%.3fs wallTime=%.3fs wallElapsed=%.3fs",
+                  timeInLevel(), wallNow, wallNow - m_startWallClock);
+        }
         int lastIdx = n - 1;
         const auto& pivotPos = tiles[lastIdx].position;
         float bpm = m_tileBPM[lastIdx];

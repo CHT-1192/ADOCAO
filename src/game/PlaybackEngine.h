@@ -55,6 +55,7 @@ private:
     float  m_elapsedTime = 0.0f;
     double m_startWallClock = 0.0;  // wall-clock time when playback started
     int    m_currentTileIndex = 0;
+    bool   m_reportedEnd = false;   // track if end-of-level log was emitted
 
     void precalculateTiming();
     int  findTileIndex(float timeInLevel) const;
