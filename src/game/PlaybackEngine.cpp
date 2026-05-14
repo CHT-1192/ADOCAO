@@ -54,6 +54,7 @@ void PlaybackEngine::precalculateTiming() {
 
     for (int i = 0; i < n - 1; i++) {
         float extraRotation = 0.0f;
+        bool preEventCW = isCW;  // ADOFAI-JS: twirl affects NEXT tile, not current
 
         // Process events on this floor (O(1) lookup)
         for (size_t j : actionsByFloor[i]) {
@@ -100,8 +101,8 @@ void PlaybackEngine::precalculateTiming() {
         } else {
             float delta = std::fmod(angleDir - rawAngleData, 360.0f);
             if (delta < 0) delta += 360.0f;
-            // Twirl (isCW=false): planets go the long way around (360-delta)
-            if (!isCW) {
+            // Twirl (preEventCW=false): ADOFAI-JS twirl affects NEXT tile, use pre-event state
+            if (!preEventCW) {
                 relAngle = 360.0f - delta;
                 if (relAngle >= 360.0f) relAngle -= 360.0f;
             } else {
