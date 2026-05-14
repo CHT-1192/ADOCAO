@@ -12,31 +12,46 @@
 
 static std::string readFileUtf8(const std::string& filepath) {
 #ifdef _WIN32
-    // Detect encoding: try UTF-8 first, fall back to ACP (system codepage)
-    std::wstring wpath;
+    // Convert UTF-8 path to wide for Windows API
     int wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
                                    filepath.c_str(), -1, nullptr, 0);
+    std::wstring wpath;
     if (wlen > 0) {
         wpath.resize(wlen);
         MultiByteToWideChar(CP_UTF8, 0, filepath.c_str(), -1, &wpath[0], wlen);
     } else {
-        // Not valid UTF-8 — try ACP (e.g., EUC-KR from legacy dialogs)
         wlen = MultiByteToWideChar(CP_ACP, 0, filepath.c_str(), -1, nullptr, 0);
         if (wlen <= 0) return {};
         wpath.resize(wlen);
         MultiByteToWideChar(CP_ACP, 0, filepath.c_str(), -1, &wpath[0], wlen);
     }
 
-    FILE* f = _wfopen(wpath.c_str(), L"rb");
-    if (!f) return {};
+    // Memory-mapped file: avoids OS buffer copy for large files
+    HANDLE hFile = CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return {};
 
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    LARGE_INTEGER fileSize;
+    if (!GetFileSizeEx(hFile, &fileSize) || fileSize.QuadPart <= 0) {
+        CloseHandle(hFile); return {};
+    }
 
-    std::string content(size, '\0');
-    fread(&content[0], 1, size, f);
-    fclose(f);
+    HANDLE hMapping = CreateFileMappingW(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    if (!hMapping) { CloseHandle(hFile); return {}; }
+
+    const char* data = (const char*)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0);
+    if (!data) { CloseHandle(hMapping); CloseHandle(hFile); return {}; }
+
+    size_t size = (size_t)fileSize.QuadPart;
+    // Skip UTF-8 BOM if present
+    size_t offset = (size >= 3 && (unsigned char)data[0] == 0xEF
+                     && (unsigned char)data[1] == 0xBB && (unsigned char)data[2] == 0xBF) ? 3 : 0;
+
+    std::string content(data + offset, size - offset);
+
+    UnmapViewOfFile(data);
+    CloseHandle(hMapping);
+    CloseHandle(hFile);
     return content;
 #else
     std::ifstream file(filepath, std::ios::binary);

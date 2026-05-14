@@ -7,6 +7,8 @@
 #include <cstring>
 #include <cstdint>
 #include <unordered_map>
+#include <thread>
+#include <future>
 
 static std::unordered_map<std::string, std::vector<float>> s_wavCache;
 
@@ -170,30 +172,44 @@ bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
     std::sort(sorted.begin(),sorted.end());
     int totalHits=(int)sorted.size();
 
-    // Single-threaded mixing with per-sample softClip (prevents amplitude explosion)
+    // Parallel mixing: each thread processes a chunk with per-sample softClip
+    unsigned numThreads = std::max(1u, std::thread::hardware_concurrency());
+    numThreads = std::min(numThreads, (unsigned)(totalHits / 500 + 1));
     size_t bufSize = (size_t)totalFrames * 2;
+    int chunkSize = (totalHits + (int)numThreads - 1) / (int)numThreads;
+
+    std::vector<std::future<std::vector<float>>> futures;
+    for (unsigned t = 0; t < numThreads; t++) {
+        int start = (int)t * chunkSize;
+        int end = std::min(start + chunkSize, totalHits);
+        if (start >= end) continue;
+
+        futures.push_back(std::async(std::launch::async, [&, start, end]() {
+            std::vector<float> localBuf(bufSize, 0.0f);
+            for (int idx = start; idx < end; idx++) {
+                float ts = sorted[idx];
+                if (ts < 0.0f) continue;
+                int sf = (int)(ts * (float)sr);
+                int cl = hitLenFrames;
+                if (sf + cl > totalFrames) cl = totalFrames - sf;
+                if (cl <= 0) continue;
+                for (int i = 0; i < cl; i++) {
+                    float hv = hitSamples[(size_t)i * (size_t)ch];
+                    size_t pos = (size_t)(sf + i) * 2;
+                    localBuf[pos]     = softClip(localBuf[pos]     + hv);
+                    localBuf[pos + 1] = softClip(localBuf[pos + 1] + hv);
+                }
+            }
+            return localBuf;
+        }));
+    }
+
+    // Merge thread results and apply final softClip pass
     m_buffer.assign(bufSize, 0.0f);
-
-    for (int idx = 0; idx < totalHits; idx++) {
-        float ts = sorted[idx];
-        if (ts < 0.0f) continue;
-        int sf = (int)(ts * (float)sr);
-        int cl = hitLenFrames;
-        if (sf + cl > totalFrames) cl = totalFrames - sf;
-        if (cl <= 0) continue;
-
-        for (int i = 0; i < cl; i++) {
-            float hv = hitSamples[(size_t)i * (size_t)ch];
-            size_t pos = (size_t)(sf + i) * 2;
-            m_buffer[pos]     = softClip(m_buffer[pos]     + hv);
-            m_buffer[pos + 1] = softClip(m_buffer[pos + 1] + hv);
-        }
-
-        if (onProgress && (idx % 5000 == 0)) {
-            float pct = 5.0f + (float)idx / (float)totalHits * 85.0f;
-            if (pct > 90.0f) pct = 90.0f;
-            onProgress(pct);
-        }
+    for (auto& fut : futures) {
+        auto localBuf = fut.get();
+        for (size_t i = 0; i < bufSize; i++)
+            m_buffer[i] = softClip(m_buffer[i] + localBuf[i]);
     }
 
     if (onProgress) onProgress(100.0f);
