@@ -55,7 +55,6 @@ void PlaybackEngine::precalculateTiming() {
 
     for (int i = 0; i < n - 1; i++) {
         float extraRotation = 0.0f;
-        bool preEventCW = isCW;  // ADOFAI-JS: twirl affects NEXT tile, not current
 
         // Process events on this floor (O(1) lookup)
         for (size_t j : actionsByFloor[i]) {
@@ -101,7 +100,7 @@ void PlaybackEngine::precalculateTiming() {
         } else {
             float delta = std::fmod(angleDir - rawAngleData, 360.0f);
             if (delta < 0) delta += 360.0f;
-            if (!preEventCW) {
+            if (!isCW) {
                 relAngle = 360.0f - delta;
                 if (relAngle >= 360.0f) relAngle -= 360.0f;
             } else {
@@ -253,8 +252,7 @@ std::vector<float> PlaybackEngine::getHitsoundTimestamps() const {
 
     // tileStartTimes are relative to tile 1 (tileStartTimes[1]=0 after shift).
     // Add countdown duration so timestamps are relative to space-press time.
-    float bpm = (m_tileBPM.size() > 0) ? m_tileBPM[0] : m_level->settings.bpm;
-    float countdown = (float)m_level->settings.countdownTicks * (60.0f / bpm);
+    float countdown = (float)m_level->settings.countdownTicks * (60.0f / m_level->settings.bpm);
 
     for (int i = 1; i < n; i++) {
         timestamps.push_back(m_tileStartTimes[i] + countdown);
