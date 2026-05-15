@@ -92,9 +92,6 @@ void PlaybackEngine::precalculateTiming() {
 
         // --- Relative angle from absolute direction (ADOFAI-JS _parseAngle) ---
         float rawAngleData = (i < (int)angleData.size()) ? angleData[i] : 180.0f;
-        // Normalize to [0,360): handles overflow values (382, 427, 472 etc.)
-        if (rawAngleData != 999.0f)
-            rawAngleData = std::fmod(std::fmod(rawAngleData, 360.0f) + 360.0f, 360.0f);
         float relAngle;
         if (rawAngleData == 999.0f) {
             relAngle = 0.0f;
