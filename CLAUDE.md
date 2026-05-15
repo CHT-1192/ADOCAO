@@ -4,7 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A native C++ / OpenGL "A Dance of Fire and Ice" (冰与火之舞) level viewer. Plays `.adofai` custom levels on Windows and Linux (Wayland). The reference implementation is the TypeScript/Three.js web player at `../re_adojas/` — all game logic, timing, and level parsing should match that implementation.
+A native C++ / OpenGL "A Dance of Fire and Ice" (冰与火之舞) level viewer. Plays `.adofai` custom levels on Windows and Linux (Wayland). Reference implementations at `../re_adojas/` (Three.js) and `../ADOFAN_PIXI/` (PixiJS) — all game logic, timing, and level parsing should match these implementations.
+
+## Floating-Point Precision Rules
+
+**ALL timing and position values must use `double` (float64).** Float32 precision loss at extreme values (millions of tiles, >100s timeline, >1M world units) causes visible artifacts:
+
+| Value | Type | Reason |
+|-------|------|--------|
+| `m_elapsedTime` | `double` | 10μs float jitter at 100s total time skips 1.8μs tiles at 32M BPM |
+| `m_tileStartTimes[]` | `double` | float quantizes timestamps at 100s, fusing consecutive microsecond tiles |
+| `totalTime` (accumulator) | `double` | cumulative float error over 6M+ tiles distorts total duration |
+| `Tile::position` | `double[2]` | 0.1-unit float jitter at 1M world units, vertices snap to grid |
+| `curX/curY` (position calc) | `double` | accumulation error over millions of cos/sin steps |
+| Camera target | `double` | ensures camera-relative offsets are computed in double before float upload |
+| Instance AABB | `double` | frustum culling uses world-space double, GPU gets relative float |
+
+GPU uploads convert to float only at the last step (camera-relative offset), keeping all values small (±50 units).
 
 ## Build & Run
 
@@ -213,3 +229,9 @@ JSON with these top-level keys:
 - `actions: [{ floor, eventType, ... }]` — Supported: SetSpeed, Twirl, Pause, PositionTrack (positionOffset + justThisTile only)
 - `pathData: string` — Alternative to angleData (R=0°, L=180°, !=midspin, etc.)
 - `decorations: [...]` — Ignored
+
+## Reference Implementations
+
+- `../ADOFAI-JS/` — Core angle parsing (`_parseAngle`), pathData conversion, tile position calculation
+- `../Re_ADOJAS/` — Three.js web player: timing model, planet movement, audio, hitsounds, camera, decorations
+- `../ADOFAN_PIXI/` — PixiJS web player: alternative implementation validating timing/angle algorithms
