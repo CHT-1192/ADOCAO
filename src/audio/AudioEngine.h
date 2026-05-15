@@ -31,11 +31,12 @@ public:
     bool hasMusic() const { return m_hasMusic; }
 
     void setVolume(float v);
+    bool hasHitsounds() const { return m_hitSamples != nullptr; }
 
-    // External audio source for mixing (hitsounds)
-    void attachExternal(const float* buffer, size_t totalFrames, int channels, int sampleRate,
-                        size_t* cursor, bool* playing);
-    void detachExternal();
+    // Attach hitsound data for real-time mixing in callback
+    void attachHitsounds(const float* samples, int sampleCount, int sampleRate,
+                         const double* timestamps, int hitCount);
+    void setHitBaseTime();  // record current audio position as t=0 for timestamps
 
 private:
     ma_device* m_device = nullptr;
@@ -49,13 +50,14 @@ private:
     bool m_hasMusic = false;
     bool m_playing = false;
 
-    // External source (hitsounds)
-    const float* m_extBuffer = nullptr;
-    size_t m_extTotalFrames = 0;
-    int m_extChannels = 0;
-    int m_extSampleRate = 44100;
-    size_t* m_extCursor = nullptr;
-    bool* m_extPlaying = nullptr;
+    // Hitsound real-time scheduling
+    const float*  m_hitSamples = nullptr;
+    int           m_hitSampleCount = 0;
+    int           m_hitSampleRate = 44100;
+    const double* m_hitTimestamps = nullptr;
+    int           m_hitCount = 0;
+    int           m_hitCursor = 0;       // next timestamp index
+    double        m_hitBaseTime = 0.0;   // offset: first timestamp = startTime + baseTime
 
     static void dataCallback(ma_device* pDevice, void* pOutput, const void*, unsigned int frameCount);
 };

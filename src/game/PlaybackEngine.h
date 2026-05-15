@@ -32,7 +32,7 @@ public:
     const std::vector<double>& tileStartTimes() const { return m_tileStartTimes; }
     const std::vector<float>& tileBPMPerTile() const { return m_tileBPM; }
     float totalDuration() const;
-    std::vector<float> getHitsoundTimestamps() const;
+    std::vector<double> getHitsoundTimestamps() const;
 
 private:
     const LevelData* m_level = nullptr;

@@ -128,11 +128,11 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         playback.bluePlanet()->buildGPU();
     }
 
-    // Attach hitsound buffer to audio engine for mixed playback
-    if (hitsoundMgr.isSynthesized()) {
-        audioEngine.attachExternal(hitsoundMgr.buffer(), hitsoundMgr.totalFrames(),
-                                   hitsoundMgr.channels(), hitsoundMgr.sampleRate(),
-                                   hitsoundMgr.cursor(), hitsoundMgr.playing());
+    // Attach hitsound data for real-time scheduling
+    if (hitsoundMgr.sampleCount() > 0) {
+        audioEngine.attachHitsounds(hitsoundMgr.samples(), hitsoundMgr.sampleCount(),
+                                    hitsoundMgr.sampleRate(),
+                                    hitsoundMgr.timestamps(), hitsoundMgr.hitCount());
     }
 
     // ---- Input callbacks ----
@@ -195,9 +195,11 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
                 float bpm = bpmArr.size() > 0 ? bpmArr[0] : level->settings.bpm;
                 float offsetSec = level->settings.offset / 1000.0f;
 
-                // Reset hitsound cursor and start playback via mixer
-                hitsoundMgr.reset();
-                *hitsoundMgr.playing() = true;
+                // Reset hitsounds for new playback
+                audioEngine.attachHitsounds(hitsoundMgr.samples(), hitsoundMgr.sampleCount(),
+                                            hitsoundMgr.sampleRate(),
+                                            hitsoundMgr.timestamps(), hitsoundMgr.hitCount());
+                audioEngine.setHitBaseTime();
 
                 if (audioEngine.hasMusic()) {
                     audioEngine.seek(offsetSec);
@@ -209,7 +211,6 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
             } else {
                 playback.stop();
                 audioEngine.pause();
-                *hitsoundMgr.playing() = false;
             }
         }
         wasSpacePressed = spacePressed;
@@ -302,7 +303,6 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
     }
 
     // Cleanup
-    audioEngine.detachExternal();
     audioEngine.shutdown();
     glfwDestroyWindow(window);
 }

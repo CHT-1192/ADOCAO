@@ -171,20 +171,22 @@ void AudioEngine::setVolume(float v) {
     m_volume = std::max(0.0f, std::min(1.0f, v));
 }
 
-void AudioEngine::attachExternal(const float* buffer, size_t totalFrames, int channels, int sampleRate,
-                                  size_t* cursor, bool* playing) {
-    m_extBuffer = buffer;
-    m_extTotalFrames = totalFrames;
-    m_extChannels = channels;
-    m_extSampleRate = sampleRate;
-    m_extCursor = cursor;
-    m_extPlaying = playing;
+void AudioEngine::attachHitsounds(const float* samples, int sampleCount, int sampleRate,
+                                   const double* timestamps, int hitCount) {
+    m_hitSamples = samples;
+    m_hitSampleCount = sampleCount;
+    m_hitSampleRate = sampleRate;
+    m_hitTimestamps = timestamps;
+    m_hitCount = hitCount;
+    m_hitCursor = 0;
+    m_hitBaseTime = 0.0;
 }
 
-void AudioEngine::detachExternal() {
-    m_extBuffer = nullptr;
-    m_extCursor = nullptr;
-    m_extPlaying = nullptr;
+void AudioEngine::setHitBaseTime() {
+    if (m_vorbis && m_sampleRate > 0)
+        m_hitBaseTime = (double)stb_vorbis_get_sample_offset(m_vorbis) / (double)m_sampleRate;
+    else
+        m_hitBaseTime = 0.0;
 }
 
 void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, unsigned int frameCount) {
@@ -215,19 +217,33 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
         if (decoded == 0) self->m_playing = false;
     }
 
-    // --- External source (hitsounds) ---
-    if (self->m_extBuffer && self->m_extPlaying && *self->m_extPlaying && self->m_extCursor) {
-        size_t cursor = *self->m_extCursor;
-        size_t extTotal = self->m_extTotalFrames;
-        int extCh = self->m_extChannels;
+    // --- Hitsound scheduling (real-time, no pre-synthesis) ---
+    if (self->m_hitSamples && self->m_hitCursor < self->m_hitCount) {
+        double audioTime = 0.0;
+        if (self->m_vorbis && self->m_sampleRate > 0)
+            audioTime = (double)stb_vorbis_get_sample_offset(self->m_vorbis) / (double)self->m_sampleRate;
+        double relTime = audioTime - self->m_hitBaseTime;
+        double chunkEnd = relTime + (double)frameCount / (double)pDevice->sampleRate;
 
-        for (unsigned int i = 0; i < frameCount && cursor < extTotal; i++, cursor++) {
-            for (int c = 0; c < extCh && c < (int)devCh; c++) {
-                out[i * devCh + c] += self->m_extBuffer[cursor * extCh + c];
+        // Skip fully-expired hits (ended before this chunk)
+        while (self->m_hitCursor < self->m_hitCount
+               && self->m_hitTimestamps[self->m_hitCursor] + (double)self->m_hitSampleCount / (double)self->m_hitSampleRate < relTime)
+            self->m_hitCursor++;
+
+        // Mix active hits
+        while (self->m_hitCursor < self->m_hitCount && self->m_hitTimestamps[self->m_hitCursor] < chunkEnd) {
+            double ts = self->m_hitTimestamps[self->m_hitCursor];
+            int dstStart = (int)((ts - relTime) * (double)pDevice->sampleRate);  // may be negative
+            int srcStart = dstStart < 0 ? -dstStart : 0;
+            int count = self->m_hitSampleCount - srcStart;
+            if (dstStart + count > (int)frameCount) count = (int)frameCount - (dstStart > 0 ? dstStart : 0);
+            int dstIdx = dstStart < 0 ? 0 : dstStart;
+            for (int i = 0; i < count && dstIdx + i < (int)frameCount; i++) {
+                float hv = self->m_hitSamples[srcStart + i];
+                out[(dstIdx + i) * devCh]     += hv;
+                out[(dstIdx + i) * devCh + 1] += hv;
             }
+            self->m_hitCursor++;
         }
-        // Update cursor (atomic write for external thread safety — but in single-threaded case it's fine)
-        *self->m_extCursor = cursor;
-        if (cursor >= extTotal) *self->m_extPlaying = false;
     }
 }

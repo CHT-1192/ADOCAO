@@ -245,8 +245,8 @@ float PlaybackEngine::totalDuration() const {
     return m_tileStartTimes[n - 1] + 10.0f;  // last tile time + buffer
 }
 
-std::vector<float> PlaybackEngine::getHitsoundTimestamps() const {
-    std::vector<float> timestamps;
+std::vector<double> PlaybackEngine::getHitsoundTimestamps() const {
+    std::vector<double> timestamps;
     int n = (int)m_tileStartTimes.size();
     if (n < 2) return timestamps;
 
