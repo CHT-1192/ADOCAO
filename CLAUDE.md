@@ -28,7 +28,12 @@ cmake --build . --parallel
 ./adocao
 ```
 
-No command-line arguments. All configuration (level file, music, resolution, fullscreen, trail toggle) is selected in the launcher window.
+**Portable (static linked):**
+```bash
+build.bat portable
+```
+
+`--debug` flag enables debug console, disables hitsounds by default.
 
 Minimum CMake version 3.20. Uses C++20.
 
@@ -48,19 +53,24 @@ Minimum CMake version 3.20. Uses C++20.
 ## Feature Scope
 
 **Implemented:**
-- Track tile rendering (instanced, frustum-culled, colored fill/stroke)
-- Event icons on tiles: Twirl (purple), SetSpeed-up (red), SetSpeed-down (blue)
-- Planet movement (red & blue spheres, pivot alternation)
-- Planet trail (Catmull-Rom ribbon, 0.4s duration, tapered width)
-- Space key to start/stop playback
-- **Audio playback** — music (.ogg/.mp3/.wav) + pre-synthesized hitsounds
-- `SetSpeed` — BPM changes (multiplier or absolute)
-- `Twirl` — flips CW/CCW rotation direction
+- Track tile rendering (instanced, frustum-culled with visibility cache, double-precision culling)
+- Event icons on tiles: Twirl (purple), SetSpeed-up (red), SetSpeed-down (blue), drawn last (always on top)
+- Planet movement (red & blue spheres, pivot alternation, Z=3.0 above tiles)
+- Planet trail (Catmull-Rom ribbon, 0.4s duration, center-relative VBO for precision)
+- Space key to start/stop playback (wall-clock driven, surviving pauses/drags)
+- **Audio playback** — music (.ogg via stb_vorbis) + pre-synthesized hitsounds (per-sample softClip)
+- `SetSpeed` — BPM changes (multiplier or absolute), affects current tile
+- `Twirl` — flips CW/CCW rotation direction, affects current tile
 - `Pause` — adds extra rotation (duration/2 full turns) to current tile
 - `PositionTrack` — **only positionOffset with justThisTile** (cumulative offsets)
-- Camera: orbit follows current pivot planet during playback, free drag/zoom when stopped
-- High-DPI window scaling (per-monitor awareness, ImGui font scaling)
-- Launcher: level/music browse, resolution, fullscreen, track colors, trail toggle
+- Camera: orbit follows current pivot during playback, free drag/zoom when stopped
+- View-at-origin + camera-relative rendering (eliminates GPU float32 precision loss at extreme distances)
+- Tile positions and timing stored as double throughout pipeline
+- High-DPI window scaling (per-monitor awareness, native-res font loading, widget size scaling)
+- Launcher: level/music browse, resolution, fullscreen, track colors, background color, trail, auto-stroke, hitsound toggle
+- `--debug` flag: disables hitsounds by default, enables debug console log
+- Portable static build: `build.bat portable` → ADOCAO-Portable.exe
+- Memory-mapped file reading on Windows, geometry/WAV caches
 
 **Not yet implemented:**
 - `MoveCamera`, `MoveTrack`, `ColorTrack`, `RecolorTrack`, `Bloom`, `Flash`
@@ -110,31 +120,43 @@ assets/
 
 ### Timing Model
 
-Precalculated in `PlaybackEngine::precalculateTiming()` (matches `Player.ts::calculateCumulativeRotations()`):
+`angleData` is treated as **absolute directions** (0=right, 90=up, 180=left, 270=down). Relative rotation per tile is computed via ADOFAI-JS `_parseAngle` algorithm from direction deltas.
 
 - `secPerBeat = 60 / currentBPM` (BPM starts from `settings.bpm`, changes via SetSpeed events)
-- For tile `i`: `rawAngle = angleData[i]` (999 for midspin), `totalAngle = rawAngle * PI / 180`
-- CW flip: if Twirl toggles isCW, `totalAngle = -totalAngle`
+- For tile `i`: `delta = normalize(angleDir - angleData[i])` — direction change in degrees
+- `relAngle = delta` (or `360-delta` if twirled, or `360` if delta==0)
+- `totalAngle = relAngle * PI / 180`; if `isCW`: `totalAngle = -totalAngle`
+- Next tile entry: `angleDir = normalize(angleData[i] + 180)`
+- Midspin (`angleData[i]==999`): `relAngle = 0`, `angleDir = normalize(angleData[i-1])`
 - Pause: `extraRotation += event.duration / 2.0` (in full 360° units)
-- `rotationAmount = abs(totalAngle) / (2*PI)` (number of full rotations)
-- `tileDurations[i] = rotationAmount * 2 * (60 / currentBPM)` (seconds to traverse tile i)
-- `tileStartTimes[i]` = cumulative time, shifted so `tileStartTimes[1] = 0` (planet hits tile 1 at t=0)
-- Countdown: `countdownTicks * (60 / settings.bpm)` seconds before tile 1
-- `timeInLevel = elapsedSec - countdownDuration`
+- `rotationAmount = abs(totalAngle) / (2*PI)`; `duration = rotationAmount * 2 * secPerBeat`
+- `tileStartTimes[]` (double) = cumulative, shifted so `tileStartTimes[1] = 0`
+- Countdown: `countdownTicks * (60 / settings.bpm)` seconds before tile 1 (always uses initial BPM)
+- `timeInLevel = elapsedMs / 1000 - countdownDuration`
+
+### Twirl / SetSpeed
+
+- Events pre-indexed by floor (O(1) lookup per tile)
+- Twirl toggles `isCW` before computing tile's angle — affects **current** tile
+- SetSpeed changes `currentBPM` before computing tile's angle — affects **current** tile
+- BPM propagation: pre-indexed per floor (O(n+m), not O(n*m))
 
 ### Planet Movement
 
 - Pivot tile index alternates: even index → red pivot, odd index → blue pivot
-- Pivot planet sits at tile position, moving planet orbits around it
-- Normal: `progress = (timeInLevel - tileStartTimes[i]) / tileDurations[i]`
-  `currentAngle = tileStartAngles[i] + tileTotalAngles[i] * progress`
-  `movingPos = pivotPos + (cos(angle)*dist, sin(angle)*dist)`
+- `progress = (timeInLevel - tileStartTimes[i]) / tileDurations[i]`, clamped [0,1]
+- `currentAngle = startAngle + totalAngle * progress`
+- `movingPos = pivotPos + (cos(angle)*dist, sin(angle)*dist)`
 - Past last tile: infinite rotation at `(BPM/60)*PI` rad/s
-- Planet Z = 1.0 (above tiles), trail Z = 0
+- Planet Z = 3.0 (above tiles), trail Z = 0 (drawn before planets, no depth test)
+
+### Timing Clock
+- **Music loaded**: `syncToAudio(audioPos, offset)` — visual follows audio clock exactly
+- **No music**: `updateWallClock(glfwGetTime())` — absolute wall clock, survives pauses/drags
 
 ### Input
 
-- **Space**: start/stop playback (edge-triggered, one press = toggle)
+- **Space**: start/stop playback (edge-triggered)
 - **Esc**: close game window
 - **Mouse drag**: pan camera (only when not playing)
 - **Mouse scroll**: zoom (5–500 range)
@@ -143,71 +165,50 @@ Precalculated in `PlaybackEngine::precalculateTiming()` (matches `Player.ts::cal
 
 ### Music (AudioEngine)
 
-Wraps miniaudio `ma_engine` + `ma_sound` for OGG/MP3/WAV music playback.
-- `init()` creates the audio engine; `loadMusic(path)` loads a file
-- `play()` / `playScheduled(delaySeconds)` / `pause()` / `stop()` / `seek(seconds)`
-- `position()` returns cursor in seconds; `volume` is 0.0-1.0
-- On space press: music is seeked to `offset/1000`, then started with a scheduled delay:
-  - `musicStartDelay = countdownDuration - musicDelaySeconds`
-  - `musicDelaySeconds = (firstTileAngle - 180) / 180 * secPerBeat`
-  - If delay negative, music starts immediately at the calculated offset
+Uses `ma_device` (WASAPI/PulseAudio) + `stb_vorbis` for OGG decoding. File is memory-mapped via `_wfopen` on Windows for UTF-8 path support.
+- `init()` creates playback device; `loadMusic(path)` opens OGG via stb_vorbis
+- `play()` / `pause()` / `stop()` / `seek(seconds)` / `resume()`
+- `position()` returns decoder cursor in seconds
+- On space press: `seek(offset/1000)` then `play()` — audio starts from offset immediately
+- Music + hitsounds mixed in single `dataCallback` (prevents clock drift)
+- External source support via `attachExternal(buffer, cursor, playing)`
 
 ### Hitsounds (HitsoundManager)
 
-Pre-synthesizes all hits into a single WAV buffer (matches reference `HitsoundManager.ts`):
-- `preSynthesize(timestamps, totalDuration)` — mixes the selected hitsound .wav at each timestamp
-- Soft-clip normalization (polynomial tanh approximation, threshold 0.5)
-- Writes temp WAV via manual RIFF header + int16 PCM
-- `start(delaySeconds)` — plays the synthesized track (delayed start for countdown sync)
-- `stop()` / `dispose()` — stops playback, deletes temp WAV
+Pre-synthesizes all hits into an in-memory float buffer (stereo, 44100Hz):
+- `preSynthesize(timestamps, totalDuration)` — multi-threaded mixing with per-sample softClip
+- Polynomial softClip (matches reference): transparent for |x|<0.5, gentle for 0.5–1.5, hard clip at ±1
+- No global gain normalization — quiet sections unaffected by dense overlaps
+- In-memory buffer streamed via AudioEngine's mixer callback (no temp WAV file)
+- WAV decode cache: decoded samples reused across level loads
+- 27 hitsound types mapped via `hitsoundKey()` (matching reference `hitsoundKeyMap`)
 
-**Hitsound timestamps**: `PlaybackEngine::getHitsoundTimestamps()` collects `tileStartTimes[i]` for i ≥ 1 (skipping tiles with raw angleData == 0). Timestamps represent when planet reaches each tile relative to tile 1.
-
-**Type mapping** (matching reference `hitsoundKeyMap`):
-- `Kick` → sndKick.wav, `Snare` → sndSnareAcoustic2.wav, `Hat` → sndHat.wav, etc.
-- 27 hitsound types supported (all .wav files in `assets/sounds/`)
-
-### Audio Sync on Space Press
-
-```
-countdownDuration = countdownTicks * (60 / initialBPM)
-musicDelaySeconds = (firstTileAngle - 180) / 180 * secPerBeat
-musicStartDelay = countdownDuration - musicDelaySeconds
-hitsoundStartDelay = countdownDuration
-
-music.seek(offset / 1000)
-if musicStartDelay > 0: music.playScheduled(musicStartDelay)
-else: music.seek(offset/1000 + |musicStartDelay|); music.play()
-hitsounds.start(hitsoundStartDelay)
-```
+**Hitsound timestamps**: `PlaybackEngine::getHitsoundTimestamps()` collects `tileStartTimes[i]` (double) + countdown offset for i ≥ 1.
 
 ## Event Icons
 
-Painted on track tiles during `TileMesh::buildIcons()`. Match re_adojas visual:
-- Icon circle radius: 0.18 world units (16 segments)
-- Z offset: +0.002 above tile (+0.001 extra for SetSpeed when Twirl also present)
+Painted during `TileMesh::buildIcons()`. Match re_adojas visual:
+- Icon circle radius: 0.11 (matches 0.275 × 0.8 / 2)
+- Z offset: +0.01 above tile (+0.005 extra for SetSpeed when Twirl also present)
 - Colors: Twirl = purple (0x800080), SpeedUp = red (0xFF0000), SpeedDown = blue (0x0000FF)
 - SetSpeed icon only shown when BPM ratio > 1.05 (up) or < 0.95 (down)
 
 ## Midspin Detection
 
 Midspin = `angleData[i] == 999.0f` (matches reference `angleData[index] === 999`).
-The shape key in `TileMesh::build()` uses raw angleData, not a heuristic.
 
 ## Coordinate System
 
-OpenGL world space: X right, Y up, Z toward camera (orthographic). Tile Z = (12 - index) * 0.1. Camera looks along -Z.
+OpenGL world space: X right, Y up. Camera at Z=10 looking at Z=0 (orthographic, near=0.1 far=50000). View matrix always at origin — all camera-relative offsets computed in double, converted to float for GPU. Tile Z = 2.0 - index*0.001.
 
 ## High DPI
 
-Windows: `SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)` called in `Application.cpp`.
-Launcher + loading windows scale by `glfwGetMonitorContentScale()`. ImGui `FontGlobalScale` set to DPI scale.
-Game window uses user-requested resolution directly.
+Windows: `SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)` in `Application.cpp`. Launcher/loading windows: `ImGui::GetStyle().ScaleAllSizes(dpiScale)`, fonts loaded at `16*dpiScale` native resolution, widget sizes multiplied by `dpiScale`. Game window uses user-requested resolution directly.
 
 ## Key ADOFAI Level Format
 
 JSON with these top-level keys:
-- `angleData: number[]` — Angle per tile (999 = midspin, 180 = straight)
+- `angleData: number[]` — Absolute direction per tile (999 = midspin). Relative rotation computed from direction deltas
 - `settings: { bpm, offset, countdownTicks, zoom, rotation, ... }`
 - `actions: [{ floor, eventType, ... }]` — Supported: SetSpeed, Twirl, Pause, PositionTrack (positionOffset + justThisTile only)
 - `pathData: string` — Alternative to angleData (R=0°, L=180°, !=midspin, etc.)
