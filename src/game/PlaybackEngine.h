@@ -25,7 +25,7 @@ public:
     Planet* bluePlanet() { return m_bluePlanet.get(); }
 
     bool isPlaying() const { return m_isPlaying; }
-    float elapsedTimeMs() const { return m_elapsedTime; }
+    float elapsedTimeMs() const { return (float)m_elapsedTime; }
     float timeInLevel() const;
     int currentTileIndex() const { return m_currentTileIndex; }
 
@@ -52,7 +52,7 @@ private:
     std::vector<float> m_tileEndDist;
 
     bool   m_isPlaying = false;
-    float  m_elapsedTime = 0.0f;
+    double m_elapsedTime = 0.0;   // double: sub-ns precision at 1000s total time
     double m_startWallClock = 0.0;  // wall-clock time when playback started
     int    m_currentTileIndex = 0;
     bool   m_reportedEnd = false;   // track if end-of-level log was emitted

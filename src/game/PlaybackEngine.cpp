@@ -8,7 +8,7 @@ void PlaybackEngine::init(const LevelData& level, bool showTrail) {
     m_level = &level;
     m_showTrail = showTrail;
     m_isPlaying = false;
-    m_elapsedTime = 0.0f;
+    m_elapsedTime = 0.0;
     m_currentTileIndex = 0;
 
     m_redPlanet.reset();
@@ -203,7 +203,7 @@ void PlaybackEngine::precalculateTiming() {
 void PlaybackEngine::start(double wallClockSec) {
     if (m_isPlaying) return;
     m_isPlaying = true;
-    m_elapsedTime = 0.0f;
+    m_elapsedTime = 0.0;
     m_startWallClock = wallClockSec;
     m_currentTileIndex = 0;
     m_reportedEnd = false;
@@ -229,14 +229,14 @@ void PlaybackEngine::start(double wallClockSec) {
 
 void PlaybackEngine::stop() {
     m_isPlaying = false;
-    m_elapsedTime = 0.0f;
+    m_elapsedTime = 0.0;
     LOG_I("Playback stopped");
 }
 
 float PlaybackEngine::timeInLevel() const {
     float secPerBeat = 60.0f / m_level->settings.bpm;  // always use initial BPM
     float countdown = m_level->settings.countdownTicks * secPerBeat;
-    return m_elapsedTime / 1000.0f - countdown;
+    return (float)(m_elapsedTime / 1000.0 - (double)countdown);
 }
 
 float PlaybackEngine::totalDuration() const {
@@ -363,8 +363,8 @@ void PlaybackEngine::updatePlanetPositions() {
 
 void PlaybackEngine::syncToAudio(float audioPosSec, float offsetSec) {
     if (!m_isPlaying) return;
-    m_elapsedTime = (audioPosSec - offsetSec) * 1000.0f;
-    if (m_elapsedTime < 0.0f) m_elapsedTime = 0.0f;
+    m_elapsedTime = ((double)audioPosSec - (double)offsetSec) * 1000.0;
+    if (m_elapsedTime < 0.0) m_elapsedTime = 0.0;
 
     updatePlanetPositions();
 
@@ -375,8 +375,8 @@ void PlaybackEngine::syncToAudio(float audioPosSec, float offsetSec) {
 
 void PlaybackEngine::updateWallClock(double wallClockSec) {
     if (!m_isPlaying) return;
-    m_elapsedTime = (float)((wallClockSec - m_startWallClock) * 1000.0);
-    if (m_elapsedTime < 0.0f) m_elapsedTime = 0.0f;
+    m_elapsedTime = (wallClockSec - m_startWallClock) * 1000.0;
+    if (m_elapsedTime < 0.0f) m_elapsedTime = 0.0;
 
     updatePlanetPositions();
 
