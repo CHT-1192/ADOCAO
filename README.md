@@ -8,7 +8,7 @@ A native high-performance viewer for [A Dance of Fire and Ice](https://store.ste
 
 ## Features
 
-- Full ADOFAI playback engine with relative angle computation (matches [ADOFAI-JS](https://github.com/ADOFAI/ADOFAI-JS))
+- Full ADOFAI playback engine with relative angle computation (matches [ADOFAI-JS](https://github.com/adofaiex/ADOFAI-JS))
 - Music playback (.ogg) via stb_vorbis + miniaudio (WASAPI/PulseAudio)
 - Pre-synthesized hitsound tracks (27 hit types)
 - Instanced GPU rendering with frustum culling and visibility cache
@@ -74,7 +74,7 @@ assets/
 
 This project draws heavily from:
 - [Re_ADOJAS](https://github.com/Re-ADOJAS/re_adojas) — Three.js web player
-- [ADOFAN_PIXI](https://github.com/ADOFAN-PIXI/ADOFAN_PIXI) — PixiJS web player
+- [ADOFAN_PIXI](https://github.com/AnStartist/ADOFAN_PIXI) — PixiJS web player
 
 Thank you to their authors for the reference implementations.
 
