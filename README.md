@@ -1,6 +1,6 @@
-# ADOCAO - A Dance of Fire and Ice Level Viewer
+# ADOCAO - A Dance of C++ and OpenGL
 
-A native C++/OpenGL viewer for [A Dance of Fire and Ice](https://store.steampowered.com/app/977950/A_Dance_of_Fire_and_Ice/) custom levels (`.adofai` format).
+A native high-performance viewer for [A Dance of Fire and Ice](https://store.steampowered.com/app/977950/A_Dance_of_Fire_and_Ice/) custom levels (`.adofai` format), written in C++20 and OpenGL.
 
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue)
 ![OpenGL](https://img.shields.io/badge/OpenGL-3.3-green)

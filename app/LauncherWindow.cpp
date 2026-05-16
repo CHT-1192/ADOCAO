@@ -247,7 +247,7 @@ LauncherConfig showLauncher() {
 
         ImGui::Spacing();
         ImGui::SetCursorPosX(60 * S);
-        ImGui::Text("ADOCAO - A Dance of Fire and Ice Level Player");
+        ImGui::Text("ADOCAO - A Dance of C++ and OpenGL");
         ImGui::Separator();
         ImGui::Spacing();
 

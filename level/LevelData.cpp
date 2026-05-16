@@ -4,11 +4,48 @@
 #include <fstream>
 #include <sstream>
 #include <cstdio>
+#include <cstring>
 #include <cmath>
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
+
+// Fast parser: extract angleData float array from JSON without DOM allocation.
+// Returns the parsed array and writes the end position (after ']') to `outArrayEnd`.
+static std::vector<float> parseAngleDataFast(const char* json, size_t len, size_t& outArrayEnd) {
+    const char* key = "\"angleData\"";
+    const char* pos = (const char*)std::memchr(json, '"', len);
+    while (pos) {
+        size_t remain = len - (pos - json);
+        if (remain >= 11 && std::memcmp(pos, key, 11) == 0) {
+            pos += 11;
+            while (pos < json + len && (*pos == ' ' || *pos == ':' || *pos == '\t' || *pos == '\n'))
+                pos++;
+            if (*pos != '[') return {};
+            pos++; // skip '['
+            break;
+        }
+        pos++;
+        pos = (const char*)std::memchr(pos, '"', json + len - pos);
+    }
+    if (!pos) return {};
+
+    std::vector<float> result;
+    while (pos < json + len) {
+        while (pos < json + len && (*pos == ' ' || *pos == '\t' || *pos == '\n' || *pos == '\r'))
+            pos++;
+        if (pos >= json + len) break;
+        if (*pos == ']') { outArrayEnd = pos - json + 1; break; }
+        if (*pos == ',') { pos++; continue; }
+        char* end;
+        float val = strtof(pos, &end);
+        if (end == pos) { pos++; continue; }
+        result.push_back(val);
+        pos = end;
+    }
+    return result;
+}
 
 static std::string readFileUtf8(const std::string& filepath) {
 #ifdef _WIN32
@@ -74,12 +111,37 @@ bool LevelData::loadFromFile(const std::string& filepath, ProgressCb onProgress)
 
 bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress) {
     try {
-        if (onProgress) onProgress(0.10f, "Parsing JSON...");
-        auto root = nlohmann::json::parse(cleanJson(jsonStr));
+        if (onProgress) onProgress(0.10f, "Parsing angleData...");
+
+        // Fast path: parse angleData directly without JSON DOM allocation
+        size_t angleDataEnd = 0;
+        angleData = parseAngleDataFast(jsonStr.c_str(), jsonStr.size(), angleDataEnd);
+
+        // Build a stripped version: replace the angleData array with [] so
+        // nlohmann only parses the small objects (settings, actions, etc.)
+        std::string stripped;
+        if (angleDataEnd > 0) {
+            // Find the start of the angleData array
+            const char* p = std::strstr(jsonStr.c_str(), "\"angleData\"");
+            size_t arrStart = p ? (p - jsonStr.c_str()) + 11 : 0;
+            // Skip whitespace and colon
+            while (arrStart < jsonStr.size() && (jsonStr[arrStart] == ' ' || jsonStr[arrStart] == ':'
+                   || jsonStr[arrStart] == '\t' || jsonStr[arrStart] == '\n'))
+                arrStart++;
+            stripped.reserve(arrStart + 2 + (jsonStr.size() - angleDataEnd));
+            stripped.append(jsonStr, 0, arrStart);
+            stripped += "[]";
+            stripped.append(jsonStr, angleDataEnd, std::string::npos);
+        } else {
+            stripped = jsonStr;
+        }
+
+        if (onProgress) onProgress(0.12f, "Parsing JSON...");
+        auto root = nlohmann::json::parse(stripped);
 
         if (onProgress) onProgress(0.15f, "Extracting level data...");
-        // angleData
-        if (root.contains("angleData") && root["angleData"].is_array()) {
+        // angleData already parsed via fast path above; fallback to nlohmann if not found
+        if (angleData.empty() && root.contains("angleData") && root["angleData"].is_array()) {
             angleData = root["angleData"].get<std::vector<float>>();
         }
 

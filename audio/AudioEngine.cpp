@@ -171,15 +171,9 @@ void AudioEngine::setVolume(float v) {
     m_volume = std::max(0.0f, std::min(1.0f, v));
 }
 
-void AudioEngine::attachHitsounds(const float* samples, int sampleCount, int sampleRate,
-                                   const double* timestamps, int hitCount) {
-    m_hitSamples = samples;
-    m_hitSampleCount = sampleCount;
-    m_hitSampleRate = sampleRate;
-    m_hitTimestamps = timestamps;
-    m_hitCount = hitCount;
-    m_hitCursor = 0;
-    m_hitMixOffset = 0;
+void AudioEngine::attachHitBuffer(const float* buffer, int frameCount) {
+    m_hitBuffer = buffer;
+    m_hitBufferLen = frameCount;
     m_hitBaseTime = 0.0;
     m_totalFrames = 0;
 }
@@ -219,8 +213,8 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
         if (decoded == 0) self->m_playing = false;
     }
 
-    // --- Hitsound scheduling (real-time, no pre-synthesis) ---
-    if (self->m_hitSamples) {
+    // --- Hitsound pre-mix streaming ---
+    if (self->m_hitBuffer) {
         // Clock source: vorbis decoder if available, otherwise accumulated frame count
         double audioTime;
         if (self->m_vorbis && self->m_sampleRate > 0)
@@ -230,69 +224,16 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
         self->m_totalFrames += frameCount;
 
         double relTime = audioTime - self->m_hitBaseTime;
-        double chunkEnd = relTime + (double)frameCount / (double)pDevice->sampleRate;
+        int hitPos = (int)(relTime * (double)pDevice->sampleRate);
 
-        // Continue mixing active hit across chunk boundaries
-        if (self->m_hitMixOffset > 0 && self->m_hitCursor < self->m_hitCount) {
-            int remaining = self->m_hitSampleCount - self->m_hitMixOffset;
+        if (hitPos >= 0 && hitPos < self->m_hitBufferLen) {
+            int remaining = self->m_hitBufferLen - hitPos;
             int count = remaining < (int)frameCount ? remaining : (int)frameCount;
             for (int i = 0; i < count; i++) {
-                float hv = self->m_hitSamples[self->m_hitMixOffset + i];
-                out[i * devCh]     += hv;
-                out[i * devCh + 1] += hv;
+                int si = (hitPos + i) * 2;
+                out[i * devCh]     += self->m_hitBuffer[si];
+                out[i * devCh + 1] += self->m_hitBuffer[si + 1];
             }
-            self->m_hitMixOffset += count;
-            if (self->m_hitMixOffset >= self->m_hitSampleCount) {
-                self->m_hitMixOffset = 0;
-                self->m_hitCursor++;
-            }
-        }
-
-        // Batch-skip fully expired hits
-        double expiryCutoff = relTime - (double)self->m_hitSampleCount / (double)self->m_hitSampleRate - 0.001;
-        while (self->m_hitCursor < self->m_hitCount
-               && self->m_hitTimestamps[self->m_hitCursor] < expiryCutoff)
-            self->m_hitCursor++;
-
-        // Start new hits that begin in this chunk
-        int batchMax = self->m_hitCursor + 512;
-        while (self->m_hitCursor < self->m_hitCount
-               && self->m_hitCursor < batchMax
-               && self->m_hitTimestamps[self->m_hitCursor] < chunkEnd) {
-            double ts = self->m_hitTimestamps[self->m_hitCursor];
-            int dstStart = (int)((ts - relTime) * (double)pDevice->sampleRate);
-            int srcStart = dstStart < 0 ? -dstStart : 0;
-            // Phase dither: ±1 sample offset breaks comb filtering when overlapping
-            self->m_hitPhase = self->m_hitPhase * 1103515245u + 12345u;
-            int dither = (int)(self->m_hitPhase >> 30) - 1;  // -1, 0, or 1
-            srcStart = srcStart + dither;
-            if (srcStart < 0) { dstStart -= srcStart; srcStart = 0; }
-            int count = self->m_hitSampleCount - srcStart;
-            int dstIdx = dstStart < 0 ? 0 : dstStart;
-            if (dstIdx + count > (int)frameCount) count = (int)frameCount - dstIdx;
-            for (int i = 0; i < count; i++) {
-                float hv = self->m_hitSamples[srcStart + i];
-                int si = (dstIdx + i) * devCh;
-                out[si]     += hv;
-                out[si + 1] += hv;
-            }
-            // If hit extends beyond chunk, track offset for next callback
-            int mixed = srcStart + count;
-            if (mixed < self->m_hitSampleCount) {
-                self->m_hitMixOffset = mixed;
-                break;
-            }
-            self->m_hitMixOffset = 0;
-            self->m_hitCursor++;
-        }
-    }
-
-    // Gentle limiter: only touches peaks >0.8f, transparent for single hits
-    for (unsigned int i = 0; i < total; i++) {
-        float a = out[i] < 0 ? -out[i] : out[i];
-        if (a > 0.8f) {
-            float s = 0.8f / a;
-            out[i] *= s * (2.0f - s);  // smooth blend toward limit, not hard clip
         }
     }
 }

@@ -128,11 +128,9 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         playback.bluePlanet()->buildGPU();
     }
 
-    // Attach hitsound data for real-time scheduling
-    if (hitsoundMgr.sampleCount() > 0) {
-        audioEngine.attachHitsounds(hitsoundMgr.samples(), hitsoundMgr.sampleCount(),
-                                    hitsoundMgr.sampleRate(),
-                                    hitsoundMgr.timestamps(), hitsoundMgr.hitCount());
+    // Attach pre-synthesized hitsound buffer (streamed linearly in callback)
+    if (hitsoundMgr.bufferFrameCount() > 0) {
+        audioEngine.attachHitBuffer(hitsoundMgr.buffer(), hitsoundMgr.bufferFrameCount());
     }
 
     // ---- Input callbacks ----
@@ -195,11 +193,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
                 float bpm = bpmArr.size() > 0 ? bpmArr[0] : level->settings.bpm;
                 float offsetSec = level->settings.offset / 1000.0f;
 
-                // Reset hitsounds for new playback
-                audioEngine.attachHitsounds(hitsoundMgr.samples(), hitsoundMgr.sampleCount(),
-                                            hitsoundMgr.sampleRate(),
-                                            hitsoundMgr.timestamps(), hitsoundMgr.hitCount());
-
+                // Restart audio for new playback
                 if (audioEngine.hasMusic()) {
                     audioEngine.seek(offsetSec);
                     audioEngine.play();

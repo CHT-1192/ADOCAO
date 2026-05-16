@@ -2,3 +2,4 @@ build/
 *.log
 .claude/
 *.exe
+CLAUDE.md

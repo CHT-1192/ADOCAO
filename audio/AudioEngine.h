@@ -31,12 +31,11 @@ public:
     bool hasMusic() const { return m_hasMusic; }
 
     void setVolume(float v);
-    bool hasHitsounds() const { return m_hitSamples != nullptr; }
+    bool hasHitsounds() const { return m_hitBuffer != nullptr; }
 
-    // Attach hitsound data for real-time mixing in callback
-    void attachHitsounds(const float* samples, int sampleCount, int sampleRate,
-                         const double* timestamps, int hitCount);
-    void setHitBaseTime();  // record current audio position as t=0 for timestamps
+    // Attach pre-synthesized hitsound buffer for streaming in callback
+    void attachHitBuffer(const float* buffer, int frameCount);
+    void setHitBaseTime();  // record current audio position as t=0 for hitsound timeline
 
 private:
     ma_device* m_device = nullptr;
@@ -50,17 +49,11 @@ private:
     bool m_hasMusic = false;
     bool m_playing = false;
 
-    // Hitsound real-time scheduling
-    const float*  m_hitSamples = nullptr;
-    int           m_hitSampleCount = 0;
-    int           m_hitSampleRate = 44100;
-    const double* m_hitTimestamps = nullptr;
-    int           m_hitCount = 0;
-    int           m_hitCursor = 0;
-    int           m_hitMixOffset = 0;
-    unsigned      m_hitPhase = 0;      // phase dither to prevent comb filtering
+    // Hitsound pre-mix streaming
+    const float* m_hitBuffer = nullptr;
+    int           m_hitBufferLen = 0;   // stereo frames
     double        m_hitBaseTime = 0.0;
-    uint64_t      m_totalFrames = 0;
+    uint64_t      m_totalFrames = 0;    // accumulated frame count (no-music clock)
 
     static void dataCallback(ma_device* pDevice, void* pOutput, const void*, unsigned int frameCount);
 };
