@@ -180,6 +180,7 @@ void AudioEngine::attachHitsounds(const float* samples, int sampleCount, int sam
     m_hitCount = hitCount;
     m_hitCursor = 0;
     m_hitBaseTime = 0.0;
+    m_totalFrames = 0;
 }
 
 void AudioEngine::setHitBaseTime() {
@@ -218,22 +219,31 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
     }
 
     // --- Hitsound scheduling (real-time, no pre-synthesis) ---
-    if (self->m_hitSamples && self->m_hitCursor < self->m_hitCount) {
-        double audioTime = 0.0;
+    if (self->m_hitSamples) {
+        // Clock source: vorbis decoder if available, otherwise accumulated frame count
+        double audioTime;
         if (self->m_vorbis && self->m_sampleRate > 0)
             audioTime = (double)stb_vorbis_get_sample_offset(self->m_vorbis) / (double)self->m_sampleRate;
+        else
+            audioTime = (double)(self->m_totalFrames) / (double)pDevice->sampleRate;
+        self->m_totalFrames += frameCount;
+
         double relTime = audioTime - self->m_hitBaseTime;
         double chunkEnd = relTime + (double)frameCount / (double)pDevice->sampleRate;
 
-        // Skip fully-expired hits (ended before this chunk)
+        // Batch-skip fully expired hits
+        double expiryCutoff = relTime - (double)self->m_hitSampleCount / (double)self->m_hitSampleRate - 0.001;
         while (self->m_hitCursor < self->m_hitCount
-               && self->m_hitTimestamps[self->m_hitCursor] + (double)self->m_hitSampleCount / (double)self->m_hitSampleRate < relTime)
+               && self->m_hitTimestamps[self->m_hitCursor] < expiryCutoff)
             self->m_hitCursor++;
 
-        // Mix active hits
-        while (self->m_hitCursor < self->m_hitCount && self->m_hitTimestamps[self->m_hitCursor] < chunkEnd) {
+        // Mix hits in this chunk
+        int batchMax = self->m_hitCursor + 64;  // limit per-callback work
+        while (self->m_hitCursor < self->m_hitCount
+               && self->m_hitCursor < batchMax
+               && self->m_hitTimestamps[self->m_hitCursor] < chunkEnd) {
             double ts = self->m_hitTimestamps[self->m_hitCursor];
-            int dstStart = (int)((ts - relTime) * (double)pDevice->sampleRate);  // may be negative
+            int dstStart = (int)((ts - relTime) * (double)pDevice->sampleRate);
             int srcStart = dstStart < 0 ? -dstStart : 0;
             int count = self->m_hitSampleCount - srcStart;
             if (dstStart + count > (int)frameCount) count = (int)frameCount - (dstStart > 0 ? dstStart : 0);

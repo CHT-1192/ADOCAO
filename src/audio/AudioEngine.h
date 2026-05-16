@@ -56,8 +56,9 @@ private:
     int           m_hitSampleRate = 44100;
     const double* m_hitTimestamps = nullptr;
     int           m_hitCount = 0;
-    int           m_hitCursor = 0;       // next timestamp index
-    double        m_hitBaseTime = 0.0;   // offset: first timestamp = startTime + baseTime
+    int           m_hitCursor = 0;
+    double        m_hitBaseTime = 0.0;
+    uint64_t      m_totalFrames = 0;     // accumulated callback frames (clock when no music)
 
     static void dataCallback(ma_device* pDevice, void* pOutput, const void*, unsigned int frameCount);
 };
