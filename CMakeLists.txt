@@ -92,64 +92,64 @@ FetchContent_MakeAvailable(tinyfiledialogs)
 # ---- Source files ----
 set(SOURCES
     # Application layer
-    src/app/main.cpp
-    src/app/Application.h
-    src/app/Application.cpp
-    src/app/LauncherWindow.h
-    src/app/LauncherWindow.cpp
-    src/app/LoadingWindow.h
-    src/app/LoadingWindow.cpp
-    src/app/LevelLoader.h
-    src/app/LevelLoader.cpp
-    src/app/GameWindow.h
-    src/app/GameWindow.cpp
+    app/main.cpp
+    app/Application.h
+    app/Application.cpp
+    app/LauncherWindow.h
+    app/LauncherWindow.cpp
+    app/LoadingWindow.h
+    app/LoadingWindow.cpp
+    app/LevelLoader.h
+    app/LevelLoader.cpp
+    app/GameWindow.h
+    app/GameWindow.cpp
 
     # OpenGL loader
-    src/glad/gl_core.h
-    src/glad/gl_core.cpp
+    glad/gl_core.h
+    glad/gl_core.cpp
 
     # Level parser
-    src/level/LevelData.h
-    src/level/LevelData.cpp
-    src/level/JsonCleaner.h
-    src/level/JsonCleaner.cpp
+    level/LevelData.h
+    level/LevelData.cpp
+    level/JsonCleaner.h
+    level/JsonCleaner.cpp
 
     # Easing
-    src/util/Easing.h
+    util/Easing.h
 
     # Logger
-    src/util/Logger.h
-    src/util/Logger.cpp
+    util/Logger.h
+    util/Logger.cpp
 
     # Render
-    src/render/Shader.h
-    src/render/Shader.cpp
-    src/render/Shaders.h
-    src/render/PlanetTrail.h
-    src/render/PlanetTrail.cpp
+    render/Shader.h
+    render/Shader.cpp
+    render/Shaders.h
+    render/PlanetTrail.h
+    render/PlanetTrail.cpp
 
     # Camera
-    src/camera/Camera.h
-    src/camera/Camera.cpp
+    camera/Camera.h
+    camera/Camera.cpp
 
     # Track
-    src/track/TileMesh.h
-    src/track/TileMesh.cpp
-    src/track/TileGeometry.h
-    src/track/TileGeometry.cpp
+    track/TileMesh.h
+    track/TileMesh.cpp
+    track/TileGeometry.h
+    track/TileGeometry.cpp
 
     # Game
-    src/game/Planet.h
-    src/game/Planet.cpp
-    src/game/PlaybackEngine.h
-    src/game/PlaybackEngine.cpp
+    game/Planet.h
+    game/Planet.cpp
+    game/PlaybackEngine.h
+    game/PlaybackEngine.cpp
 
     # Audio
-    src/audio/AudioEngine.h
-    src/audio/AudioEngine.cpp
-    src/audio/HitsoundManager.h
-    src/audio/HitsoundManager.cpp
-    src/audio/stb_vorbis_impl.cpp
+    audio/AudioEngine.h
+    audio/AudioEngine.cpp
+    audio/HitsoundManager.h
+    audio/HitsoundManager.cpp
+    audio/stb_vorbis_impl.cpp
 )
 
 # ImGui sources
@@ -163,8 +163,8 @@ set(IMGUI_SOURCES
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
-# stb_image (header-only, implementation in src/util/stb_impl.cpp)
-add_library(stb_image STATIC src/util/stb_impl.cpp)
+# stb_image (header-only, implementation in util/stb_impl.cpp)
+add_library(stb_image STATIC util/stb_impl.cpp)
 target_include_directories(stb_image PUBLIC ${stb_SOURCE_DIR})
 
 # tinyfiledialogs
@@ -175,7 +175,7 @@ target_include_directories(tinyfiledialogs PUBLIC ${tinyfiledialogs_SOURCE_DIR})
 add_executable(adocao ${SOURCES} ${IMGUI_SOURCES})
 
 target_include_directories(adocao PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
     ${miniaudio_SOURCE_DIR}
@@ -227,7 +227,7 @@ add_custom_command(TARGET adocao POST_BUILD
 )
 
 # ---- Copy example level (if available) ----
-if(EXISTS "${CMAKE_SOURCE_DIR}/../re_adojas/src/lib/example/level.adofai")
-    file(COPY ${CMAKE_SOURCE_DIR}/../re_adojas/src/lib/example/level.adofai
+if(EXISTS "${CMAKE_SOURCE_DIR}/../re_adojas/lib/example/level.adofai")
+    file(COPY ${CMAKE_SOURCE_DIR}/../re_adojas/lib/example/level.adofai
          DESTINATION ${CMAKE_BINARY_DIR})
 endif()

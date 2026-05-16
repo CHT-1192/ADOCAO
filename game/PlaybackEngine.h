@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../level/LevelData.h"
+#include "level/LevelData.h"
 #include "Planet.h"
 #include <memory>
 #include <vector>

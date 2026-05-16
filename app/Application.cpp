@@ -3,7 +3,7 @@
 #include "LoadingWindow.h"
 #include "LevelLoader.h"
 #include "GameWindow.h"
-#include "../util/Logger.h"
+#include "util/Logger.h"
 #include <GLFW/glfw3.h>
 
 #ifdef _WIN32

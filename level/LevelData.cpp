@@ -1,6 +1,6 @@
 #include "LevelData.h"
 #include "JsonCleaner.h"
-#include "../util/Logger.h"
+#include "util/Logger.h"
 #include <fstream>
 #include <sstream>
 #include <cstdio>
