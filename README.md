@@ -47,7 +47,6 @@ All dependencies are fetched automatically via CMake `FetchContent`:
 ## Project Structure
 
 ```
-src/
   app/         Application layer (windows, launcher, game loop)
   audio/       Music playback + hitsound synthesis
   camera/      Orthographic camera with orbit controls
@@ -73,7 +72,7 @@ assets/
 ## Acknowledgements
 
 This project draws heavily from:
-- [Re_ADOJAS](https://github.com/Re-ADOJAS/re_adojas) — Three.js web player
+- [Re_ADOJAS](https://github.com/adofaiex/Re_ADOJAS) — Three.js web player
 - [ADOFAN_PIXI](https://github.com/AnStartist/ADOFAN_PIXI) — PixiJS web player
 
 Thank you to their authors for the reference implementations.
