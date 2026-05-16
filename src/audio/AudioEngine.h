@@ -57,8 +57,9 @@ private:
     const double* m_hitTimestamps = nullptr;
     int           m_hitCount = 0;
     int           m_hitCursor = 0;
+    int           m_hitMixOffset = 0;   // remaining samples to mix for current active hit
     double        m_hitBaseTime = 0.0;
-    uint64_t      m_totalFrames = 0;     // accumulated callback frames (clock when no music)
+    uint64_t      m_totalFrames = 0;
 
     static void dataCallback(ma_device* pDevice, void* pOutput, const void*, unsigned int frameCount);
 };

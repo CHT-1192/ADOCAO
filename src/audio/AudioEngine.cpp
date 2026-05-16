@@ -179,6 +179,7 @@ void AudioEngine::attachHitsounds(const float* samples, int sampleCount, int sam
     m_hitTimestamps = timestamps;
     m_hitCount = hitCount;
     m_hitCursor = 0;
+    m_hitMixOffset = 0;
     m_hitBaseTime = 0.0;
     m_totalFrames = 0;
 }
@@ -231,14 +232,30 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
         double relTime = audioTime - self->m_hitBaseTime;
         double chunkEnd = relTime + (double)frameCount / (double)pDevice->sampleRate;
 
+        // Continue mixing active hit across chunk boundaries
+        if (self->m_hitMixOffset > 0 && self->m_hitCursor < self->m_hitCount) {
+            int remaining = self->m_hitSampleCount - self->m_hitMixOffset;
+            int count = remaining < (int)frameCount ? remaining : (int)frameCount;
+            for (int i = 0; i < count; i++) {
+                float hv = self->m_hitSamples[self->m_hitMixOffset + i];
+                out[i * devCh]     += hv;
+                out[i * devCh + 1] += hv;
+            }
+            self->m_hitMixOffset += count;
+            if (self->m_hitMixOffset >= self->m_hitSampleCount) {
+                self->m_hitMixOffset = 0;
+                self->m_hitCursor++;
+            }
+        }
+
         // Batch-skip fully expired hits
         double expiryCutoff = relTime - (double)self->m_hitSampleCount / (double)self->m_hitSampleRate - 0.001;
         while (self->m_hitCursor < self->m_hitCount
                && self->m_hitTimestamps[self->m_hitCursor] < expiryCutoff)
             self->m_hitCursor++;
 
-        // Mix hits in this chunk
-        int batchMax = self->m_hitCursor + 512;  // limit per-callback work
+        // Start new hits that begin in this chunk
+        int batchMax = self->m_hitCursor + 512;
         while (self->m_hitCursor < self->m_hitCount
                && self->m_hitCursor < batchMax
                && self->m_hitTimestamps[self->m_hitCursor] < chunkEnd) {
@@ -246,14 +263,21 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
             int dstStart = (int)((ts - relTime) * (double)pDevice->sampleRate);
             int srcStart = dstStart < 0 ? -dstStart : 0;
             int count = self->m_hitSampleCount - srcStart;
-            if (dstStart + count > (int)frameCount) count = (int)frameCount - (dstStart > 0 ? dstStart : 0);
             int dstIdx = dstStart < 0 ? 0 : dstStart;
-            for (int i = 0; i < count && dstIdx + i < (int)frameCount; i++) {
+            if (dstIdx + count > (int)frameCount) count = (int)frameCount - dstIdx;
+            for (int i = 0; i < count; i++) {
                 float hv = self->m_hitSamples[srcStart + i];
                 int si = (dstIdx + i) * devCh;
                 out[si]     += hv;
                 out[si + 1] += hv;
             }
+            // If hit extends beyond chunk, track offset for next callback
+            int mixed = srcStart + count;
+            if (mixed < self->m_hitSampleCount) {
+                self->m_hitMixOffset = mixed;
+                break;
+            }
+            self->m_hitMixOffset = 0;
             self->m_hitCursor++;
         }
     }
