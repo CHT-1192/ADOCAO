@@ -258,11 +258,4 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
         }
     }
 
-    // Soft limiter: prevents hard clipping when many hits overlap
-    for (unsigned int i = 0; i < total; i++) {
-        float x = out[i];
-        float a = x < 0 ? -x : x;
-        if (a > 1.5f) out[i] = x < 0 ? -1.0f : 1.0f;
-        else if (a > 0.5f) out[i] = x * (1.0f - x * x / 3.0f);
-    }
 }
