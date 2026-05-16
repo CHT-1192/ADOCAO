@@ -7,6 +7,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Maximum safe optimization (no -ffast-math — timing precision is critical)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_options(-O3 -march=native -fomit-frame-pointer)
+endif()
+
 # ---- Dependencies via FetchContent ----
 include(FetchContent)
 
@@ -66,6 +71,13 @@ FetchContent_Declare(
     GIT_TAG 0.11.22
     GIT_SHALLOW TRUE
 )
+# Suppress miniaudio optional dependency not-found messages
+set(MINIAUDIO_NO_LIBVORBIS ON CACHE BOOL "" FORCE)
+set(MINIAUDIO_NO_LIBOPUS ON CACHE BOOL "" FORCE)
+set(MINIAUDIO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(MINIAUDIO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SDL2_LIBRARY "SDL2_LIBRARY-NOTFOUND" CACHE FILEPATH "" FORCE)
+set(STEAMAUDIO_LIBRARY "STEAMAUDIO_LIBRARY-NOTFOUND" CACHE FILEPATH "" FORCE)
 FetchContent_MakeAvailable(miniaudio)
 
 # tinyfiledialogs (single-header C library)
@@ -214,6 +226,8 @@ add_custom_command(TARGET adocao POST_BUILD
     COMMENT "Copying assets to build directory"
 )
 
-# ---- Copy example level ----
-file(COPY ${CMAKE_SOURCE_DIR}/../re_adojas/src/lib/example/level.adofai
-     DESTINATION ${CMAKE_BINARY_DIR})
+# ---- Copy example level (if available) ----
+if(EXISTS "${CMAKE_SOURCE_DIR}/../re_adojas/src/lib/example/level.adofai")
+    file(COPY ${CMAKE_SOURCE_DIR}/../re_adojas/src/lib/example/level.adofai
+         DESTINATION ${CMAKE_BINARY_DIR})
+endif()
