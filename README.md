@@ -70,6 +70,14 @@ assets/
 | Mouse drag | Pan camera (when stopped) |
 | Scroll | Zoom in/out |
 
+## Acknowledgements
+
+This project draws heavily from:
+- [Re_ADOJAS](https://github.com/Re-ADOJAS/re_adojas) — Three.js web player
+- [ADOFAN_PIXI](https://github.com/ADOFAN-PIXI/ADOFAN_PIXI) — PixiJS web player
+
+Thank you to their authors for the reference implementations.
+
 ## License
 
-MIT
+Apache 2.0
