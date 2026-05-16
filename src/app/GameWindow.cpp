@@ -199,15 +199,14 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
                 audioEngine.attachHitsounds(hitsoundMgr.samples(), hitsoundMgr.sampleCount(),
                                             hitsoundMgr.sampleRate(),
                                             hitsoundMgr.timestamps(), hitsoundMgr.hitCount());
-                audioEngine.setHitBaseTime();
 
                 if (audioEngine.hasMusic()) {
                     audioEngine.seek(offsetSec);
                     audioEngine.play();
                 } else {
-                    // No music — start device for hitsounds only
                     audioEngine.play();
                 }
+                audioEngine.setHitBaseTime();  // after seek/play, records current audio position
             } else {
                 playback.stop();
                 audioEngine.pause();

@@ -250,8 +250,9 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
             int dstIdx = dstStart < 0 ? 0 : dstStart;
             for (int i = 0; i < count && dstIdx + i < (int)frameCount; i++) {
                 float hv = self->m_hitSamples[srcStart + i];
-                out[(dstIdx + i) * devCh]     += hv;
-                out[(dstIdx + i) * devCh + 1] += hv;
+                int si = (dstIdx + i) * devCh;
+                out[si]     = tanhf(out[si]     + hv);
+                out[si + 1] = tanhf(out[si + 1] + hv);
             }
             self->m_hitCursor++;
         }
