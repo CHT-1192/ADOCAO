@@ -262,6 +262,11 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
             double ts = self->m_hitTimestamps[self->m_hitCursor];
             int dstStart = (int)((ts - relTime) * (double)pDevice->sampleRate);
             int srcStart = dstStart < 0 ? -dstStart : 0;
+            // Phase dither: ±1 sample offset breaks comb filtering when overlapping
+            self->m_hitPhase = self->m_hitPhase * 1103515245u + 12345u;
+            int dither = (int)(self->m_hitPhase >> 30) - 1;  // -1, 0, or 1
+            srcStart = srcStart + dither;
+            if (srcStart < 0) { dstStart -= srcStart; srcStart = 0; }
             int count = self->m_hitSampleCount - srcStart;
             int dstIdx = dstStart < 0 ? 0 : dstStart;
             if (dstIdx + count > (int)frameCount) count = (int)frameCount - dstIdx;

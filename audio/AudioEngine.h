@@ -57,7 +57,8 @@ private:
     const double* m_hitTimestamps = nullptr;
     int           m_hitCount = 0;
     int           m_hitCursor = 0;
-    int           m_hitMixOffset = 0;   // remaining samples to mix for current active hit
+    int           m_hitMixOffset = 0;
+    unsigned      m_hitPhase = 0;      // phase dither to prevent comb filtering
     double        m_hitBaseTime = 0.0;
     uint64_t      m_totalFrames = 0;
 
