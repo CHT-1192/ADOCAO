@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ADOCAO VERSION 0.1.0 LANGUAGES CXX C)
+project(ADOCAO VERSION 0.5.0 LANGUAGES CXX C)
 
 option(ADOCAO_PORTABLE "Build a static-linked portable executable" OFF)
 
