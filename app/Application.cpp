@@ -77,3 +77,45 @@ int runApplication(bool debugConsole) {
     glfwTerminate();
     return 0;
 }
+
+int runApplicationFromCLI(const LauncherConfig& cfg, bool debugConsole) {
+    std::string logPath = "ADOCAO.log";
+    Logger::instance().init(logPath, debugConsole);
+
+    LOG_I("ADOCAO starting (CLI mode)...");
+
+#ifdef _WIN32
+    enableDPIAwareness();
+#endif
+
+    if (!glfwInit()) {
+        LOG_E("Failed to initialize GLFW");
+        return 1;
+    }
+
+    LauncherConfig config = cfg;
+    if (debugConsole) config.enableHitsounds = false;
+
+    LOG_I("CLI: level=%s, music=%s, resolution=%dx%d, fullscreen=%d",
+          config.levelPath.c_str(), config.musicPath.c_str(),
+          config.resolutionW, config.resolutionH, config.fullscreen);
+
+    LoadResult loadResult;
+    showLoadingWindow([&](LoadingProgress& progress) {
+        runLevelLoading(config, progress, loadResult);
+    });
+
+    if (!loadResult.level) {
+        LOG_E("Failed to load level");
+        glfwTerminate();
+        return 1;
+    }
+
+    LOG_I("Level loaded: %zu tiles, BPM=%.1f", loadResult.level->tiles.size(), loadResult.level->settings.bpm);
+
+    showGameWindow(config, loadResult);
+
+    LOG_I("Game window closed, exiting.");
+    glfwTerminate();
+    return 0;
+}
