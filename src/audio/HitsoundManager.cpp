@@ -12,34 +12,34 @@
 #endif
 
 static const char* hitsoundKey(const std::string& type) {
-    if (type == "Kick")              return "sndKick.wav";
-    if (type == "KickHouse")         return "sndKickHouse.wav";
-    if (type == "KickChroma")        return "sndKickChroma.wav";
-    if (type == "KickRupture")       return "sndKickRupture.wav";
-    if (type == "Snare")             return "sndSnareAcoustic2.wav";
-    if (type == "SnareHouse")        return "sndSnareHouse.wav";
-    if (type == "SnareVapor")        return "sndSnareVapor.wav";
-    if (type == "Clap")              return "sndClapHit.wav";
-    if (type == "ClapHit")           return "sndClapHit.wav";
-    if (type == "ClapHitEcho")       return "sndClapHitEcho.wav";
-    if (type == "Hat")               return "sndHat.wav";
-    if (type == "HatHouse")          return "sndHatHouse.wav";
-    if (type == "Chuck")             return "sndChuck.wav";
-    if (type == "Hammer")            return "sndHammer.wav";
-    if (type == "Shaker")            return "sndShaker.wav";
-    if (type == "ShakerLoud")        return "sndShakerLoud.wav";
-    if (type == "Sidestick")         return "sndSidestick.wav";
-    if (type == "Stick")             return "sndStick.wav";
-    if (type == "ReverbClack")       return "sndReverbClack.wav";
-    if (type == "ReverbClap")        return "sndReverbClap.wav";
-    if (type == "Squareshot")        return "sndSquareshot.wav";
-    if (type == "FireTile")          return "sndFireTile.wav";
-    if (type == "IceTile")           return "sndIceTile.wav";
-    if (type == "PowerUp")           return "sndPowerUp.wav";
-    if (type == "PowerDown")         return "sndPowerDown.wav";
-    if (type == "VehiclePositive")   return "sndVehiclePositive.wav";
-    if (type == "VehicleNegative")   return "sndVehicleNegative.wav";
-    if (type == "Sizzle")            return "sndSizzle.wav";
+    if (type == "Kick")              return "Kick.wav";
+    if (type == "KickHouse")         return "KickHouse.wav";
+    if (type == "KickChroma")        return "KickChroma.wav";
+    if (type == "KickRupture")       return "KickRupture.wav";
+    if (type == "Snare")             return "SnareAcoustic2.wav";
+    if (type == "SnareHouse")        return "SnareHouse.wav";
+    if (type == "SnareVapor")        return "SnareVapor.wav";
+    if (type == "Clap")              return "ClapHit.wav";
+    if (type == "ClapHit")           return "ClapHit.wav";
+    if (type == "ClapHitEcho")       return "ClapHitEcho.wav";
+    if (type == "Hat")               return "Hat.wav";
+    if (type == "HatHouse")          return "HatHouse.wav";
+    if (type == "Chuck")             return "Chuck.wav";
+    if (type == "Hammer")            return "Hammer.wav";
+    if (type == "Shaker")            return "Shaker.wav";
+    if (type == "ShakerLoud")        return "ShakerLoud.wav";
+    if (type == "Sidestick")         return "Sidestick.wav";
+    if (type == "Stick")             return "Stick.wav";
+    if (type == "ReverbClack")       return "ReverbClack.wav";
+    if (type == "ReverbClap")        return "ReverbClap.wav";
+    if (type == "Squareshot")        return "Squareshot.wav";
+    if (type == "FireTile")          return "FireTile.wav";
+    if (type == "IceTile")           return "IceTile.wav";
+    if (type == "PowerUp")           return "PowerUp.wav";
+    if (type == "PowerDown")         return "PowerDown.wav";
+    if (type == "VehiclePositive")   return "VehiclePositive.wav";
+    if (type == "VehicleNegative")   return "VehicleNegative.wav";
+    if (type == "Sizzle")            return "Sizzle.wav";
     return nullptr;
 }
 
