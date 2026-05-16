@@ -47,15 +47,15 @@ All dependencies are fetched automatically via CMake `FetchContent`:
 ## Project Structure
 
 ```
-  app/         Application layer (windows, launcher, game loop)
-  audio/       Music playback + hitsound synthesis
-  camera/      Orthographic camera with orbit controls
-  game/        Planet rendering + playback engine
-  glad/        OpenGL 3.3 Core loader
-  level/       .adofai parser + JSON cleaner
-  render/      Shader programs + planet trail
-  track/       Tile mesh generation + instanced rendering
-  util/        Logger + easing functions
+app/         Application layer (windows, launcher, game loop)
+audio/       Music playback + hitsound synthesis
+camera/      Orthographic camera with orbit controls
+game/        Planet rendering + playback engine
+glad/        OpenGL 3.3 Core loader
+level/       .adofai parser + JSON cleaner
+render/      Shader programs + planet trail
+track/       Tile mesh generation + instanced rendering
+util/        Logger + easing functions
 assets/
   sounds/      27 hit sound .wav files
 ```
