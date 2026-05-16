@@ -206,7 +206,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
                 } else {
                     audioEngine.play();
                 }
-                audioEngine.setHitBaseTime();  // after seek/play, records current audio position
+                audioEngine.setHitBaseTime();  // records current audio position for hit sync
             } else {
                 playback.stop();
                 audioEngine.pause();

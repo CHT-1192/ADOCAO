@@ -238,7 +238,7 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
             self->m_hitCursor++;
 
         // Mix hits in this chunk
-        int batchMax = self->m_hitCursor + 64;  // limit per-callback work
+        int batchMax = self->m_hitCursor + 512;  // limit per-callback work
         while (self->m_hitCursor < self->m_hitCount
                && self->m_hitCursor < batchMax
                && self->m_hitTimestamps[self->m_hitCursor] < chunkEnd) {
@@ -251,8 +251,8 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
             for (int i = 0; i < count && dstIdx + i < (int)frameCount; i++) {
                 float hv = self->m_hitSamples[srcStart + i];
                 int si = (dstIdx + i) * devCh;
-                out[si]     = tanhf(out[si]     + hv);
-                out[si + 1] = tanhf(out[si + 1] + hv);
+                out[si]     += hv;
+                out[si + 1] += hv;
             }
             self->m_hitCursor++;
         }
