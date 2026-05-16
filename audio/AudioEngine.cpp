@@ -282,4 +282,12 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
         }
     }
 
+    // Gentle limiter: only touches peaks >0.8f, transparent for single hits
+    for (unsigned int i = 0; i < total; i++) {
+        float a = out[i] < 0 ? -out[i] : out[i];
+        if (a > 0.8f) {
+            float s = 0.8f / a;
+            out[i] *= s * (2.0f - s);  // smooth blend toward limit, not hard clip
+        }
+    }
 }
