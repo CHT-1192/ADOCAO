@@ -171,11 +171,16 @@ void AudioEngine::setVolume(float v) {
     m_volume = std::max(0.0f, std::min(1.0f, v));
 }
 
-void AudioEngine::attachHitBuffer(const float* buffer, int frameCount) {
-    m_hitBuffer = buffer;
-    m_hitBufferLen = frameCount;
+void AudioEngine::attachHitsounds(const float* wav, int wavLen,
+                                   const double* timestamps, int hitCount) {
+    m_hitWav = wav;
+    m_hitWavLen = wavLen;
+    m_hitTimestamps = timestamps;
+    m_hitCount = hitCount;
+    m_hitCursor = 0;
     m_hitBaseTime = 0.0;
     m_totalFrames = 0;
+    m_active.clear();
 }
 
 void AudioEngine::setHitBaseTime() {
@@ -213,9 +218,8 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
         if (decoded == 0) self->m_playing = false;
     }
 
-    // --- Hitsound pre-mix streaming ---
-    if (self->m_hitBuffer) {
-        // Clock source: vorbis decoder if available, otherwise accumulated frame count
+    // --- Hitsounds — independent AudioSource model ---
+    if (self->m_hitWav && self->m_playing) {
         double audioTime;
         if (self->m_vorbis && self->m_sampleRate > 0)
             audioTime = (double)stb_vorbis_get_sample_offset(self->m_vorbis) / (double)self->m_sampleRate;
@@ -224,16 +228,56 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
         self->m_totalFrames += frameCount;
 
         double relTime = audioTime - self->m_hitBaseTime;
-        int hitPos = (int)(relTime * (double)pDevice->sampleRate);
+        double frameDur = (double)frameCount / (double)pDevice->sampleRate;
 
-        if (hitPos >= 0 && hitPos < self->m_hitBufferLen) {
-            int remaining = self->m_hitBufferLen - hitPos;
-            int count = remaining < (int)frameCount ? remaining : (int)frameCount;
-            for (int i = 0; i < count; i++) {
-                int si = (hitPos + i) * 2;
-                out[i * devCh]     += self->m_hitBuffer[si];
-                out[i * devCh + 1] += self->m_hitBuffer[si + 1];
+        // 1. Mix ongoing hits (simple cursor advance, like Unity AudioSource)
+        for (size_t hi = 0; hi < self->m_active.size(); ) {
+            auto& h = self->m_active[hi];
+            int remain = self->m_hitWavLen - h.cursor;
+            int n = remain < (int)frameCount ? remain : (int)frameCount;
+            for (int j = 0; j < n; j++) {
+                float v = self->m_hitWav[h.cursor + j];
+                out[j * devCh]     += v;
+                out[j * devCh + 1] += v;
             }
+            h.cursor += n;
+            if (h.cursor >= self->m_hitWavLen) {
+                self->m_active[hi] = self->m_active.back();
+                self->m_active.pop_back();
+            } else {
+                hi++;
+            }
+        }
+
+        // 2. Spawn new hits whose timestamp falls within this frame
+        int batchMax = self->m_hitCursor + 1024;
+        while (self->m_hitCursor < self->m_hitCount
+               && self->m_hitCursor < batchMax
+               && self->m_hitTimestamps[self->m_hitCursor] < relTime + frameDur) {
+            double ts = self->m_hitTimestamps[self->m_hitCursor];
+
+            int dstStart = (int)((ts - relTime) * (double)pDevice->sampleRate);
+            int srcSkip = 0;
+            if (dstStart < 0) {
+                srcSkip = -dstStart;
+                if (srcSkip >= self->m_hitWavLen) { self->m_hitCursor++; continue; }
+                dstStart = 0;
+            }
+            int n = self->m_hitWavLen - srcSkip;
+            int dstEnd = dstStart + n;
+            if (dstEnd > (int)frameCount) n = (int)frameCount - dstStart;
+
+            for (int j = 0; j < n; j++) {
+                float v = self->m_hitWav[srcSkip + j];
+                int si = (dstStart + j) * devCh;
+                out[si]     += v;
+                out[si + 1] += v;
+            }
+
+            if (srcSkip + n < self->m_hitWavLen)
+                self->m_active.push_back({srcSkip + n});
+
+            self->m_hitCursor++;
         }
     }
 }

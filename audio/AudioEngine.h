@@ -31,11 +31,12 @@ public:
     bool hasMusic() const { return m_hasMusic; }
 
     void setVolume(float v);
-    bool hasHitsounds() const { return m_hitBuffer != nullptr; }
+    bool hasHitsounds() const { return m_hitWav != nullptr; }
 
-    // Attach pre-synthesized hitsound buffer for streaming in callback
-    void attachHitBuffer(const float* buffer, int frameCount);
-    void setHitBaseTime();  // record current audio position as t=0 for hitsound timeline
+    // Attach hitsound data: WAV samples + timestamps. Keeps pointers — caller owns data.
+    void attachHitsounds(const float* wav, int wavLen,
+                         const double* timestamps, int hitCount);
+    void setHitBaseTime();
 
 private:
     ma_device* m_device = nullptr;
@@ -49,11 +50,17 @@ private:
     bool m_hasMusic = false;
     bool m_playing = false;
 
-    // Hitsound pre-mix streaming
-    const float* m_hitBuffer = nullptr;
-    int           m_hitBufferLen = 0;   // stereo frames
+    // Hitsound — independent AudioSource model (like Unity PlayScheduled)
+    const float*  m_hitWav = nullptr;
+    int           m_hitWavLen = 0;
+    const double* m_hitTimestamps = nullptr;
+    int           m_hitCount = 0;
+    int           m_hitCursor = 0;       // next timestamp to spawn
     double        m_hitBaseTime = 0.0;
-    uint64_t      m_totalFrames = 0;    // accumulated frame count (no-music clock)
+    uint64_t      m_totalFrames = 0;     // no-music clock
+
+    struct ActiveHit { int cursor; };
+    std::vector<ActiveHit> m_active;
 
     static void dataCallback(ma_device* pDevice, void* pOutput, const void*, unsigned int frameCount);
 };
