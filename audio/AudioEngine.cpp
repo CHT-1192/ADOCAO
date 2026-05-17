@@ -171,23 +171,20 @@ void AudioEngine::setVolume(float v) {
     m_volume = std::max(0.0f, std::min(1.0f, v));
 }
 
-void AudioEngine::attachHitsounds(const float* wav, int wavLen,
-                                   const double* timestamps, int hitCount) {
-    m_hitWav = wav;
-    m_hitWavLen = wavLen;
-    m_hitTimestamps = timestamps;
-    m_hitCount = hitCount;
-    m_hitCursor = 0;
-    m_hitBaseTime = 0.0;
-    m_totalFrames = 0;
-    m_active.clear();
+void AudioEngine::attachExternal(const float* buffer, size_t totalFrames, int channels, int sampleRate,
+                                  size_t* cursor, bool* playing) {
+    m_extBuffer = buffer;
+    m_extTotalFrames = totalFrames;
+    m_extChannels = channels;
+    m_extSampleRate = sampleRate;
+    m_extCursor = cursor;
+    m_extPlaying = playing;
 }
 
-void AudioEngine::setHitBaseTime() {
-    if (m_vorbis && m_sampleRate > 0)
-        m_hitBaseTime = (double)stb_vorbis_get_sample_offset(m_vorbis) / (double)m_sampleRate;
-    else
-        m_hitBaseTime = 0.0;
+void AudioEngine::detachExternal() {
+    m_extBuffer = nullptr;
+    m_extCursor = nullptr;
+    m_extPlaying = nullptr;
 }
 
 void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, unsigned int frameCount) {
@@ -218,66 +215,19 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
         if (decoded == 0) self->m_playing = false;
     }
 
-    // --- Hitsounds — independent AudioSource model ---
-    if (self->m_hitWav && self->m_playing) {
-        double audioTime;
-        if (self->m_vorbis && self->m_sampleRate > 0)
-            audioTime = (double)stb_vorbis_get_sample_offset(self->m_vorbis) / (double)self->m_sampleRate;
-        else
-            audioTime = (double)(self->m_totalFrames) / (double)pDevice->sampleRate;
-        self->m_totalFrames += frameCount;
+    // --- External source (hitsounds) ---
+    if (self->m_extBuffer && self->m_extPlaying && *self->m_extPlaying && self->m_extCursor) {
+        size_t cursor = *self->m_extCursor;
+        size_t extTotal = self->m_extTotalFrames;
+        int extCh = self->m_extChannels;
 
-        double relTime = audioTime - self->m_hitBaseTime;
-        double frameDur = (double)frameCount / (double)pDevice->sampleRate;
-
-        // 1. Mix ongoing hits (simple cursor advance, like Unity AudioSource)
-        for (size_t hi = 0; hi < self->m_active.size(); ) {
-            auto& h = self->m_active[hi];
-            int remain = self->m_hitWavLen - h.cursor;
-            int n = remain < (int)frameCount ? remain : (int)frameCount;
-            for (int j = 0; j < n; j++) {
-                float v = self->m_hitWav[h.cursor + j];
-                out[j * devCh]     += v;
-                out[j * devCh + 1] += v;
-            }
-            h.cursor += n;
-            if (h.cursor >= self->m_hitWavLen) {
-                self->m_active[hi] = self->m_active.back();
-                self->m_active.pop_back();
-            } else {
-                hi++;
+        for (unsigned int i = 0; i < frameCount && cursor < extTotal; i++, cursor++) {
+            for (int c = 0; c < extCh && c < (int)devCh; c++) {
+                out[i * devCh + c] += self->m_extBuffer[cursor * extCh + c];
             }
         }
-
-        // 2. Spawn new hits whose timestamp falls within this frame
-        int batchMax = self->m_hitCursor + 1024;
-        while (self->m_hitCursor < self->m_hitCount
-               && self->m_hitCursor < batchMax
-               && self->m_hitTimestamps[self->m_hitCursor] < relTime + frameDur) {
-            double ts = self->m_hitTimestamps[self->m_hitCursor];
-
-            int dstStart = (int)((ts - relTime) * (double)pDevice->sampleRate);
-            int srcSkip = 0;
-            if (dstStart < 0) {
-                srcSkip = -dstStart;
-                if (srcSkip >= self->m_hitWavLen) { self->m_hitCursor++; continue; }
-                dstStart = 0;
-            }
-            int n = self->m_hitWavLen - srcSkip;
-            int dstEnd = dstStart + n;
-            if (dstEnd > (int)frameCount) n = (int)frameCount - dstStart;
-
-            for (int j = 0; j < n; j++) {
-                float v = self->m_hitWav[srcSkip + j];
-                int si = (dstStart + j) * devCh;
-                out[si]     += v;
-                out[si + 1] += v;
-            }
-
-            if (srcSkip + n < self->m_hitWavLen)
-                self->m_active.push_back({srcSkip + n});
-
-            self->m_hitCursor++;
-        }
+        // Update cursor (atomic write for external thread safety — but in single-threaded case it's fine)
+        *self->m_extCursor = cursor;
+        if (cursor >= extTotal) *self->m_extPlaying = false;
     }
 }

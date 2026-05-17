@@ -128,10 +128,11 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         playback.bluePlanet()->buildGPU();
     }
 
-    // Attach hitsound data for AudioSource-style mixing
-    if (hitsoundMgr.sampleCount() > 0) {
-        audioEngine.attachHitsounds(hitsoundMgr.samples(), hitsoundMgr.sampleCount(),
-                                    hitsoundMgr.timestamps(), hitsoundMgr.hitCount());
+    // Attach pre-synthesized hitsound buffer
+    if (hitsoundMgr.isSynthesized()) {
+        audioEngine.attachExternal(hitsoundMgr.buffer(), hitsoundMgr.totalFrames(),
+                                   hitsoundMgr.channels(), hitsoundMgr.sampleRate(),
+                                   hitsoundMgr.cursor(), hitsoundMgr.playing());
     }
 
     // ---- Input callbacks ----
@@ -194,9 +195,8 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
                 float bpm = bpmArr.size() > 0 ? bpmArr[0] : level->settings.bpm;
                 float offsetSec = level->settings.offset / 1000.0f;
 
-                // Reset hitsounds for new playback
-                audioEngine.attachHitsounds(hitsoundMgr.samples(), hitsoundMgr.sampleCount(),
-                                            hitsoundMgr.timestamps(), hitsoundMgr.hitCount());
+                // Reset hitsounds cursor for new playback
+                hitsoundMgr.reset();
 
                 if (audioEngine.hasMusic()) {
                     audioEngine.seek(offsetSec);
@@ -204,7 +204,6 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
                 } else {
                     audioEngine.play();
                 }
-                audioEngine.setHitBaseTime();  // records current audio position for hit sync
             } else {
                 playback.stop();
                 audioEngine.pause();
