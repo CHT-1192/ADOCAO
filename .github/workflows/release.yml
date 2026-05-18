@@ -1,10 +1,8 @@
-name: Build
+name: Release
 
 on:
   push:
-    branches: [master, pre-synth-v1]
-  pull_request:
-    branches: [master]
+    tags: ['v*']
 
 jobs:
   windows:
@@ -39,19 +37,10 @@ jobs:
         shell: msys2 {0}
         run: cmake --build build --parallel
 
-      - name: Rename artifact
-        shell: msys2 {0}
-        run: |
-          if [ "${{ matrix.portable }}" = "true" ]; then
-            cp build/ADOCAO-Portable.exe ADOCAO-Portable.exe
-          else
-            cp build/ADOCAO.exe ADOCAO.exe
-          fi
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload assets
+        uses: softprops/action-gh-release@v2
         with:
-          name: windows${{ matrix.portable && '-portable' || '' }}
-          path: ADOCAO*.exe
+          files: build/ADOCAO*.exe
 
   linux:
     strategy:
@@ -79,15 +68,10 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
-      - name: Rename artifact
-        run: |
-          if [ "${{ matrix.portable }}" = "true" ]; then
-            cp build/adocao adocao-portable
-          else
-            cp build/adocao adocao
-          fi
+      - name: Rename
+        run: cp build/adocao adocao${{ matrix.portable && '-portable' || '' }}
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload assets
+        uses: softprops/action-gh-release@v2
         with:
-          name: linux${{ matrix.portable && '-portable' || '' }}
-          path: adocao*
+          files: adocao*
