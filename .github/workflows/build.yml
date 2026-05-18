@@ -29,29 +29,17 @@ jobs:
       - name: Configure
         shell: msys2 {0}
         run: |
-          if [ "${{ matrix.portable }}" = "true" ]; then
-            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DADOCAO_PORTABLE=ON
-          else
-            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          fi
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DADOCAO_PORTABLE=${{ matrix.portable == true && 'ON' || 'OFF' }}
 
       - name: Build
         shell: msys2 {0}
         run: cmake --build build --parallel
 
-      - name: Rename artifact
-        shell: msys2 {0}
-        run: |
-          if [ "${{ matrix.portable }}" = "true" ]; then
-            cp build/ADOCAO-Portable.exe ADOCAO-Portable.exe
-          else
-            cp build/ADOCAO.exe ADOCAO.exe
-          fi
-
       - uses: actions/upload-artifact@v4
         with:
           name: windows${{ matrix.portable && '-portable' || '' }}
-          path: ADOCAO*.exe
+          path: build/ADOCAO*.exe
 
   linux:
     strategy:
@@ -70,24 +58,13 @@ jobs:
 
       - name: Configure
         run: |
-          if [ "${{ matrix.portable }}" = "true" ]; then
-            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DADOCAO_PORTABLE=ON
-          else
-            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          fi
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DADOCAO_PORTABLE=${{ matrix.portable == true && 'ON' || 'OFF' }}
 
       - name: Build
         run: cmake --build build --parallel
 
-      - name: Rename artifact
-        run: |
-          if [ "${{ matrix.portable }}" = "true" ]; then
-            cp build/adocao adocao-portable
-          else
-            cp build/adocao adocao
-          fi
-
       - uses: actions/upload-artifact@v4
         with:
           name: linux${{ matrix.portable && '-portable' || '' }}
-          path: adocao*
+          path: build/adocao*
