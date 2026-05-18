@@ -173,7 +173,7 @@ target_include_directories(tinyfiledialogs PUBLIC ${tinyfiledialogs_SOURCE_DIR})
 
 # ---- Main executable ----
 add_executable(adocao ${SOURCES} ${IMGUI_SOURCES})
-set_target_properties(adocao PROPERTIES OUTPUT_NAME "ADOCAO")
+set_target_properties(adocao PROPERTIES WIN32_EXECUTABLE TRUE OUTPUT_NAME "ADOCAO")
 
 target_include_directories(adocao PRIVATE
     ${CMAKE_SOURCE_DIR}
