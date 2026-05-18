@@ -4,6 +4,9 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+
 jobs:
   windows:
     strategy:
@@ -65,4 +68,4 @@ jobs:
       - name: Upload assets
         uses: softprops/action-gh-release@v2
         with:
-          files: build/adocao*
+          files: build/ADOCAO*
