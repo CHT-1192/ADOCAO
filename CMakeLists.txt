@@ -1,4 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
+
+# Prefer GCC over Clang (both over MSVC). Must be set before project().
+if(NOT CMAKE_C_COMPILER AND NOT CMAKE_CXX_COMPILER)
+    find_program(GCC_C   gcc)
+    find_program(GCC_CXX g++)
+    find_program(CLANG_C   clang)
+    find_program(CLANG_CXX clang++)
+    if(GCC_C AND GCC_CXX)
+        set(CMAKE_C_COMPILER   "${GCC_C}"   CACHE FILEPATH "C compiler")
+        set(CMAKE_CXX_COMPILER "${GCC_CXX}" CACHE FILEPATH "C++ compiler")
+    elseif(CLANG_C AND CLANG_CXX)
+        set(CMAKE_C_COMPILER   "${CLANG_C}"   CACHE FILEPATH "C compiler")
+        set(CMAKE_CXX_COMPILER "${CLANG_CXX}" CACHE FILEPATH "C++ compiler")
+    endif()
+endif()
+
 project(ADOCAO VERSION 0.5.0 LANGUAGES CXX C)
 
 option(ADOCAO_PORTABLE "Build a static-linked portable executable" OFF)
