@@ -27,11 +27,8 @@ jobs:
       - name: Configure
         shell: msys2 {0}
         run: |
-          if [ "${{ matrix.portable }}" = "true" ]; then
-            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DADOCAO_PORTABLE=ON
-          else
-            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          fi
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DADOCAO_PORTABLE=${{ matrix.portable == true && 'ON' || 'OFF' }}
 
       - name: Build
         shell: msys2 {0}
@@ -59,19 +56,13 @@ jobs:
 
       - name: Configure
         run: |
-          if [ "${{ matrix.portable }}" = "true" ]; then
-            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DADOCAO_PORTABLE=ON
-          else
-            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          fi
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DADOCAO_PORTABLE=${{ matrix.portable == true && 'ON' || 'OFF' }}
 
       - name: Build
         run: cmake --build build --parallel
 
-      - name: Rename
-        run: cp build/adocao adocao${{ matrix.portable && '-portable' || '' }}
-
       - name: Upload assets
         uses: softprops/action-gh-release@v2
         with:
-          files: adocao*
+          files: build/adocao*
