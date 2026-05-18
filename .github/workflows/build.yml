@@ -45,7 +45,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build pkg-config \
-            libwayland-dev libxkbcommon-dev libgl-dev
+            libwayland-dev libxkbcommon-dev libgl-dev \
+            libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 
       - name: Configure
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
