@@ -5,6 +5,14 @@
 #include "GameWindow.h"
 #include "util/Logger.h"
 #include <GLFW/glfw3.h>
+#include <sys/stat.h>
+
+static constexpr long long SKIP_LOADING_THRESHOLD = 100LL * 1024 * 1024;  // 100 MB
+
+static long long fileSize(const std::string& path) {
+    struct stat st;
+    return (stat(path.c_str(), &st) == 0) ? (long long)st.st_size : -1;
+}
 
 #ifdef _WIN32
 #include <windows.h>
@@ -90,11 +98,19 @@ int runApplication(bool debugConsole) {
           cfg.levelPath.c_str(), cfg.musicPath.c_str(),
           cfg.resolutionW, cfg.resolutionH, cfg.fullscreen);
 
-    // Stage 2: Loading
+    // Stage 2: Loading (skip progress window for small files)
     LoadResult loadResult;
-    showLoadingWindow([&](LoadingProgress& progress) {
-        runLevelLoading(cfg, progress, loadResult);
-    });
+    long long fsize = fileSize(cfg.levelPath);
+    if (fsize >= 0 && fsize < SKIP_LOADING_THRESHOLD) {
+        LOG_I("Level file size %.1f MB < 100 MB, loading without window...",
+              (double)fsize / (1024.0 * 1024.0));
+        LoadingProgress dummy;
+        runLevelLoading(cfg, dummy, loadResult);
+    } else {
+        showLoadingWindow([&](LoadingProgress& progress) {
+            runLevelLoading(cfg, progress, loadResult);
+        });
+    }
 
     if (!loadResult.level) {
         LOG_E("Failed to load level");
@@ -136,9 +152,15 @@ int runApplicationFromCLI(const LauncherConfig& cfg, bool debugConsole) {
           config.resolutionW, config.resolutionH, config.fullscreen);
 
     LoadResult loadResult;
-    showLoadingWindow([&](LoadingProgress& progress) {
-        runLevelLoading(config, progress, loadResult);
-    });
+    long long cliFsize = fileSize(config.levelPath);
+    if (cliFsize >= 0 && cliFsize < SKIP_LOADING_THRESHOLD) {
+        LoadingProgress dummy;
+        runLevelLoading(config, dummy, loadResult);
+    } else {
+        showLoadingWindow([&](LoadingProgress& progress) {
+            runLevelLoading(config, progress, loadResult);
+        });
+    }
 
     if (!loadResult.level) {
         LOG_E("Failed to load level");
