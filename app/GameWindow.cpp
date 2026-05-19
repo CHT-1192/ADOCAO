@@ -166,6 +166,16 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
     constexpr double targetFrameTime = 1.0 / 320.0;  // 320 FPS soft cap
     bool wasSpacePressed = false;
 
+    // Frame profiler: set #if 1 to enable, logs every ~1s
+#if 1
+    enum { PROF_N = 4 };
+    const char* profName[PROF_N] = {"input+playback", "camera+drag", "render", "swap"};
+    double profAcc[PROF_N] = {};
+    double profT0 = 0;
+    int profFrame = 0;
+#endif
+#define TS() (glfwGetTime())
+
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -183,6 +193,10 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         lastFrameTime = now;
         if (deltaMs > 500.0f) deltaMs = 0.0f;
         else if (deltaMs > 100.0f) deltaMs = 100.0f;
+
+#if 1
+        profT0 = TS();
+#endif
 
         // Space toggles playback
         bool spacePressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
@@ -255,6 +269,10 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
             camera.setTarget(input.baseTargetX+input.offsetX, input.baseTargetY+input.offsetY);
         }
 
+#if 1
+        profAcc[1] += TS() - profT0;  profT0 = TS();
+#endif
+
         glViewport(0, 0, fbW, fbH);
         glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -296,7 +314,26 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         tileMesh.drawIcons(vl, vr, vb, vt, camera.targetX(), camera.targetY());
         glEnable(GL_DEPTH_TEST);
 
+#if 1
+        profAcc[2] += TS() - profT0;  profT0 = TS();
+#endif
+
         glfwSwapBuffers(window);
+
+#if 1
+        profAcc[3] += TS() - profT0;
+        if (++profFrame >= 320) {
+            double sum = 0;
+            for (int pi = 0; pi < PROF_N; pi++) sum += profAcc[pi];
+            if (sum > 0) {
+                LOG_I("[perf] avg ms: ");
+                for (int pi = 0; pi < PROF_N; pi++)
+                    LOG_I("  %s=%.3f", profName[pi], profAcc[pi] / 320.0);
+            }
+            for (int pi = 0; pi < PROF_N; pi++) profAcc[pi] = 0;
+            profFrame = 0;
+        }
+#endif
     }
 
     // Cleanup
