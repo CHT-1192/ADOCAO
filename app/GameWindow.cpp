@@ -169,7 +169,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
     // Frame profiler: set #if 1 to enable, logs every ~1s
 #if 1
     enum { PROF_N = 4 };
-    const char* profName[PROF_N] = {"input+playback", "camera+drag", "render", "swap"};
+    const char* profName[PROF_N] = {"poll+update", "cam+clear", "draw", "swap"};
     double profAcc[PROF_N] = {};
     double profT0 = 0;
     int profFrame = 0;
@@ -198,6 +198,9 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         profT0 = TS();
 #endif
 
+#if 1
+        profAcc[0] += TS() - profT0;  profT0 = TS();
+#endif
         // Space toggles playback
         bool spacePressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
         if (spacePressed && !wasSpacePressed) {
@@ -322,14 +325,10 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
 #if 1
         profAcc[3] += TS() - profT0;
-        if (++profFrame >= 320) {
-            double sum = 0;
-            for (int pi = 0; pi < PROF_N; pi++) sum += profAcc[pi];
-            if (sum > 0) {
-                LOG_I("[perf] avg ms: ");
-                for (int pi = 0; pi < PROF_N; pi++)
-                    LOG_I("  %s=%.3f", profName[pi], profAcc[pi] / 320.0);
-            }
+        if (++profFrame >= 60) {
+            LOG_I("[perf] %d frames, delta=%.1fms, avg ms:", profFrame, deltaMs);
+            for (int pi = 0; pi < PROF_N; pi++)
+                LOG_I("  %s=%.3f", profName[pi], profAcc[pi] * 1000.0 / profFrame);
             for (int pi = 0; pi < PROF_N; pi++) profAcc[pi] = 0;
             profFrame = 0;
         }
