@@ -260,9 +260,6 @@ LauncherConfig showLauncher() {
             auto result = openFileDialog("Select level file", "*.adofai");
             if (!result.empty()) {
                 snprintf(levelBuf, sizeof(levelBuf), "%s", result.c_str());
-                LOG_I("Browse level: %s", result.c_str());
-            } else {
-                LOG_I("Browse level: cancelled or failed");
             }
         }
 
