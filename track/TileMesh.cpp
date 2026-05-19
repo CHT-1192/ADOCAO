@@ -346,7 +346,7 @@ void TileMesh::buildIcons(const LevelData& level) {
 
         glGenBuffers(1, &sg.instVbo);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferData(GL_ARRAY_BUFFER, instOffsets.size()*sizeof(float), instOffsets.data(), GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, instOffsets.size()*sizeof(float), instOffsets.data(), GL_STATIC_DRAW);
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
         glVertexAttribDivisor(2, 1);
@@ -363,25 +363,34 @@ void TileMesh::drawIcons(float viewL, float viewR, float viewB, float viewT, dou
     double margin = 20.0;
     double vl = viewL - margin, vr = viewR + margin;
     double vb = viewB - margin, vt = viewT + margin;
+    bool useBase = (glDrawElementsInstancedBaseInstance != nullptr);
 
     for (const auto& sg : m_iconGroups) {
-        std::vector<float> visOffsets;
-        visOffsets.reserve(sg.instances.size() * 3);
-        for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
-            const auto& inst = sg.instances[ii];
-            if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
-                continue;
-            visOffsets.push_back((float)(inst.offX - camX));
-            visOffsets.push_back((float)(inst.offY - camY));
-            visOffsets.push_back(inst.offZ);
-        }
-        if (visOffsets.empty()) continue;
+        if (sg.instances.empty()) continue;
 
         glBindVertexArray(sg.vao);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, visOffsets.size()*sizeof(float), visOffsets.data());
-        glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
-                                nullptr, (GLsizei)(visOffsets.size() / 3));
+        int rangeStart = -1, rangeEnd = -1;
+        for (int i = 0; i < (int)sg.instances.size(); i++) {
+            const auto& inst = sg.instances[i];
+            bool vis = !(inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt);
+            if (vis) {
+                if (rangeStart < 0) rangeStart = i;
+                rangeEnd = i + 1;
+            }
+            if ((!vis || i == (int)sg.instances.size() - 1) && rangeStart >= 0) {
+                int count = rangeEnd - rangeStart;
+                if (useBase) {
+                    glDrawElementsInstancedBaseInstance(GL_TRIANGLES, sg.indexCount,
+                        GL_UNSIGNED_INT, nullptr, count, (GLuint)rangeStart);
+                } else {
+                    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE,
+                        3*sizeof(float), (void*)(rangeStart * 3 * sizeof(float)));
+                    glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
+                                            nullptr, count);
+                }
+                rangeStart = -1;
+            }
+        }
         glBindVertexArray(0);
     }
 }
