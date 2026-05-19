@@ -164,7 +164,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
     // ---- Main loop ----
     double lastFrameTime = glfwGetTime();
-    constexpr double targetFrameTime = 1.0 / 240.0;  // 240 FPS soft cap
+    constexpr double targetFrameTime = 1.0 / 320.0;  // 320 FPS soft cap
     bool wasSpacePressed = false;
 
     while (!glfwWindowShouldClose(window)) {
