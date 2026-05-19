@@ -34,6 +34,8 @@ bool AudioEngine::init() {
     config.sampleRate        = 44100;
     config.dataCallback      = dataCallback;
     config.pUserData         = this;
+    // Large buffer for best audio quality. < 256 samples glitches in Unity.
+    config.periodSizeInFrames = 1024;  // ~23ms @ 44100Hz, stable
 
     if (ma_device_init(nullptr, &config, m_device) != MA_SUCCESS) {
         config.sampleRate = 0;
