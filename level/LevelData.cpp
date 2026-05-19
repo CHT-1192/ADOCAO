@@ -190,15 +190,6 @@ bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress
         }
 
         if (onProgress) onProgress(0.30f, "Calculating tile positions...");
-        // Diagnostic: angleData distribution
-        if (!angleData.empty()) {
-            std::map<int, size_t> dist;
-            for (float a : angleData) { dist[(int)a]++; }
-            std::string dstr = "AngleData distribution: ";
-            for (auto& [k, v] : dist)
-                dstr += std::to_string(k) + "°:" + std::to_string(v) + " ";
-            LOG_I("%s", dstr.c_str());
-        }
         calculateTilePositions();
         if (onProgress) onProgress(0.40f, "Processing actions...");
         processActions();
