@@ -202,16 +202,32 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
         const auto& sg = m_shapes[si];
         auto& cache = m_visCaches[si];
 
-        // Cull in world-space double, upload camera-relative float
-        cache.offsets.clear();
-        cache.offsets.reserve(sg.instances.size() * 3);
-        for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
-            const auto& inst = sg.instances[ii];
-            if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
-                continue;
-            cache.offsets.push_back((float)(inst.offX - camX));
-            cache.offsets.push_back((float)(inst.offY - camY));
-            cache.offsets.push_back(inst.offZ);
+        // Only rebuild when camera moved enough to change culling
+        if (!frustumChanged(cache, (float)vl, (float)vr, (float)vb, (float)vt)) {
+            if (cache.offsets.empty()) continue;
+            // Upload cached offsets (camera-relative positions updated below)
+            for (size_t k = 0; k < cache.offsets.size(); k += 3) {
+                cache.offsets[k]   = (float)(sg.instances[cache.instanceIdx[k/3]].offX - camX);
+                cache.offsets[k+1] = (float)(sg.instances[cache.instanceIdx[k/3]].offY - camY);
+            }
+        } else {
+            // Rebuild culled visible set
+            cache.viewL = (float)vl; cache.viewR = (float)vr;
+            cache.viewB = (float)vb; cache.viewT = (float)vt;
+            cache.valid = true;
+            cache.offsets.clear();
+            cache.instanceIdx.clear();
+            cache.offsets.reserve(sg.instances.size() * 3);
+            cache.instanceIdx.reserve(sg.instances.size());
+            for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
+                const auto& inst = sg.instances[ii];
+                if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
+                    continue;
+                cache.instanceIdx.push_back(ii);
+                cache.offsets.push_back((float)(inst.offX - camX));
+                cache.offsets.push_back((float)(inst.offY - camY));
+                cache.offsets.push_back(inst.offZ);
+            }
         }
 
         if (cache.offsets.empty()) continue;

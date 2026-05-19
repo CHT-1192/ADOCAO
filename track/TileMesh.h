@@ -49,7 +49,8 @@ private:
 
     // Visibility cache: avoid recomputing visible set when camera hasn't moved
     struct VisibilityCache {
-        std::vector<float> offsets;  // cached visible instance offsets
+        std::vector<float> offsets;      // cached visible instance offsets
+        std::vector<int>   instanceIdx;  // which instances are in the visible set
         float viewL=0, viewR=0, viewB=0, viewT=0;
         bool valid = false;
     };
