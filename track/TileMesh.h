@@ -8,9 +8,8 @@
 #include <map>
 #include <tuple>
 
-// Per-instance data (world position + bounding box for culling)
 struct TileInstance {
-    double offX, offY;       // world position (double for precision)
+    double offX, offY;
     float  offZ;
     double minX, minY, maxX, maxY;  // world-space AABB (double for culling)
 };
@@ -19,7 +18,7 @@ struct ShapeGroup {
     GLuint vao = 0;
     GLuint vbo = 0;       // local-space vertex data (x,y,z, r,g,b)
     GLuint ebo = 0;
-    GLuint instVbo = 0;   // per-instance vec2 offsets
+    GLuint instVbo = 0;   // per-instance vec3 world offsets (uploaded once)
     unsigned indexCount = 0;
     std::vector<TileInstance> instances;
 };
@@ -47,17 +46,7 @@ private:
     std::vector<ShapeGroup> m_shapes;
     std::vector<ShapeGroup> m_iconGroups;
 
-    // Visibility cache: avoid recomputing visible set when camera hasn't moved
-    struct VisibilityCache {
-        std::vector<float> offsets;      // cached visible instance offsets
-        std::vector<int>   instanceIdx;  // which instances are in the visible set
-        float viewL=0, viewR=0, viewB=0, viewT=0;
-        bool valid = false;
-    };
-    mutable std::vector<VisibilityCache> m_visCaches;  // per-shape-group
-
     void destroy();
     void buildIcons(const LevelData& level);
     static unsigned int hexToUInt(const std::string& hex);
-    static bool frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt);
 };

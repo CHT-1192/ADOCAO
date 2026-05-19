@@ -2,10 +2,14 @@
 #include "TileGeometry.h"
 #include "glad/gl_core.h"
 #include "util/Logger.h"
+#include <GLFW/glfw3.h>
 #include <cmath>
 #include <map>
 #include <tuple>
 #include <unordered_map>
+
+// OpenGL 4.2 function (loaded manually — glad targets 3.3)
+static void (GLAPIENTRY *glDrawElementsInstancedBaseInstance)(GLenum, GLsizei, GLenum, const void*, GLsizei, GLuint) = nullptr;
 
 // Geometry cache (persists across builds)
 struct CachedGeo { std::vector<float> interleaved; std::vector<unsigned> indices; unsigned idxCount=0; };
@@ -39,6 +43,12 @@ bool TileMesh::empty() const { return m_shapes.empty(); }
 
 void TileMesh::build(const LevelData& level, const std::string& fillColorHex, const std::string& strokeColorHex) {
     destroy();
+
+    // Load GL 4.2 function (available on most GPUs since 2011)
+    if (!glDrawElementsInstancedBaseInstance)
+        glDrawElementsInstancedBaseInstance = (decltype(glDrawElementsInstancedBaseInstance))
+            glfwGetProcAddress("glDrawElementsInstancedBaseInstance");
+
     const auto& tiles = level.tiles;
     if (tiles.size() < 2) return;
 
@@ -167,30 +177,22 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sg.ebo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, idxCopy.size()*sizeof(unsigned), idxCopy.data(), GL_STATIC_DRAW);
 
-        // Instance VBO (vec2 offsets, dynamic for visibility filtering)
+        // Instance VBO (world-space offsets, uploaded once — never updated)
         glGenBuffers(1, &sg.instVbo);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferData(GL_ARRAY_BUFFER, instOffsets.size()*sizeof(float), instOffsets.data(), GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, instOffsets.size()*sizeof(float), instOffsets.data(), GL_STATIC_DRAW);
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
         glVertexAttribDivisor(2, 1); // per-instance
 
         glBindVertexArray(0);
+
         shapeIdx++;
     }
 
     LOG_I("Built track: %d tiles → %zu shape groups", n, m_shapes.size());
 
-    // Init visibility cache per shape group
-    m_visCaches.resize(m_shapes.size());
-
     buildIcons(level);
-}
-
-bool TileMesh::frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt) {
-    if (!cache.valid) return true;
-    return std::abs(cache.viewL - vl) > 0.5f || std::abs(cache.viewR - vr) > 0.5f
-        || std::abs(cache.viewB - vb) > 0.5f || std::abs(cache.viewT - vt) > 0.5f;
 }
 
 void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const {
@@ -198,45 +200,34 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
     double vl = viewL - margin, vr = viewR + margin;
     double vb = viewB - margin, vt = viewT + margin;
 
-    for (size_t si = 0; si < m_shapes.size(); si++) {
-        const auto& sg = m_shapes[si];
-        auto& cache = m_visCaches[si];
-
-        // Only rebuild when camera moved enough to change culling
-        if (!frustumChanged(cache, (float)vl, (float)vr, (float)vb, (float)vt)) {
-            if (cache.offsets.empty()) continue;
-            // Upload cached offsets (camera-relative positions updated below)
-            for (size_t k = 0; k < cache.offsets.size(); k += 3) {
-                cache.offsets[k]   = (float)(sg.instances[cache.instanceIdx[k/3]].offX - camX);
-                cache.offsets[k+1] = (float)(sg.instances[cache.instanceIdx[k/3]].offY - camY);
-            }
-        } else {
-            // Rebuild culled visible set
-            cache.viewL = (float)vl; cache.viewR = (float)vr;
-            cache.viewB = (float)vb; cache.viewT = (float)vt;
-            cache.valid = true;
-            cache.offsets.clear();
-            cache.instanceIdx.clear();
-            cache.offsets.reserve(sg.instances.size() * 3);
-            cache.instanceIdx.reserve(sg.instances.size());
-            for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
-                const auto& inst = sg.instances[ii];
-                if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
-                    continue;
-                cache.instanceIdx.push_back(ii);
-                cache.offsets.push_back((float)(inst.offX - camX));
-                cache.offsets.push_back((float)(inst.offY - camY));
-                cache.offsets.push_back(inst.offZ);
-            }
-        }
-
-        if (cache.offsets.empty()) continue;
+    for (const auto& sg : m_shapes) {
+        if (sg.instances.empty()) continue;
 
         glBindVertexArray(sg.vao);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
-        glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
-                                nullptr, (GLsizei)(cache.offsets.size() / 3));
+        int rangeStart = -1, rangeEnd = -1;
+        bool useBase = (glDrawElementsInstancedBaseInstance != nullptr);
+
+        for (int i = 0; i < (int)sg.instances.size(); i++) {
+            const auto& inst = sg.instances[i];
+            bool vis = !(inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt);
+            if (vis) {
+                if (rangeStart < 0) rangeStart = i;
+                rangeEnd = i + 1;
+            }
+            if ((!vis || i == (int)sg.instances.size() - 1) && rangeStart >= 0) {
+                int count = rangeEnd - rangeStart;
+                if (useBase) {
+                    glDrawElementsInstancedBaseInstance(GL_TRIANGLES, sg.indexCount,
+                        GL_UNSIGNED_INT, nullptr, count, (GLuint)rangeStart);
+                } else {
+                    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE,
+                        3*sizeof(float), (void*)(rangeStart * 3 * sizeof(float)));
+                    glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
+                                            nullptr, count);
+                }
+                rangeStart = -1;
+            }
+        }
         glBindVertexArray(0);
     }
 }

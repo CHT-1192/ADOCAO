@@ -2,16 +2,18 @@
 
 namespace Shaders {
 
-// Instanced tile rendering: per-vertex position + color, per-instance offset
+// Instanced tile rendering. aInstOffset is world position (uploaded once at build).
+// Camera-relative subtraction done in shader to eliminate per-frame CPU uploads.
 constexpr const char* kTileVertSrc = R"(
 #version 330 core
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aColor;
-layout(location = 2) in vec3 aInstOffset;
+layout(location = 2) in vec3 aInstOffset;  // world-space (static, uploaded once)
 uniform mat4 uVP;
+uniform vec2 uCam;                         // camera target in world coords
 out vec3 vColor;
 void main() {
-    gl_Position = uVP * vec4(aPos + aInstOffset, 1.0);
+    gl_Position = uVP * vec4(aPos + aInstOffset - vec3(uCam, 0.0), 1.0);
     vColor = aColor;
 }
 )";
