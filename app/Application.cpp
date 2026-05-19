@@ -9,6 +9,39 @@
 #ifdef _WIN32
 #include <windows.h>
 
+// Pin current thread to a performance core (big.LITTLE aware).
+// Uses GetSystemCpuSetInformation via dynamic load for MinGW compat.
+typedef BOOL (WINAPI *PGSCSI)(PSYSTEM_CPU_SET_INFORMATION, ULONG, PULONG, HANDLE, ULONG);
+
+static void pinToBigCore() {
+    HMODULE k = GetModuleHandleA("kernel32.dll");
+    if (!k) return;
+    auto pfn = (PGSCSI)GetProcAddress(k, "GetSystemCpuSetInformation");
+    if (!pfn) return;
+
+    ULONG len = 0;
+    pfn(nullptr, 0, &len, GetCurrentProcess(), 0);
+    if (len == 0) return;
+
+    auto* sets = (SYSTEM_CPU_SET_INFORMATION*)malloc(len);
+    if (!sets) return;
+    if (!pfn(sets, len, &len, GetCurrentProcess(), 0)) {
+        free(sets); return;
+    }
+
+    DWORD_PTR mask = 0;
+    for (ULONG off = 0; off * sizeof(*sets) < len; ) {
+        auto& s = sets[off];
+        if (s.Type == 0 && s.CpuSet.EfficiencyClass == 1)  // perf core
+            mask |= (DWORD_PTR)1 << s.CpuSet.Id;
+        off += s.Size;
+    }
+    free(sets);
+
+    if (mask)
+        SetThreadAffinityMask(GetCurrentThread(), mask);
+}
+
 static void enableDPIAwareness() {
     HMODULE shcore = LoadLibraryA("shcore.dll");
     if (shcore) {
@@ -37,6 +70,7 @@ int runApplication(bool debugConsole) {
 
 #ifdef _WIN32
     enableDPIAwareness();
+    pinToBigCore();
 #endif
 
     if (!glfwInit()) {
@@ -86,6 +120,7 @@ int runApplicationFromCLI(const LauncherConfig& cfg, bool debugConsole) {
 
 #ifdef _WIN32
     enableDPIAwareness();
+    pinToBigCore();
 #endif
 
     if (!glfwInit()) {
