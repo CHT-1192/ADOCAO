@@ -163,7 +163,11 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
     // ---- Main loop ----
     double lastFrameTime = glfwGetTime();
-    constexpr double targetFrameTime = 1.0 / 320.0;  // 320 FPS soft cap
+#ifdef ADOCAO_HIGH_FPS
+    constexpr double targetFrameTime = 1.0 / 1000.0;  // 1000 FPS
+#else
+    constexpr double targetFrameTime = 1.0 / 320.0;   // 320 FPS
+#endif
     bool wasSpacePressed = false;
 
     // Frame profiler: set #if 1 to enable, logs every ~1s

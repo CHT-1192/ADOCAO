@@ -18,6 +18,7 @@ endif()
 project(ADOCAO VERSION 0.5.0 LANGUAGES CXX C)
 
 option(ADOCAO_PORTABLE "Build a static-linked portable executable" OFF)
+option(ADOCAO_HIGH_FPS "Raise FPS cap from 320 to 1000" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -210,6 +211,9 @@ target_link_libraries(adocao PRIVATE
 if(WIN32)
     target_link_libraries(adocao PRIVATE opengl32 ole32)
     target_compile_definitions(adocao PRIVATE NOMINMAX UNICODE _UNICODE)
+    if(ADOCAO_HIGH_FPS)
+        target_compile_definitions(adocao PRIVATE ADOCAO_HIGH_FPS=1)
+    endif()
 elseif(UNIX AND NOT APPLE)
     find_package(OpenGL REQUIRED)
     target_link_libraries(adocao PRIVATE OpenGL::GL ${CMAKE_DL_LIBS})
