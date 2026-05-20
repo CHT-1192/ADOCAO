@@ -79,3 +79,7 @@ void Shader::setVec4(const char* name, float x, float y, float z, float w) const
 void Shader::setFloat(const char* name, float v) const {
     glUniform1f(glGetUniformLocation(m_program, name), v);
 }
+
+void Shader::setVec2(const char* name, float x, float y) const {
+    glUniform2f(glGetUniformLocation(m_program, name), x, y);
+}

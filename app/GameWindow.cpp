@@ -293,6 +293,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         glDisable(GL_DEPTH_TEST);
         tileShader.use();
         tileShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
+        tileShader.setVec2("uCam", (float)camera.targetX(), (float)camera.targetY());
         float vl,vr,vb,vt; camera.frustumBounds(vl,vr,vb,vt);
         tileMesh.draw(vl, vr, vb, vt, camera.targetX(), camera.targetY());
         glEnable(GL_DEPTH_TEST);
@@ -314,6 +315,8 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         // Draw event icons on top of everything (no depth test)
         glDisable(GL_DEPTH_TEST);
         tileShader.use();
+        tileShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
+        tileShader.setVec2("uCam", (float)camera.targetX(), (float)camera.targetY());
         tileMesh.drawIcons(vl, vr, vb, vt, camera.targetX(), camera.targetY());
         glEnable(GL_DEPTH_TEST);
 
