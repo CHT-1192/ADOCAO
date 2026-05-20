@@ -1,4 +1,34 @@
 #include "JsonCleaner.h"
+#include <cstring>
+
+// In-string replacement: replaces False/True/None → false/true/null (not inside strings)
+static void fixPythonLiterals(std::string& s) {
+    const char* pairs[][2] = {
+        {"False", "false"}, {"True", "true"}, {"None", "null"},
+        {"FALSE", "false"}, {"TRUE", "true"}, {"NONE", "null"},
+    };
+    bool inStr = false, esc = false;
+    for (size_t i = 0; i + 4 < s.size(); i++) {
+        char c = s[i];
+        if (inStr) { if (esc) esc = false; else if (c == '\\') esc = true; else if (c == '"') inStr = false; continue; }
+        if (c == '"') { inStr = true; continue; }
+        for (auto& p : pairs) {
+            size_t len = std::strlen(p[0]);
+            if (i + len > s.size()) continue;
+            if (std::memcmp(&s[i], p[0], len) == 0) {
+                // make sure it's a whole word (not part of a larger identifier)
+                char before = (i > 0) ? s[i-1] : ' ';
+                char after  = (i + len < s.size()) ? s[i+len] : ' ';
+                if (!((before >= 'a' && before <= 'z') || (before >= 'A' && before <= 'Z') ||
+                      (before >= '0' && before <= '9') || before == '_' ||
+                      (after >= 'a' && after <= 'z') || (after >= 'A' && after <= 'Z') ||
+                      (after >= '0' && after <= '9') || after == '_')) {
+                    s.replace(i, len, p[1]);
+                }
+            }
+        }
+    }
+}
 
 std::string cleanJson(const std::string& raw) {
     std::string out;
@@ -27,7 +57,11 @@ std::string cleanJson(const std::string& raw) {
 
         if (c == '"') {
             inString = true;
-            if (lastOut == '}' || lastOut == ']' || lastOut == '"' || (lastOut >= '0' && lastOut <= '9')) {
+            // Insert missing comma before key: ...value"key" or ...}"key" or ...]key"
+            if (lastOut == '}' || lastOut == ']' || lastOut == '"' ||
+                (lastOut >= '0' && lastOut <= '9') ||
+                (lastOut >= 'a' && lastOut <= 'z') ||
+                (lastOut >= 'A' && lastOut <= 'Z')) {
                 out.push_back(',');
             }
             lastOut = '"';
@@ -37,17 +71,23 @@ std::string cleanJson(const std::string& raw) {
 
         if (c == '\r') continue;
 
-        if ((c == '{' || c == '[') && (lastOut == '}' || lastOut == ']' || lastOut == '"' || (lastOut >= '0' && lastOut <= '9'))) {
+        // Insert missing comma before { or [ when preceded by value
+        if ((c == '{' || c == '[') &&
+            (lastOut == '}' || lastOut == ']' || lastOut == '"' ||
+             (lastOut >= '0' && lastOut <= '9') ||
+             (lastOut >= 'a' && lastOut <= 'z') ||
+             (lastOut >= 'A' && lastOut <= 'Z'))) {
             out.push_back(',');
         }
 
+        // Skip trailing commas before } or ] or another comma
         if (c == ',') {
             size_t j = i + 1;
-            while (j < raw.size() && (raw[j] == ' ' || raw[j] == '\t' || raw[j] == '\n')) j++;
+            while (j < raw.size() && (raw[j] == ' ' || raw[j] == '\t' || raw[j] == '\n' || raw[j] == '\r'))
+                j++;
             if (j < raw.size()) {
                 char nc = raw[j];
-                if (nc == '}' || nc == ']') continue;
-                if (nc == ',') continue;
+                if (nc == '}' || nc == ']' || nc == ',') continue;
             }
         }
 
@@ -55,7 +95,7 @@ std::string cleanJson(const std::string& raw) {
         out.push_back(c);
     }
 
-    // Post-pass: remove double commas and leading commas after { or [
+    // Post-pass: remove leading commas after { or [ and double commas
     std::string out2;
     out2.reserve(out.size());
     bool afterBrace = false;
@@ -81,6 +121,7 @@ std::string cleanJson(const std::string& raw) {
         }
     }
 
+    fixPythonLiterals(out2);
     return out2;
 }
 
