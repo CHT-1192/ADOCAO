@@ -19,7 +19,7 @@ public:
     void stop();
     void update(float deltaMs);
     void updateWallClock(double wallClockSec);  // jump to absolute time (window drag/sleep)
-    void syncToAudio(float audioPosSec, float offsetSec);  // drive from audio clock
+    void syncToAudio(float audioPosSec);  // drive from audio clock (music starts at 0)
 
     Planet* redPlanet()  { return m_redPlanet.get(); }
     Planet* bluePlanet() { return m_bluePlanet.get(); }

@@ -236,7 +236,8 @@ void PlaybackEngine::stop() {
 float PlaybackEngine::timeInLevel() const {
     float secPerBeat = 60.0f / m_level->settings.bpm;  // always use initial BPM
     float countdown = m_level->settings.countdownTicks * secPerBeat;
-    return (float)(m_elapsedTime / 1000.0 - (double)countdown);
+    float offsetS = m_level->settings.offset / 1000.0f;
+    return (float)(m_elapsedTime / 1000.0 - (double)countdown - (double)offsetS);
 }
 
 float PlaybackEngine::totalDuration() const {
@@ -251,11 +252,12 @@ std::vector<double> PlaybackEngine::getHitsoundTimestamps() const {
     if (n < 2) return timestamps;
 
     // tileStartTimes are relative to tile 1 (tileStartTimes[1]=0 after shift).
-    // Add countdown duration so timestamps are relative to space-press time.
+    // Timestamps relative to audio start (music from 0, no seek).
     float countdown = (float)m_level->settings.countdownTicks * (60.0f / m_level->settings.bpm);
+    float offsetS = m_level->settings.offset / 1000.0f;
 
     for (int i = 1; i < n; i++) {
-        timestamps.push_back(m_tileStartTimes[i] + countdown);
+        timestamps.push_back(m_tileStartTimes[i] + countdown + offsetS);
     }
     return timestamps;
 }
@@ -361,9 +363,9 @@ void PlaybackEngine::updatePlanetPositions() {
     }
 }
 
-void PlaybackEngine::syncToAudio(float audioPosSec, float offsetSec) {
+void PlaybackEngine::syncToAudio(float audioPosSec) {
     if (!m_isPlaying) return;
-    m_elapsedTime = ((double)audioPosSec - (double)offsetSec) * 1000.0;
+    m_elapsedTime = (double)audioPosSec * 1000.0;
     if (m_elapsedTime < 0.0) m_elapsedTime = 0.0;
 
     updatePlanetPositions();
