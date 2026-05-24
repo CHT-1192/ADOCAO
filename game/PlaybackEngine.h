@@ -32,6 +32,7 @@ public:
     const std::vector<double>& tileStartTimes() const { return m_tileStartTimes; }
     const std::vector<float>& tileBPMPerTile() const { return m_tileBPM; }
     float totalDuration() const;
+    double startWallClock() const { return m_startWallClock; }
     std::vector<double> getHitsoundTimestamps() const;
 
 private:
@@ -53,7 +54,7 @@ private:
 
     bool   m_isPlaying = false;
     double m_elapsedTime = 0.0;   // double: sub-ns precision at 1000s total time
-    double m_startWallClock = 0.0;  // wall-clock time when playback started
+    double m_startWallClock = 0.0;  // wall-clock time when playback started (public for timing)
     int    m_currentTileIndex = 0;
     bool   m_reportedEnd = false;   // track if end-of-level log was emitted
 
