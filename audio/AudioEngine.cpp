@@ -131,6 +131,7 @@ bool AudioEngine::loadMusic(const std::string& filepath) {
 
 void AudioEngine::play() {
     if (!m_device) return;
+    if (m_vorbis) stb_vorbis_seek_start(m_vorbis);  // always start from beginning
     m_playing = true;
     if (ma_device_is_started(m_device) == MA_FALSE)
         ma_device_start(m_device);
