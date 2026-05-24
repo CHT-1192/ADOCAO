@@ -156,8 +156,20 @@ void AudioEngine::stop() {
 
 void AudioEngine::seek(float seconds) {
     if (!m_vorbis || m_sampleRate <= 0) return;
-    unsigned int sample = (unsigned int)(seconds * (float)m_sampleRate);
-    stb_vorbis_seek(m_vorbis, sample);
+    int target = (int)(seconds * (float)m_sampleRate);
+    if (stb_vorbis_seek(m_vorbis, target) != 0) return;  // success
+
+    // stb_vorbis_seek failed (no seek table) — discard samples to advance
+    LOG_I("AudioEngine: seek failed, discarding %d samples to reach %.1fs", target, seconds);
+    float* tmp = (float*)alloca(4096 * (unsigned)m_channels * sizeof(float));
+    int skipped = 0;
+    while (skipped < target) {
+        int n = stb_vorbis_get_samples_float_interleaved(
+            m_vorbis, m_channels, tmp,
+            std::min(4096 * m_channels, (target - skipped) * m_channels));
+        if (n <= 0) break;
+        skipped += n;
+    }
 }
 
 float AudioEngine::position() const {
