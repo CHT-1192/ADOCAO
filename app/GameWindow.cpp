@@ -234,13 +234,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
         // Update playback — sync to audio clock when music playing, else wall-clock
         if (playback.isPlaying()) {
-            float countdownSec = level->settings.countdownTicks * 60.0f / level->settings.bpm;
-            float offsetSec = level->settings.offset / 1000.0f;
-            // During countdown+offset use wall-clock (audio not yet at beat position).
-            // Switch to audio sync once past countdown+offset for sample-accurate timing.
-            double elapsedWall = (now - playback.startWallClock()) * 1000.0;
-            if (audioEngine.hasMusic() && audioEngine.isPlaying()
-                && elapsedWall > (double)(countdownSec + offsetSec) * 1000.0) {
+            if (audioEngine.hasMusic() && audioEngine.isPlaying()) {
                 playback.syncToAudio(audioEngine.position());
             } else {
                 playback.updateWallClock(now);
