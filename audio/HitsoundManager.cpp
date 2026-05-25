@@ -225,3 +225,28 @@ void HitsoundManager::reset() {
 void HitsoundManager::stop() {
     m_playing = false;
 }
+
+bool HitsoundManager::writeWav(const std::string& filepath) {
+    if (m_buffer.empty()) return false;
+    size_t n = m_buffer.size() / 2;  // stereo frames
+    // 16-bit stereo WAV
+    std::vector<int16_t> raw(m_buffer.size());
+    for (size_t i = 0; i < m_buffer.size(); i++) {
+        float v = m_buffer[i];
+        if (v > 1.0f) v = 1.0f; else if (v < -1.0f) v = -1.0f;
+        raw[i] = (int16_t)(v * 32767.0f);
+    }
+    FILE* f = fopen(filepath.c_str(), "wb");
+    if (!f) return false;
+    uint32_t dataSize = (uint32_t)(raw.size() * sizeof(int16_t));
+    uint32_t riffSize = 36 + dataSize;
+    auto w32 = [&](uint32_t v) { fwrite(&v, 4, 1, f); };
+    auto w16 = [&](uint16_t v) { fwrite(&v, 2, 1, f); };
+    fwrite("RIFF", 1, 4, f); w32(riffSize); fwrite("WAVE", 1, 4, f);
+    fwrite("fmt ", 1, 4, f); w32(16); w16(1); w16(2); w32(44100); w32(44100 * 4); w16(4); w16(16);
+    fwrite("data", 1, 4, f); w32(dataSize);
+    fwrite(raw.data(), sizeof(int16_t), raw.size(), f);
+    fclose(f);
+    LOG_I("Hitsound: Exported %zu frames to %s", n, filepath.c_str());
+    return true;
+}

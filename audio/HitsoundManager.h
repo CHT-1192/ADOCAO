@@ -35,6 +35,7 @@ public:
     void reset();
     void stop();
     bool isSynthesized() const { return m_synthesized; }
+    bool writeWav(const std::string& filepath);  // export pre-mixed buffer to WAV
 
 private:
     std::string m_assetsDir;

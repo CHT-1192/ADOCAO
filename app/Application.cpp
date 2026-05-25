@@ -98,6 +98,36 @@ int runApplication(bool debugConsole) {
           cfg.levelPath.c_str(), cfg.musicPath.c_str(),
           cfg.resolutionW, cfg.resolutionH, cfg.fullscreen);
 
+    // Export hitsounds to WAV and exit (no game window)
+    if (cfg.exportHitsounds) {
+        LevelData lvl;
+        if (!lvl.loadFromFile(cfg.levelPath)) {
+            LOG_E("Failed to load level for export");
+            glfwTerminate();
+            return 1;
+        }
+        PlaybackEngine pb;
+        pb.init(lvl, true);
+        HitsoundManager hm;
+        hm.init();
+        hm.setHitsoundType(lvl.settings.hitsound);
+        auto ts = pb.getHitsoundTimestamps();
+        std::vector<float> fts(ts.begin(), ts.end());
+        if (!hm.preSynthesize(fts, pb.totalDuration())) {
+            LOG_E("Export: pre-synthesis failed");
+            glfwTerminate();
+            return 1;
+        }
+        std::string outPath = cfg.levelPath;
+        auto dot = outPath.rfind('.');
+        if (dot != std::string::npos) outPath = outPath.substr(0, dot);
+        outPath += "_hitsounds.wav";
+        hm.writeWav(outPath);
+        LOG_I("Exported hitsounds to %s", outPath.c_str());
+        glfwTerminate();
+        return 0;
+    }
+
     // Stage 2: Loading (skip progress window for small files)
     LoadResult loadResult;
     long long fsize = fileSize(cfg.levelPath);
