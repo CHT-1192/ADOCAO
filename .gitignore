@@ -3,3 +3,4 @@ build/
 .claude/
 *.exe
 CLAUDE.md
+test/
