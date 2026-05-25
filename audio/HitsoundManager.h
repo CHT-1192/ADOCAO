@@ -21,7 +21,7 @@ public:
     void setEnabled(bool enabled);
     bool isEnabled() const { return m_enabled; }
 
-    bool preSynthesize(const std::vector<float>& timestamps, float totalDuration,
+    bool preSynthesize(const std::vector<double>& timestamps, float totalDuration,
                        HitsoundProgressCb onProgress = nullptr);
 
     // Read-only access for mixer

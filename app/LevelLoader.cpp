@@ -53,9 +53,8 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
     if (cfg.enableHitsounds) {
         result.hitsounds.init();
         result.hitsounds.setHitsoundType(result.level->settings.hitsound);
-        auto ts = result.playback.getHitsoundTimestamps();
-        std::vector<float> fts(ts.begin(), ts.end());
-        result.hitsounds.preSynthesize(fts, result.playback.totalDuration());
+        result.hitsounds.preSynthesize(result.playback.getHitsoundTimestamps(),
+                                       result.playback.totalDuration());
     }
 
     report(progress, 1.0f, "Ready!");

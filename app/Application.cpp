@@ -111,9 +111,7 @@ int runApplication(bool debugConsole) {
         HitsoundManager hm;
         hm.init();
         hm.setHitsoundType(lvl.settings.hitsound);
-        auto ts = pb.getHitsoundTimestamps();
-        std::vector<float> fts(ts.begin(), ts.end());
-        if (!hm.preSynthesize(fts, pb.totalDuration())) {
+        if (!hm.preSynthesize(pb.getHitsoundTimestamps(), pb.totalDuration())) {
             LOG_E("Export: pre-synthesis failed");
             glfwTerminate();
             return 1;

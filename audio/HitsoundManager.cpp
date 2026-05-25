@@ -134,7 +134,7 @@ bool HitsoundManager::readWav(const std::string& filepath,
     return true;
 }
 
-bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
+bool HitsoundManager::preSynthesize(const std::vector<double>& timestamps,
                                      float totalDuration,
                                      HitsoundProgressCb onProgress) {
     if (!m_enabled) return false;
@@ -161,7 +161,7 @@ bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
     float pad = hitLenFrames>0 ? (float)hitLenFrames/(float)sr+1.0f : 2.0f;
     int totalFrames = (int)((totalDuration+pad)*(float)sr);
 
-    std::vector<float> sorted=timestamps;
+    std::vector<double> sorted=timestamps;
     std::sort(sorted.begin(),sorted.end());
     int totalHits=(int)sorted.size();
 
@@ -180,7 +180,7 @@ bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
         futures.push_back(std::async(std::launch::async, [&, start, end]() {
             std::vector<float> localBuf(bufSize, 0.0f);
             for (int idx = start; idx < end; idx++) {
-                float ts = sorted[idx];
+                double ts = sorted[idx];
                 if (ts < 0.0f) continue;
                 int sf = (int)(ts * (float)sr);
                 int cl = hitLenFrames;
