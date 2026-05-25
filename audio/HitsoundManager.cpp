@@ -17,34 +17,34 @@ static std::unordered_map<std::string, std::vector<float>> s_wavCache;
 #endif
 
 static const char* hitsoundKey(const std::string& type) {
-    if (type == "Kick")              return "sndKick.wav";
-    if (type == "KickHouse")         return "sndKickHouse.wav";
-    if (type == "KickChroma")        return "sndKickChroma.wav";
-    if (type == "KickRupture")       return "sndKickRupture.wav";
-    if (type == "Snare")             return "sndSnareAcoustic2.wav";
-    if (type == "SnareHouse")        return "sndSnareHouse.wav";
-    if (type == "SnareVapor")        return "sndSnareVapor.wav";
-    if (type == "Clap")              return "sndClapHit.wav";
-    if (type == "ClapHit")           return "sndClapHit.wav";
-    if (type == "ClapHitEcho")       return "sndClapHitEcho.wav";
-    if (type == "Hat")               return "sndHat.wav";
-    if (type == "HatHouse")          return "sndHatHouse.wav";
-    if (type == "Chuck")             return "sndChuck.wav";
-    if (type == "Hammer")            return "sndHammer.wav";
-    if (type == "Shaker")            return "sndShaker.wav";
-    if (type == "ShakerLoud")        return "sndShakerLoud.wav";
-    if (type == "Sidestick")         return "sndSidestick.wav";
-    if (type == "Stick")             return "sndStick.wav";
-    if (type == "ReverbClack")       return "sndReverbClack.wav";
-    if (type == "ReverbClap")        return "sndReverbClap.wav";
-    if (type == "Squareshot")        return "sndSquareshot.wav";
-    if (type == "FireTile")          return "sndFireTile.wav";
-    if (type == "IceTile")           return "sndIceTile.wav";
-    if (type == "PowerUp")           return "sndPowerUp.wav";
-    if (type == "PowerDown")         return "sndPowerDown.wav";
-    if (type == "VehiclePositive")   return "sndVehiclePositive.wav";
-    if (type == "VehicleNegative")   return "sndVehicleNegative.wav";
-    if (type == "Sizzle")            return "sndSizzle.wav";
+    if (type == "Kick")              return "Kick.wav";
+    if (type == "KickHouse")         return "KickHouse.wav";
+    if (type == "KickChroma")        return "KickChroma.wav";
+    if (type == "KickRupture")       return "KickRupture.wav";
+    if (type == "Snare")             return "SnareAcoustic2.wav";
+    if (type == "SnareHouse")        return "SnareHouse.wav";
+    if (type == "SnareVapor")        return "SnareVapor.wav";
+    if (type == "Clap")              return "ClapHit.wav";
+    if (type == "ClapHit")           return "ClapHit.wav";
+    if (type == "ClapHitEcho")       return "ClapHitEcho.wav";
+    if (type == "Hat")               return "Hat.wav";
+    if (type == "HatHouse")          return "HatHouse.wav";
+    if (type == "Chuck")             return "Chuck.wav";
+    if (type == "Hammer")            return "Hammer.wav";
+    if (type == "Shaker")            return "Shaker.wav";
+    if (type == "ShakerLoud")        return "ShakerLoud.wav";
+    if (type == "Sidestick")         return "Sidestick.wav";
+    if (type == "Stick")             return "Stick.wav";
+    if (type == "ReverbClack")       return "ReverbClack.wav";
+    if (type == "ReverbClap")        return "ReverbClap.wav";
+    if (type == "Squareshot")        return "Squareshot.wav";
+    if (type == "FireTile")          return "FireTile.wav";
+    if (type == "IceTile")           return "IceTile.wav";
+    if (type == "PowerUp")           return "PowerUp.wav";
+    if (type == "PowerDown")         return "PowerDown.wav";
+    if (type == "VehiclePositive")   return "VehiclePositive.wav";
+    if (type == "VehicleNegative")   return "VehicleNegative.wav";
+    if (type == "Sizzle")            return "Sizzle.wav";
     return nullptr;
 }
 
@@ -134,13 +134,6 @@ bool HitsoundManager::readWav(const std::string& filepath,
     return true;
 }
 
-static inline float softClip(float x) {
-    float a = x < 0 ? -x : x;
-    if (a < 0.5f) return x;
-    if (a < 1.5f) return x * (1.0f - x * x / 3.0f);
-    return x < 0 ? -1.0f : 1.0f;
-}
-
 bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
                                      float totalDuration,
                                      HitsoundProgressCb onProgress) {
@@ -193,23 +186,29 @@ bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
                 int cl = hitLenFrames;
                 if (sf + cl > totalFrames) cl = totalFrames - sf;
                 if (cl <= 0) continue;
+                // 16-bit integer hard-clip (matches original HitSoundGenerator.exe)
                 for (int i = 0; i < cl; i++) {
                     float hv = hitSamples[(size_t)i * (size_t)ch];
                     size_t pos = (size_t)(sf + i) * 2;
-                    localBuf[pos]     = softClip(localBuf[pos]     + hv);
-                    localBuf[pos + 1] = softClip(localBuf[pos + 1] + hv);
+                    int curL = (int)(localBuf[pos]     * 32767.0f);
+                    int curR = (int)(localBuf[pos + 1] * 32767.0f);
+                    int addV = (int)(hv * 32767.0f);
+                    int sumL = curL + addV; if (sumL > 32767) sumL = 32767; else if (sumL < -32768) sumL = -32768;
+                    int sumR = curR + addV; if (sumR > 32767) sumR = 32767; else if (sumR < -32768) sumR = -32768;
+                    localBuf[pos]     = (float)sumL / 32768.0f;
+                    localBuf[pos + 1] = (float)sumR / 32768.0f;
                 }
             }
             return localBuf;
         }));
     }
 
-    // Merge thread results and apply final softClip pass
+    // Merge thread results (pure addition — hard-clip was already applied per-sample)
     m_buffer.assign(bufSize, 0.0f);
     for (auto& fut : futures) {
         auto localBuf = fut.get();
         for (size_t i = 0; i < bufSize; i++)
-            m_buffer[i] = softClip(m_buffer[i] + localBuf[i]);
+            m_buffer[i] = m_buffer[i] + localBuf[i];
     }
 
     if (onProgress) onProgress(100.0f);
