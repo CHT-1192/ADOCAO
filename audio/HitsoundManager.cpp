@@ -219,7 +219,7 @@ bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
 
 void HitsoundManager::reset() {
     m_readCursor = 0;
-    m_playing = false;
+    m_playing = true;
 }
 
 void HitsoundManager::stop() {
