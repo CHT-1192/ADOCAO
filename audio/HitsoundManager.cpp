@@ -186,17 +186,12 @@ bool HitsoundManager::preSynthesize(const std::vector<float>& timestamps,
                 int cl = hitLenFrames;
                 if (sf + cl > totalFrames) cl = totalFrames - sf;
                 if (cl <= 0) continue;
-                // 16-bit integer hard-clip (matches original HitSoundGenerator.exe)
+                // Float addition — no clamping during mixing (preserves dynamics at high density)
                 for (int i = 0; i < cl; i++) {
                     float hv = hitSamples[(size_t)i * (size_t)ch];
                     size_t pos = (size_t)(sf + i) * 2;
-                    int curL = (int)(localBuf[pos]     * 32767.0f);
-                    int curR = (int)(localBuf[pos + 1] * 32767.0f);
-                    int addV = (int)(hv * 32767.0f);
-                    int sumL = curL + addV; if (sumL > 32767) sumL = 32767; else if (sumL < -32768) sumL = -32768;
-                    int sumR = curR + addV; if (sumR > 32767) sumR = 32767; else if (sumR < -32768) sumR = -32768;
-                    localBuf[pos]     = (float)sumL / 32768.0f;
-                    localBuf[pos + 1] = (float)sumR / 32768.0f;
+                    localBuf[pos]     += hv;
+                    localBuf[pos + 1] += hv;
                 }
             }
             return localBuf;
