@@ -40,6 +40,7 @@ public:
 private:
     ma_device* m_device = nullptr;
     ma_decoder* m_decoder = nullptr;
+    std::vector<uint8_t> m_fileData;  // keep file memory alive for decoder
     int m_sampleRate = 44100;
     uint64_t m_readCursor = 0;  // current decoder position in frames
     float m_duration = 0.0f;

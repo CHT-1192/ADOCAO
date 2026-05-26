@@ -60,6 +60,7 @@ void AudioEngine::shutdown() {
         delete m_decoder;
         m_decoder = nullptr;
     }
+    m_fileData.clear();
     m_initialized = false;
     m_hasMusic = false;
     m_playing = false;
@@ -74,6 +75,7 @@ bool AudioEngine::loadMusic(const std::string& filepath) {
         m_decoder = nullptr;
         m_hasMusic = false;
     }
+    m_fileData.clear();
 
     // Read file into memory (handles UTF-8 paths on Windows)
     std::vector<uint8_t> data;
@@ -117,6 +119,7 @@ bool AudioEngine::loadMusic(const std::string& filepath) {
     m_sampleRate = 44100;
     m_readCursor = 0;
     m_duration = (m_sampleRate > 0) ? (float)total / (float)m_sampleRate : 0.0f;
+    m_fileData = std::move(data);  // keep alive for memory-backed decoder
 
     m_hasMusic = true;
     LOG_I("AudioEngine: Loaded (%dHz, stereo, %.1fs): %s",
