@@ -44,6 +44,11 @@ void Planet::update(float currentTime) {
         trail->update(glm::vec2(position.x, position.y), currentTime);
 }
 
+void Planet::setTrailPoints(const float* xy, int count) {
+    if (trail)
+        trail->setPoints(xy, count);
+}
+
 void Planet::clearTrail() {
     if (trail)
         trail->clear();

@@ -35,6 +35,8 @@ public:
     float totalDuration() const;
     std::vector<double> getHitsoundTimestamps() const;
     std::vector<struct HitsoundTimestampGroup> getHitsoundTimestampGroups() const;
+    void computePlanetTrails() const;
+    void computePositionsAtTime(float t, glm::vec2& redOut, glm::vec2& blueOut) const;
 
 private:
     const LevelData* m_level = nullptr;
