@@ -458,10 +458,7 @@ void PlaybackEngine::syncToAudio(float audioPosSec, float offsetSec) {
     if (m_elapsedTime < 0.0) m_elapsedTime = 0.0;
 
     updatePlanetPositions();
-
-    float tSec = m_elapsedTime / 1000.0f;
-    if (m_redPlanet)  m_redPlanet->update(tSec);
-    if (m_bluePlanet) m_bluePlanet->update(tSec);
+    computePlanetTrails();
 }
 
 void PlaybackEngine::updateWallClock(double wallClockSec) {
@@ -470,10 +467,7 @@ void PlaybackEngine::updateWallClock(double wallClockSec) {
     if (m_elapsedTime < 0.0f) m_elapsedTime = 0.0;
 
     updatePlanetPositions();
-
-    float tSec = m_elapsedTime / 1000.0f;
-    if (m_redPlanet)  m_redPlanet->update(tSec);
-    if (m_bluePlanet) m_bluePlanet->update(tSec);
+    computePlanetTrails();
 }
 
 void PlaybackEngine::update(float deltaMs) {

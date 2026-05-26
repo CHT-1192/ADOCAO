@@ -219,8 +219,6 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
             } else {
                 playback.updateWallClock(now);
             }
-            // Rebuild trail from dense analytical samples (like Re_ADOJAS)
-            playback.computePlanetTrails();
         }
 
         // Camera: follow pivot during playback, allow drag when stopped
