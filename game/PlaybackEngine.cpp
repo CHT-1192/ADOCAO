@@ -436,7 +436,7 @@ void PlaybackEngine::computePlanetTrails() const {
 
     for (int i = 0; i < samples; i++) {
         float tt = t - 0.4f + (0.4f * (float)i / (float)(samples - 1));
-        glm::vec2 r, b;
+        glm::vec2 r(0), b(0);
         computePositionsAtTime(tt, r, b);
         redXY[i * 2] = r.x; redXY[i * 2 + 1] = r.y;
         blueXY[i * 2] = b.x; blueXY[i * 2 + 1] = b.y;
