@@ -4,9 +4,6 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
-#define STB_VORBIS_HEADER_ONLY
-#include "stb_vorbis.c"
-
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -58,11 +55,11 @@ void AudioEngine::shutdown() {
         delete m_device;
         m_device = nullptr;
     }
-    if (m_vorbis) {
-        stb_vorbis_close(m_vorbis);
-        m_vorbis = nullptr;
+    if (m_decoder) {
+        ma_decoder_uninit(m_decoder);
+        delete m_decoder;
+        m_decoder = nullptr;
     }
-    m_fileData.clear();
     m_initialized = false;
     m_hasMusic = false;
     m_playing = false;
@@ -71,12 +68,12 @@ void AudioEngine::shutdown() {
 bool AudioEngine::loadMusic(const std::string& filepath) {
     if (!m_device) return false;
 
-    if (m_vorbis) {
-        stb_vorbis_close(m_vorbis);
-        m_vorbis = nullptr;
+    if (m_decoder) {
+        ma_decoder_uninit(m_decoder);
+        delete m_decoder;
+        m_decoder = nullptr;
         m_hasMusic = false;
     }
-    m_fileData.clear();
 
     // Read file into memory (handles UTF-8 paths on Windows)
     std::vector<uint8_t> data;
@@ -106,20 +103,20 @@ bool AudioEngine::loadMusic(const std::string& filepath) {
 #endif
     }
 
-    int error = 0;
-    m_vorbis = stb_vorbis_open_memory(data.data(), (int)data.size(), &error, nullptr);
-    if (!m_vorbis) {
-        LOG_E("AudioEngine: Failed to decode OGG [stb_err=%d]: %s", error, filepath.c_str());
+    m_decoder = new ma_decoder;
+    ma_decoder_config dc = ma_decoder_config_init(ma_format_f32, 2, 44100);
+    if (ma_decoder_init_memory(data.data(), data.size(), &dc, m_decoder) != MA_SUCCESS) {
+        LOG_E("AudioEngine: Unsupported format: %s", filepath.c_str());
+        delete m_decoder;
+        m_decoder = nullptr;
         return false;
     }
-    m_fileData = std::move(data);  // keep data alive for vorbis
 
-    stb_vorbis_info info = stb_vorbis_get_info(m_vorbis);
-    m_sampleRate = info.sample_rate;
-    m_channels = info.channels;
-
-    unsigned int totalSamples = stb_vorbis_stream_length_in_samples(m_vorbis);
-    m_duration = (m_sampleRate > 0) ? (float)totalSamples / (float)m_sampleRate : 0.0f;
+    ma_uint64 total = 0;
+    ma_decoder_get_length_in_pcm_frames(m_decoder, &total);
+    m_sampleRate = 44100;
+    m_readCursor = 0;
+    m_duration = (m_sampleRate > 0) ? (float)total / (float)m_sampleRate : 0.0f;
 
     m_hasMusic = true;
     LOG_I("AudioEngine: Loaded (%dHz, %dch, %.1fs): %s",
@@ -129,6 +126,7 @@ bool AudioEngine::loadMusic(const std::string& filepath) {
 
 void AudioEngine::play() {
     if (!m_device) return;
+    if (m_decoder) { ma_decoder_seek_to_pcm_frame(m_decoder, 0); m_readCursor = 0; }
     m_playing = true;
     if (ma_device_is_started(m_device) == MA_FALSE)
         ma_device_start(m_device);
@@ -147,20 +145,21 @@ void AudioEngine::pause() {
 
 void AudioEngine::stop() {
     m_playing = false;
-    if (m_vorbis) stb_vorbis_seek_start(m_vorbis);
+    if (m_decoder) { ma_decoder_seek_to_pcm_frame(m_decoder, 0); m_readCursor = 0; }
     if (m_device && ma_device_is_started(m_device) != MA_FALSE)
         ma_device_stop(m_device);
 }
 
 void AudioEngine::seek(float seconds) {
-    if (!m_vorbis || m_sampleRate <= 0) return;
-    unsigned int sample = (unsigned int)(seconds * (float)m_sampleRate);
-    stb_vorbis_seek(m_vorbis, sample);
+    if (!m_decoder || m_sampleRate <= 0) return;
+    ma_uint64 frame = (ma_uint64)(seconds * (float)m_sampleRate);
+    ma_decoder_seek_to_pcm_frame(m_decoder, frame);
+    m_readCursor = frame;
 }
 
 float AudioEngine::position() const {
-    if (!m_vorbis || m_sampleRate <= 0) return 0.0f;
-    return (float)stb_vorbis_get_sample_offset(m_vorbis) / (float)m_sampleRate;
+    if (!m_decoder || m_sampleRate <= 0) return 0.0f;
+    return (float)m_readCursor / (float)m_sampleRate;
 }
 
 float AudioEngine::duration() const {
@@ -198,18 +197,17 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
 
     if (!self) return;
 
-    // --- Music source ---
-    if (self->m_vorbis && self->m_playing) {
-        float* musicBuf = (float*)alloca(frameCount * (unsigned)self->m_channels * sizeof(float));
-        int decoded = stb_vorbis_get_samples_float_interleaved(
-            self->m_vorbis, self->m_channels, musicBuf, (int)frameCount * self->m_channels);
+    // --- Music source (ma_decoder: stereo f32 @ 44100) ---
+    if (self->m_decoder && self->m_playing) {
+        float* musicBuf = (float*)alloca(frameCount * 2 * sizeof(float));
+        ma_uint64 decoded = 0;
+        ma_decoder_read_pcm_frames(self->m_decoder, musicBuf, frameCount, &decoded);
+        self->m_readCursor += decoded;
 
         if (decoded > 0) {
-            // Mix into output (mono/stereo → device channels)
-            for (int i = 0; i < decoded; i++) {
-                for (int c = 0; c < (int)self->m_channels && c < (int)devCh; c++) {
-                    out[i * devCh + c] += musicBuf[i * self->m_channels + c] * self->m_volume;
-                }
+            for (ma_uint64 i = 0; i < decoded; i++) {
+                out[i * devCh]     += musicBuf[i * 2]     * self->m_volume;
+                out[i * devCh + 1] += musicBuf[i * 2 + 1] * self->m_volume;
             }
         }
         if (decoded == 0) self->m_playing = false;
@@ -226,7 +224,6 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
                 out[i * devCh + c] += self->m_extBuffer[cursor * extCh + c];
             }
         }
-        // Update cursor (atomic write for external thread safety — but in single-threaded case it's fine)
         *self->m_extCursor = cursor;
         if (cursor >= extTotal) *self->m_extPlaying = false;
     }

@@ -5,7 +5,7 @@
 #include <cstdint>
 
 struct ma_device;
-struct stb_vorbis;
+struct ma_decoder;
 
 class AudioEngine {
 public:
@@ -39,10 +39,9 @@ public:
 
 private:
     ma_device* m_device = nullptr;
-    stb_vorbis* m_vorbis = nullptr;
-    std::vector<uint8_t> m_fileData;
+    ma_decoder* m_decoder = nullptr;
     int m_sampleRate = 44100;
-    int m_channels = 2;
+    uint64_t m_readCursor = 0;  // current decoder position in frames
     float m_duration = 0.0f;
     float m_volume = 1.0f;
     bool m_initialized = false;
