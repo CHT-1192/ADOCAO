@@ -106,7 +106,7 @@ void PlaybackEngine::precalculateTiming() {
             } else {
                 relAngle = delta;
             }
-            if (relAngle < 0.01f) relAngle = 360.0f;
+            if (delta < 0.0001f) relAngle = 360.0f;  // only true straight-ahead; not 0.01°
             angleDir = std::fmod(rawAngleData + 180.0f, 360.0f);
             if (angleDir < 0) angleDir += 360.0f;
         }
