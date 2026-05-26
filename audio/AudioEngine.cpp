@@ -119,8 +119,8 @@ bool AudioEngine::loadMusic(const std::string& filepath) {
     m_duration = (m_sampleRate > 0) ? (float)total / (float)m_sampleRate : 0.0f;
 
     m_hasMusic = true;
-    LOG_I("AudioEngine: Loaded (%dHz, %dch, %.1fs): %s",
-          m_sampleRate, m_channels, m_duration, filepath.c_str());
+    LOG_I("AudioEngine: Loaded (%dHz, stereo, %.1fs): %s",
+          m_sampleRate, m_duration, filepath.c_str());
     return true;
 }
 
