@@ -18,8 +18,10 @@ public:
     PlanetTrail& operator=(PlanetTrail&&) noexcept;
 
     void update(const glm::vec2& pos, float currentTime);
+    void setPoints(const float* xy, int count);  // batch set from flat XY array (like Re_ADOJAS)
     void draw(Shader& shader, const Camera& camera, double camX, double camY);
     void clear();
+    void setPlanetRadius(float r) { m_planetRadius = r; }
 
 private:
     struct Point { glm::vec2 pos; float time; };
