@@ -250,14 +250,40 @@ std::vector<double> PlaybackEngine::getHitsoundTimestamps() const {
     int n = (int)m_tileStartTimes.size();
     if (n < 2) return timestamps;
 
-    // tileStartTimes are relative to tile 1 (tileStartTimes[1]=0 after shift).
-    // Add countdown duration so timestamps are relative to space-press time.
     float countdown = (float)m_level->settings.countdownTicks * (60.0f / m_level->settings.bpm);
 
     for (int i = 1; i < n; i++) {
         timestamps.push_back(m_tileStartTimes[i] + countdown);
     }
     return timestamps;
+}
+
+std::vector<HitsoundTimestampGroup> PlaybackEngine::getHitsoundTimestampGroups() const {
+    std::vector<HitsoundTimestampGroup> groups;
+    int n = (int)m_tileStartTimes.size();
+    if (n < 2) return groups;
+
+    float countdown = (float)m_level->settings.countdownTicks * (60.0f / m_level->settings.bpm);
+    float defaultVol = m_level->settings.hitsoundVolume;
+    const std::string& defaultType = m_level->settings.hitsound;
+
+    // Map from (type, volume) key to group index
+    std::map<std::pair<std::string, float>, size_t> groupMap;
+
+    for (int i = 1; i < n; i++) {
+        std::string type = (i < (int)m_level->tileHitsounds.size() && !m_level->tileHitsounds[i].empty())
+            ? m_level->tileHitsounds[i] : defaultType;
+        float vol = defaultVol;
+
+        auto key = std::make_pair(type, vol);
+        auto it = groupMap.find(key);
+        if (it == groupMap.end()) {
+            groupMap[key] = groups.size();
+            groups.push_back({type, vol, {}});
+        }
+        groups[groupMap[key]].timestamps.push_back(m_tileStartTimes[i] + countdown);
+    }
+    return groups;
 }
 
 int PlaybackEngine::findTileIndex(float t) const {

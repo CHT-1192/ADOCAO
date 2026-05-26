@@ -134,81 +134,85 @@ bool HitsoundManager::readWav(const std::string& filepath,
     return true;
 }
 
-bool HitsoundManager::preSynthesize(const std::vector<double>& timestamps,
+bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& groups,
                                      float totalDuration,
                                      HitsoundProgressCb onProgress) {
     if (!m_enabled) return false;
-    if (m_hitsoundType == "None" || m_hitsoundType.empty()) {
-        LOG_I("Hitsound: Disabled (type=%s)", m_hitsoundType.c_str());
-        return false;
-    }
-    std::string hp = hitsoundPath(m_hitsoundType);
-    if (hp.empty()) {
-        LOG_E("Hitsound: Unknown type '%s', no WAV mapping", m_hitsoundType.c_str());
+    if (groups.empty()) {
+        LOG_I("Hitsound: No groups, skipping");
         return false;
     }
 
-    std::vector<float> hitSamples;
-    int sr=0, ch=0;
-    if (!readWav(hp, hitSamples, sr, ch)) {
-        LOG_E("Hitsound: Failed to read WAV: %s", hp.c_str());
-        return false;
+    // Load all WAV files per group (cached)
+    struct GroupData { std::vector<float> samples; int lenFrames; int sr; int ch; };
+    std::unordered_map<std::string, GroupData> wavData;
+    float maxHitSec = 0.0f;
+
+    for (auto& g : groups) {
+        if (g.type == "None" || g.type.empty()) continue;
+        auto it = wavData.find(g.type);
+        if (it != wavData.end()) continue;
+
+        std::string hp = hitsoundPath(g.type);
+        if (hp.empty()) {
+            LOG_E("Hitsound: Unknown type '%s', skipping", g.type.c_str());
+            continue;
+        }
+        GroupData gd;
+        if (!readWav(hp, gd.samples, gd.sr, gd.ch)) {
+            LOG_E("Hitsound: Failed to read WAV for '%s'", g.type.c_str());
+            continue;
+        }
+        gd.lenFrames = (int)gd.samples.size() / gd.ch;
+        float dur = (float)gd.lenFrames / (float)gd.sr;
+        if (dur > maxHitSec) maxHitSec = dur;
+        wavData[g.type] = gd;
     }
+    if (wavData.empty()) return false;
     if (onProgress) onProgress(5.0f);
 
+    int sr = 44100;
     m_sampleRate = sr;
-    int hitLenFrames = (int)hitSamples.size()/ch;
-    float pad = hitLenFrames>0 ? (float)hitLenFrames/(float)sr+1.0f : 2.0f;
-    int totalFrames = (int)((totalDuration+pad)*(float)sr);
-
-    std::vector<double> sorted=timestamps;
-    std::sort(sorted.begin(),sorted.end());
-    int totalHits=(int)sorted.size();
-
-    // Parallel mixing: each thread processes a chunk with per-sample softClip
-    unsigned numThreads = std::max(1u, std::thread::hardware_concurrency());
-    numThreads = std::min(numThreads, (unsigned)(totalHits / 500 + 1));
+    int totalFrames = (int)((totalDuration + maxHitSec + 1.0f) * sr);
     size_t bufSize = (size_t)totalFrames * 2;
-    int chunkSize = (totalHits + (int)numThreads - 1) / (int)numThreads;
 
-    std::vector<std::future<std::vector<float>>> futures;
-    for (unsigned t = 0; t < numThreads; t++) {
-        int start = (int)t * chunkSize;
-        int end = std::min(start + chunkSize, totalHits);
-        if (start >= end) continue;
-
-        futures.push_back(std::async(std::launch::async, [&, start, end]() {
-            std::vector<float> localBuf(bufSize, 0.0f);
-            for (int idx = start; idx < end; idx++) {
-                double ts = sorted[idx];
-                if (ts < 0.0f) continue;
-                int sf = (int)(ts * (float)sr);
-                int cl = hitLenFrames;
-                if (sf + cl > totalFrames) cl = totalFrames - sf;
-                if (cl <= 0) continue;
-                // Float addition — no clamping during mixing (preserves dynamics at high density)
-                for (int i = 0; i < cl; i++) {
-                    float hv = hitSamples[(size_t)i * (size_t)ch];
-                    size_t pos = (size_t)(sf + i) * 2;
-                    localBuf[pos]     += hv;
-                    localBuf[pos + 1] += hv;
-                }
-            }
-            return localBuf;
-        }));
-    }
-
-    // Merge thread results (pure addition — hard-clip was already applied per-sample)
     m_buffer.assign(bufSize, 0.0f);
-    for (auto& fut : futures) {
-        auto localBuf = fut.get();
-        for (size_t i = 0; i < bufSize; i++)
-            m_buffer[i] = m_buffer[i] + localBuf[i];
+
+    int totalHits = 0;
+    for (auto& g : groups) totalHits += (int)g.timestamps.size();
+    int processed = 0;
+
+    for (auto& g : groups) {
+        if (g.type == "None" || g.type.empty()) continue;
+        auto it = wavData.find(g.type);
+        if (it == wavData.end()) continue;
+
+        auto& gd = it->second;
+        float volScale = g.volume / 100.0f;
+
+        auto sorted = g.timestamps;
+        std::sort(sorted.begin(), sorted.end());
+
+        for (double ts : sorted) {
+            if (ts < 0.0) continue;
+            int sf = (int)(ts * (double)sr);
+            int cl = gd.lenFrames;
+            if (sf + cl > totalFrames) cl = totalFrames - sf;
+            if (cl <= 0) continue;
+            for (int i = 0; i < cl; i++) {
+                float hv = gd.samples[(size_t)i * (size_t)gd.ch] * volScale;
+                size_t pos = (size_t)(sf + i) * 2;
+                m_buffer[pos]     += hv;
+                m_buffer[pos + 1] += hv;
+            }
+            processed++;
+        }
     }
 
     if (onProgress) onProgress(100.0f);
-    LOG_I("Hitsound: Synthesized %d hits into %.1fs buffer", totalHits, totalDuration);
-    m_synthesized=true;
+    LOG_I("Hitsound: Synthesized %d hits from %zu groups into %.1fs buffer",
+          processed, groups.size(), totalDuration);
+    m_synthesized = true;
     return true;
 }
 

@@ -6,6 +6,12 @@
 
 using HitsoundProgressCb = std::function<void(float percent)>;
 
+struct HitsoundTimestampGroup {
+    std::string type;               // "Kick", "Snare", etc.
+    float volume = 100.0f;          // 0-100
+    std::vector<double> timestamps; // seconds
+};
+
 class HitsoundManager {
 public:
     HitsoundManager();
@@ -21,7 +27,7 @@ public:
     void setEnabled(bool enabled);
     bool isEnabled() const { return m_enabled; }
 
-    bool preSynthesize(const std::vector<double>& timestamps, float totalDuration,
+    bool preSynthesize(const std::vector<HitsoundTimestampGroup>& groups, float totalDuration,
                        HitsoundProgressCb onProgress = nullptr);
 
     // Read-only access for mixer

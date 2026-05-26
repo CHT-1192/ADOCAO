@@ -52,8 +52,7 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
     report(progress, 0.80f, "Synthesizing hitsounds...");
     if (cfg.enableHitsounds) {
         result.hitsounds.init();
-        result.hitsounds.setHitsoundType(result.level->settings.hitsound);
-        result.hitsounds.preSynthesize(result.playback.getHitsoundTimestamps(),
+        result.hitsounds.preSynthesize(result.playback.getHitsoundTimestampGroups(),
                                        result.playback.totalDuration());
     }
 

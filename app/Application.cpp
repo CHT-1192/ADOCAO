@@ -110,8 +110,7 @@ int runApplication(bool debugConsole) {
         pb.init(lvl, true);
         HitsoundManager hm;
         hm.init();
-        hm.setHitsoundType(lvl.settings.hitsound);
-        if (!hm.preSynthesize(pb.getHitsoundTimestamps(), pb.totalDuration())) {
+        if (!hm.preSynthesize(pb.getHitsoundTimestampGroups(), pb.totalDuration())) {
             LOG_E("Export: pre-synthesis failed");
             glfwTerminate();
             return 1;

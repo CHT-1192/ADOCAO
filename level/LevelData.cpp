@@ -302,6 +302,7 @@ void LevelData::processActions() {
     tileBPMs.assign(n, settings.bpm);
     tileHasTwirl.assign(n, false);
     tileHasSetSpeed.assign(n, false);
+    tileHitsounds.assign(n, "");  // empty = use global default
     tilePositionOffsets.assign(n, {});
 
     if (actions.is_null() || !actions.is_array()) return;
@@ -333,6 +334,13 @@ void LevelData::processActions() {
                 tilePositionOffsets[floor].offsetX = a["positionOffset"][0].get<float>();
                 tilePositionOffsets[floor].offsetY = a["positionOffset"][1].get<float>();
                 tilePositionOffsets[floor].justThisTile = parseBool(a, "justThisTile", false);
+            }
+        } else if (etype == "SetHitsound") {
+            std::string hs = a.value("hitsound", std::string());
+            if (!hs.empty() && floor >= 0 && floor < n) {
+                // Propagate to all subsequent tiles (like Re_ADOJAS)
+                for (int k = floor; k < n; k++)
+                    tileHitsounds[k] = hs;
             }
         }
     }

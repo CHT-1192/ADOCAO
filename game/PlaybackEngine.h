@@ -2,6 +2,7 @@
 
 #include "level/LevelData.h"
 #include "Planet.h"
+#include "audio/HitsoundManager.h"
 #include <memory>
 #include <vector>
 
@@ -33,6 +34,7 @@ public:
     const std::vector<float>& tileBPMPerTile() const { return m_tileBPM; }
     float totalDuration() const;
     std::vector<double> getHitsoundTimestamps() const;
+    std::vector<struct HitsoundTimestampGroup> getHitsoundTimestampGroups() const;
 
 private:
     const LevelData* m_level = nullptr;

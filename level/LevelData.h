@@ -51,6 +51,7 @@ struct LevelData {
     std::vector<float> tileBPMs;      // BPM for each tile (after SetSpeed events)
     std::vector<bool>  tileHasTwirl;  // true if tile has a Twirl event
     std::vector<bool>  tileHasSetSpeed; // true if tile has a SetSpeed event
+    std::vector<std::string> tileHitsounds;  // per-tile hitsound type override
     std::vector<TilePositionOffset> tilePositionOffsets;
 
     using ProgressCb = std::function<void(float pct, const char* stage)>;
