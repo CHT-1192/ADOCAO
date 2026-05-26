@@ -441,12 +441,12 @@ void PlaybackEngine::computePlanetTrails() const {
         redXY[i * 2] = r.x; redXY[i * 2 + 1] = r.y;
         blueXY[i * 2] = b.x; blueXY[i * 2 + 1] = b.y;
     }
-    // Log first and last trail points for debugging
     static int callCount = 0;
-    if (callCount == 0) {
-        LOG_I("Trail: t=%.3f, red[0]=(%.1f,%.1f) red[79]=(%.1f,%.1f)",
-              t, redXY[0], redXY[1], redXY[158], redXY[159]);
-        callCount = 1;
+    if (callCount < 3) {
+        LOG_I("Trail: t=%.3f red[0]=(%.1f,%.1f) red[79]=(%.1f,%.1f) blue[0]=(%.1f,%.1f) blue[79]=(%.1f,%.1f)",
+              t, redXY[0], redXY[1], redXY[158], redXY[159],
+              blueXY[0], blueXY[1], blueXY[158], blueXY[159]);
+        callCount++;
     }
     m_redPlanet->setTrailPoints(redXY.data(), samples);
     m_bluePlanet->setTrailPoints(blueXY.data(), samples);
@@ -462,6 +462,7 @@ void PlaybackEngine::syncToAudio(float audioPosSec, float offsetSec) {
     float tSec = m_elapsedTime / 1000.0f;
     if (m_redPlanet)  m_redPlanet->update(tSec);
     if (m_bluePlanet) m_bluePlanet->update(tSec);
+    computePlanetTrails();  // DEBUG: call both to compare
 }
 
 void PlaybackEngine::updateWallClock(double wallClockSec) {
