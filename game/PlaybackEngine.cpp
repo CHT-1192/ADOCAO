@@ -441,6 +441,13 @@ void PlaybackEngine::computePlanetTrails() const {
         redXY[i * 2] = r.x; redXY[i * 2 + 1] = r.y;
         blueXY[i * 2] = b.x; blueXY[i * 2 + 1] = b.y;
     }
+    // Log first and last trail points for debugging
+    static int callCount = 0;
+    if (callCount == 0) {
+        LOG_I("Trail: t=%.3f, red[0]=(%.1f,%.1f) red[79]=(%.1f,%.1f)",
+              t, redXY[0], redXY[1], redXY[158], redXY[159]);
+        callCount = 1;
+    }
     m_redPlanet->setTrailPoints(redXY.data(), samples);
     m_bluePlanet->setTrailPoints(blueXY.data(), samples);
 }
