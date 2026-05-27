@@ -53,6 +53,8 @@ struct LevelData {
     std::vector<bool>  tileHasSetSpeed; // true if tile has a SetSpeed event
     std::vector<std::string> tileHitsounds;  // per-tile hitsound type override
     std::vector<TilePositionOffset> tilePositionOffsets;
+    std::vector<std::string> tileFillColors;   // per-tile fill hex color
+    std::vector<std::string> tileStrokeColors; // per-tile stroke hex color
 
     void releaseMemory();  // free data no longer needed after loading
 

@@ -302,8 +302,10 @@ void LevelData::processActions() {
     tileBPMs.assign(n, settings.bpm);
     tileHasTwirl.assign(n, false);
     tileHasSetSpeed.assign(n, false);
-    tileHitsounds.assign(n, "");  // empty = use global default
+    tileHitsounds.assign(n, "");
     tilePositionOffsets.assign(n, {});
+    tileFillColors.assign(n, settings.trackColor);
+    tileStrokeColors.assign(n, settings.secondaryTrackColor);
 
     if (actions.is_null() || !actions.is_array()) return;
 
@@ -338,9 +340,19 @@ void LevelData::processActions() {
         } else if (etype == "SetHitsound") {
             std::string hs = a.value("hitsound", std::string());
             if (!hs.empty() && floor >= 0 && floor < n) {
-                // Propagate to all subsequent tiles (like Re_ADOJAS)
                 for (int k = floor; k < n; k++)
                     tileHitsounds[k] = hs;
+            }
+        } else if (etype == "ColorTrack") {
+            std::string fc = a.value("trackColor", std::string());
+            std::string sc = a.value("secondaryTrackColor", std::string());
+            bool jtt = parseBool(a, "justThisTile", false);
+            if ((!fc.empty() || !sc.empty()) && floor >= 0 && floor < n) {
+                int end = jtt ? floor + 1 : n;
+                for (int k = floor; k < end; k++) {
+                    if (!fc.empty()) tileFillColors[k] = fc;
+                    if (!sc.empty()) tileStrokeColors[k] = sc;
+                }
             }
         }
     }
