@@ -54,6 +54,8 @@ struct LevelData {
     std::vector<std::string> tileHitsounds;  // per-tile hitsound type override
     std::vector<TilePositionOffset> tilePositionOffsets;
 
+    void releaseMemory();  // free data no longer needed after loading
+
     using ProgressCb = std::function<void(float pct, const char* stage)>;
 
     bool loadFromFile(const std::string& filepath, ProgressCb onProgress = nullptr);

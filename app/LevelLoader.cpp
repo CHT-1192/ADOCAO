@@ -56,5 +56,8 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
                                        result.playback.totalDuration());
     }
 
+    // Release data no longer needed (angleData, actions, position offsets)
+    result.level->releaseMemory();
+
     report(progress, 1.0f, "Ready!");
 }

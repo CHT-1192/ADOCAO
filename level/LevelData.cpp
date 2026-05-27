@@ -395,6 +395,16 @@ void LevelData::applyPositionTrackOffsets() {
     }
 }
 
+void LevelData::releaseMemory() {
+    // angleData only needed for precalculateTiming + calculateTilePositions
+    std::vector<double>().swap(angleData);
+    // actions JSON only needed for processActions + precalculateTiming
+    actions = nlohmann::json();
+    // tilePositionOffsets applied; no longer needed
+    tilePositionOffsets.clear();
+    tilePositionOffsets.shrink_to_fit();
+}
+
 void LevelData::convertPathToAngles() {
     if (pathData.empty()) return;
 
