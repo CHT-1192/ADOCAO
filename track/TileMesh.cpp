@@ -189,8 +189,8 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
 
 bool TileMesh::frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt) {
     if (!cache.valid) return true;
-    return std::abs(cache.viewL - vl) > 0.5f || std::abs(cache.viewR - vr) > 0.5f
-        || std::abs(cache.viewB - vb) > 0.5f || std::abs(cache.viewT - vt) > 0.5f;
+    return std::abs((float)cache.vl - vl) > 0.5f || std::abs((float)cache.vr - vr) > 0.5f
+        || std::abs((float)cache.vb - vb) > 0.5f || std::abs((float)cache.vt - vt) > 0.5f;
 }
 
 void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const {
@@ -202,19 +202,30 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
         const auto& sg = m_shapes[si];
         auto& cache = m_visCaches[si];
 
-        // Cull in world-space double, upload camera-relative float
-        cache.offsets.clear();
-        cache.offsets.reserve(sg.instances.size() * 3);
-        for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
-            const auto& inst = sg.instances[ii];
-            if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
-                continue;
-            cache.offsets.push_back((float)(inst.offX - camX));
-            cache.offsets.push_back((float)(inst.offY - camY));
-            cache.offsets.push_back(inst.offZ);
+        // Rebuild visible set only when frustum moves enough
+        if (!cache.valid || frustumChanged(cache, (float)vl, (float)vr, (float)vb, (float)vt)) {
+            cache.indices.clear();
+            cache.indices.reserve(sg.instances.size());
+            for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
+                const auto& inst = sg.instances[ii];
+                if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
+                    continue;
+                cache.indices.push_back(ii);
+            }
+            cache.vl = vl; cache.vr = vr; cache.vb = vb; cache.vt = vt;
+            cache.valid = true;
         }
 
-        if (cache.offsets.empty()) continue;
+        if (cache.indices.empty()) continue;
+
+        // Recompute camera-relative offsets (cheap — only visible instances)
+        cache.offsets.resize(cache.indices.size() * 3);
+        for (size_t i = 0; i < cache.indices.size(); i++) {
+            const auto& inst = sg.instances[cache.indices[i]];
+            cache.offsets[i * 3]     = (float)(inst.offX - camX);
+            cache.offsets[i * 3 + 1] = (float)(inst.offY - camY);
+            cache.offsets[i * 3 + 2] = inst.offZ;
+        }
 
         glBindVertexArray(sg.vao);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);

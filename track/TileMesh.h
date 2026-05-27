@@ -49,8 +49,9 @@ private:
 
     // Visibility cache: avoid recomputing visible set when camera hasn't moved
     struct VisibilityCache {
-        std::vector<float> offsets;  // cached visible instance offsets
-        float viewL=0, viewR=0, viewB=0, viewT=0;
+        std::vector<int>   indices;   // visible instance indices (rebuilt on frustum change)
+        std::vector<float> offsets;   // camera-relative offsets (recomputed each frame)
+        double vl=0, vr=0, vb=0, vt=0;
         bool valid = false;
     };
     mutable std::vector<VisibilityCache> m_visCaches;  // per-shape-group
