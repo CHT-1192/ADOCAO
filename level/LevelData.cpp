@@ -414,8 +414,6 @@ void LevelData::releaseMemory() {
     decorations = nlohmann::json();
     tilePositionOffsets.clear(); tilePositionOffsets.shrink_to_fit();
     tileBPMs.clear(); tileBPMs.shrink_to_fit();
-    tileHasTwirl.clear(); tileHasTwirl.shrink_to_fit();
-    tileHasSetSpeed.clear(); tileHasSetSpeed.shrink_to_fit();
     tileFillColors.clear(); tileFillColors.shrink_to_fit();
     tileStrokeColors.clear(); tileStrokeColors.shrink_to_fit();
 }
