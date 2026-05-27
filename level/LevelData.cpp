@@ -408,13 +408,16 @@ void LevelData::applyPositionTrackOffsets() {
 }
 
 void LevelData::releaseMemory() {
-    // angleData only needed for precalculateTiming + calculateTilePositions
+    // Free large arrays no longer needed after loading
     std::vector<double>().swap(angleData);
-    // actions JSON only needed for processActions + precalculateTiming
     actions = nlohmann::json();
-    // tilePositionOffsets applied; no longer needed
-    tilePositionOffsets.clear();
-    tilePositionOffsets.shrink_to_fit();
+    decorations = nlohmann::json();
+    tilePositionOffsets.clear(); tilePositionOffsets.shrink_to_fit();
+    tileBPMs.clear(); tileBPMs.shrink_to_fit();
+    tileHasTwirl.clear(); tileHasTwirl.shrink_to_fit();
+    tileHasSetSpeed.clear(); tileHasSetSpeed.shrink_to_fit();
+    tileFillColors.clear(); tileFillColors.shrink_to_fit();
+    tileStrokeColors.clear(); tileStrokeColors.shrink_to_fit();
 }
 
 void LevelData::convertPathToAngles() {
