@@ -90,25 +90,25 @@ void PlaybackEngine::precalculateTiming() {
         m_tileStartAngles[i] = startAngle;
 
         // --- Relative angle from absolute direction (ADOFAI-JS _parseAngle) ---
-        float rawAngleData = (i < (int)angleData.size()) ? angleData[i] : 180.0f;
-        float relAngle;
-        if (rawAngleData == 999.0f) {
-            relAngle = 0.0f;
-            float prevAbs = (i > 0) ? angleData[i - 1] : 0.0f;
-            angleDir = std::fmod(prevAbs, 360.0f);
-            if (angleDir < 0) angleDir += 360.0f;
+        double rawAngleData = (i < (int)angleData.size()) ? angleData[i] : 180.0;
+        double relAngle;
+        if (rawAngleData == 999.0) {
+            relAngle = 0.0;
+            double prevAbs = (i > 0) ? angleData[i - 1] : 0.0;
+            angleDir = std::fmod(prevAbs, 360.0);
+            if (angleDir < 0) angleDir += 360.0;
         } else {
-            float delta = std::fmod(angleDir - rawAngleData, 360.0f);
+            double delta = std::fmod(angleDir - rawAngleData, 360.0);
             if (delta < 0) delta += 360.0f;
             if (!isCW) {
-                relAngle = 360.0f - delta;
-                if (relAngle >= 360.0f) relAngle -= 360.0f;
+                relAngle = 360.0 - delta;
+                if (relAngle >= 360.0) relAngle -= 360.0;
             } else {
                 relAngle = delta;
             }
-            if (delta < 0.0001f) relAngle = 360.0f;  // only true straight-ahead; not 0.01°
-            angleDir = std::fmod(rawAngleData + 180.0f, 360.0f);
-            if (angleDir < 0) angleDir += 360.0f;
+            if (delta < 0.0001) relAngle = 360.0;
+            angleDir = std::fmod(rawAngleData + 180.0, 360.0);
+            if (angleDir < 0) angleDir += 360.0;
         }
         float totalAngle = relAngle * 3.14159265f / 180.0f;
         if (isCW) totalAngle = -totalAngle;

@@ -35,7 +35,7 @@ struct LevelData {
     };
 
     Settings settings;
-    std::vector<float> angleData;
+    std::vector<double> angleData;
     std::string        pathData;       // raw pathData string (alternative to angleData)
     std::vector<Tile>  tiles;
     nlohmann::json     actions;       // raw JSON array

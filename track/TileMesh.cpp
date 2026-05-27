@@ -57,7 +57,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
     for (int i = 0; i < n; i++) {
         float startAngle = (i == 0) ? -180.0f : tiles[i-1].direction - 180.0f;
         float endAngle   = tiles[i].direction;
-        bool midspin = (i < (int)level.angleData.size() && level.angleData[i] == 999.0f);
+        bool midspin = (i < (int)level.angleData.size() && level.angleData[i] == 999.0);
 
         auto key = std::make_tuple((int)std::round(startAngle*100), (int)std::round(endAngle*100), midspin);
         shapeGroups[key].push_back(i);
