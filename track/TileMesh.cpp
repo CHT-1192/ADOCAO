@@ -70,6 +70,8 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
     size_t shapeIdx = 0;
 
     for (auto& [key, tileIndices] : shapeGroups) {
+        // Sort descending: high index first = drawn first (Re_ADOJAS renderOrder = -tileIndex)
+        std::sort(tileIndices.begin(), tileIndices.end(), std::greater<int>());
         auto [sa, ea, mid] = key;
         float startAngle = sa / 100.0f, endAngle = ea / 100.0f;
 
@@ -122,7 +124,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         for (int i : tileIndices) {
             double wx = tiles[i].position[0];
             double wy = tiles[i].position[1];
-            float wz = 2.0f - (float)i * 0.001f;
+            float wz = 0.0f;  // constant Z — draw order (descending) handles layering
             // Per-tile color from ColorTrack events, fallback to global
             float fr = fillR, fg = fillG, fb = fillB;
             float sr = outR, sg = outG, sb = outB;
