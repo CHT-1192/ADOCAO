@@ -12,6 +12,9 @@
 struct TileInstance {
     double offX, offY;       // world position (double for precision)
     float  offZ;
+    float  fillR, fillG, fillB;     // per-instance fill color
+    float  strokeR, strokeG, strokeB; // per-instance stroke color
+    float  opacity;
     double minX, minY, maxX, maxY;  // world-space AABB (double for culling)
 };
 

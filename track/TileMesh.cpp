@@ -71,10 +71,9 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         auto [sa, ea, mid] = key;
         float startAngle = sa / 100.0f, endAngle = ea / 100.0f;
 
-        // Cache key = shape params + colors
+        // Cache key = shape params only (colors are per-instance)
         char kbuf[64];
-        snprintf(kbuf, sizeof(kbuf), "tile_%d_%d_%d_%s_%s", sa, ea, (int)mid,
-                 fillColorHex.c_str(), strokeColorHex.c_str());
+        snprintf(kbuf, sizeof(kbuf), "tile_%d_%d_%d", sa, ea, (int)mid);
         std::string cacheKey(kbuf);
 
         std::vector<float> interleaved;
@@ -94,26 +93,17 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
             else
                 createTileMesh(startAngle, endAngle, sc);
 
-            // Remap colors + offset outline Z
-            for (size_t ci = 0, vi = 0; ci < sc.colors.size(); ci += 3, vi += 3) {
-                if (sc.colors[ci] == 0.0f) {
-                    sc.colors[ci]=outR; sc.colors[ci+1]=outG; sc.colors[ci+2]=outB;
-                    sc.verts[vi + 2] -= 0.001f;
-                } else {
-                    sc.colors[ci]=fillR; sc.colors[ci+1]=fillG; sc.colors[ci+2]=fillB;
-                }
+            // Offset stroke Z + interleave: [x,y,z, type]
+            for (size_t vi = 0; vi < sc.types.size(); vi++) {
+                if (sc.types[vi] == 0.0f) sc.verts[vi * 3 + 2] -= 0.001f;
             }
-
-            // Interleave vertex position + color: [x,y,z, r,g,b, ...]
             size_t vc = sc.verts.size() / 3;
-            interleaved.reserve(vc * 6);
+            interleaved.reserve(vc * 4);
             for (size_t vi = 0; vi < vc; vi++) {
                 interleaved.push_back(sc.verts[vi*3]);
                 interleaved.push_back(sc.verts[vi*3+1]);
                 interleaved.push_back(sc.verts[vi*3+2]);
-                interleaved.push_back(sc.colors[vi*3]);
-                interleaved.push_back(sc.colors[vi*3+1]);
-                interleaved.push_back(sc.colors[vi*3+2]);
+                interleaved.push_back(sc.types[vi]);
             }
 
             idxCopy.assign(sc.indices.begin(), sc.indices.end());
@@ -121,28 +111,31 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
             s_geoCache[cacheKey] = {interleaved, idxCopy, idxCount};
         }
 
-        // Collect instance data (vec3: x, y, z)
-        std::vector<float> instOffsets;
+        // Collect instance data: [offX,offY,offZ, fillR,fillG,fillB, strokeR,strokeG,strokeB, opacity]
+        std::vector<float> instData;
         std::vector<TileInstance> instances;
-        instOffsets.reserve(tileIndices.size() * 3);
+        instData.reserve(tileIndices.size() * 10);
         instances.reserve(tileIndices.size());
 
         for (int i : tileIndices) {
             double wx = tiles[i].position[0];
             double wy = tiles[i].position[1];
             float wz = 2.0f - (float)i * 0.001f;
-            instOffsets.push_back((float)wx);
-            instOffsets.push_back((float)wy);
-            instOffsets.push_back(wz);
+            instData.push_back((float)wx);
+            instData.push_back((float)wy);
+            instData.push_back(wz);
+            instData.push_back(fillR); instData.push_back(fillG); instData.push_back(fillB);
+            instData.push_back(outR);  instData.push_back(outG);  instData.push_back(outB);
+            instData.push_back(1.0f);  // opacity
             double minX=1e99,minY=1e99,maxX=-1e99,maxY=-1e99;
-            size_t vertCount = interleaved.size() / 6;
+            size_t vertCount = interleaved.size() / 4;  // [x,y,z,type]
             for (size_t vi = 0; vi < vertCount; vi++) {
-                double lx = (double)interleaved[vi*6] + wx;
-                double ly = (double)interleaved[vi*6+1] + wy;
+                double lx = (double)interleaved[vi*4] + wx;
+                double ly = (double)interleaved[vi*4+1] + wy;
                 if (lx<minX)minX=lx; if (lx>maxX)maxX=lx;
                 if (ly<minY)minY=ly; if (ly>maxY)maxY=ly;
             }
-            instances.push_back({wx, wy, wz, minX, minY, maxX, maxY});
+            instances.push_back({wx, wy, wz, fillR, fillG, fillB, outR, outG, outB, 1.0f, minX, minY, maxX, maxY});
         }
 
         // Upload GPU buffers
@@ -153,27 +146,42 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         glGenVertexArrays(1, &sg.vao);
         glBindVertexArray(sg.vao);
 
-        // Vertex VBO (local space, interleaved)
+        // Vertex VBO: [x,y,z, type] — 4 floats per vertex
         glGenBuffers(1, &sg.vbo);
         glBindBuffer(GL_ARRAY_BUFFER, sg.vbo);
         glBufferData(GL_ARRAY_BUFFER, interleaved.size()*sizeof(float), interleaved.data(), GL_STATIC_DRAW);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)0);
         glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)(3*sizeof(float)));
+        glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)(3*sizeof(float)));
 
         // Element buffer
         glGenBuffers(1, &sg.ebo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sg.ebo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, idxCopy.size()*sizeof(unsigned), idxCopy.data(), GL_STATIC_DRAW);
 
-        // Instance VBO (vec2 offsets, dynamic for visibility filtering)
+        // Instance VBO: [offX,offY,offZ, fillR,fillG,fillB, strokeR,strokeG,strokeB, opacity]
+        // 10 floats per instance, STRIDE = 10*sizeof(float)
+        GLsizei instStride = 10 * sizeof(float);
         glGenBuffers(1, &sg.instVbo);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferData(GL_ARRAY_BUFFER, instOffsets.size()*sizeof(float), instOffsets.data(), GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, instData.size()*sizeof(float), instData.data(), GL_DYNAMIC_DRAW);
+        // Location 2: aInstOffset (vec3 at offset 0)
         glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
-        glVertexAttribDivisor(2, 1); // per-instance
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, instStride, (void*)0);
+        glVertexAttribDivisor(2, 1);
+        // Location 3: iColor (vec3 at offset 3*sizeof(float))
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, instStride, (void*)(3*sizeof(float)));
+        glVertexAttribDivisor(3, 1);
+        // Location 4: iBgColor (vec3 at offset 6*sizeof(float))
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, instStride, (void*)(6*sizeof(float)));
+        glVertexAttribDivisor(4, 1);
+        // Location 5: iOpacity (float at offset 9*sizeof(float))
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, instStride, (void*)(9*sizeof(float)));
+        glVertexAttribDivisor(5, 1);
 
         glBindVertexArray(0);
         shapeIdx++;
@@ -218,20 +226,29 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
 
         if (cache.indices.empty()) continue;
 
-        // Recompute camera-relative offsets (cheap — only visible instances)
-        cache.offsets.resize(cache.indices.size() * 3);
+        // Recompute camera-relative offsets for visible instances: 10 floats per instance
+        cache.offsets.resize(cache.indices.size() * 10);
         for (size_t i = 0; i < cache.indices.size(); i++) {
             const auto& inst = sg.instances[cache.indices[i]];
-            cache.offsets[i * 3]     = (float)(inst.offX - camX);
-            cache.offsets[i * 3 + 1] = (float)(inst.offY - camY);
-            cache.offsets[i * 3 + 2] = inst.offZ;
+            cache.offsets[i * 10]     = (float)(inst.offX - camX);
+            cache.offsets[i * 10 + 1] = (float)(inst.offY - camY);
+            cache.offsets[i * 10 + 2] = inst.offZ;
+            cache.offsets[i * 10 + 3] = inst.fillR;
+            cache.offsets[i * 10 + 4] = inst.fillG;
+            cache.offsets[i * 10 + 5] = inst.fillB;
+            cache.offsets[i * 10 + 6] = inst.strokeR;
+            cache.offsets[i * 10 + 7] = inst.strokeG;
+            cache.offsets[i * 10 + 8] = inst.strokeB;
+            cache.offsets[i * 10 + 9] = inst.opacity;
         }
 
+        // Full re-upload (positions change per frame, colors static)
+        // For now upload all 10 floats per visible instance
         glBindVertexArray(sg.vao);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
         glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
         glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
-                                nullptr, (GLsizei)(cache.offsets.size() / 3));
+                                nullptr, (GLsizei)(cache.indices.size()));
         glBindVertexArray(0);
     }
 }
@@ -295,35 +312,36 @@ void TileMesh::buildIcons(const LevelData& level) {
 
         // Generate circle geometry with this color
         sc.clear();
-        createCircle(0.0f, 0.0f, ICON_RADIUS, cr, cgv, cb, sc, ICON_SEGMENTS);
+        createCircle(0.0f, 0.0f, ICON_RADIUS, 1.0f, sc, ICON_SEGMENTS);
 
-        // Interleave vertex data: [x,y,z, r,g,b, ...]
+        // Interleave: [x,y,z, type] — icons always type=1.0 (fill only)
         size_t vc = sc.verts.size() / 3;
         std::vector<float> interleaved;
-        interleaved.reserve(vc * 6);
+        interleaved.reserve(vc * 4);
         for (size_t vi = 0; vi < vc; vi++) {
             interleaved.push_back(sc.verts[vi*3]);
             interleaved.push_back(sc.verts[vi*3+1]);
             interleaved.push_back(sc.verts[vi*3+2]);
-            interleaved.push_back(sc.colors[vi*3]);
-            interleaved.push_back(sc.colors[vi*3+1]);
-            interleaved.push_back(sc.colors[vi*3+2]);
+            interleaved.push_back(sc.types[vi]);
         }
 
-        // Instance offsets + AABBs
-        std::vector<float> instOffsets;
+        // Instance data: [offX,offY,offZ, fillR,fillG,fillB, strokeR,strokeG,strokeB, opacity]
+        std::vector<float> instData;
         std::vector<TileInstance> instances;
-        instOffsets.reserve(grp.size() * 3);
+        instData.reserve(grp.size() * 10);
         instances.reserve(grp.size());
 
         for (auto& icon : grp) {
             double wx = tiles[icon.tileIdx].position[0];
             double wy = tiles[icon.tileIdx].position[1];
             float wz = icon.zOff;
-            instOffsets.push_back((float)wx);
-            instOffsets.push_back((float)wy);
-            instOffsets.push_back(wz);
-            instances.push_back({wx, wy, wz,
+            instData.push_back((float)wx);
+            instData.push_back((float)wy);
+            instData.push_back(wz);
+            instData.push_back(cr); instData.push_back(cgv); instData.push_back(cb);  // fill = icon color
+            instData.push_back(cr); instData.push_back(cgv); instData.push_back(cb);  // stroke = same
+            instData.push_back(1.0f);  // opacity
+            instances.push_back({wx, wy, wz, cr, cgv, cb, cr, cgv, cb, 1.0f,
                 wx - ICON_RADIUS, wy - ICON_RADIUS,
                 wx + ICON_RADIUS, wy + ICON_RADIUS});
         }
@@ -340,20 +358,30 @@ void TileMesh::buildIcons(const LevelData& level) {
         glBindBuffer(GL_ARRAY_BUFFER, sg.vbo);
         glBufferData(GL_ARRAY_BUFFER, interleaved.size()*sizeof(float), interleaved.data(), GL_STATIC_DRAW);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)0);
         glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)(3*sizeof(float)));
+        glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)(3*sizeof(float)));
 
         glGenBuffers(1, &sg.ebo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sg.ebo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sc.indices.size()*sizeof(unsigned), sc.indices.data(), GL_STATIC_DRAW);
 
+        GLsizei istr = 10 * sizeof(float);
         glGenBuffers(1, &sg.instVbo);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferData(GL_ARRAY_BUFFER, instOffsets.size()*sizeof(float), instOffsets.data(), GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, instData.size()*sizeof(float), instData.data(), GL_DYNAMIC_DRAW);
         glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, istr, (void*)0);
         glVertexAttribDivisor(2, 1);
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, istr, (void*)(3*sizeof(float)));
+        glVertexAttribDivisor(3, 1);
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, istr, (void*)(6*sizeof(float)));
+        glVertexAttribDivisor(4, 1);
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, istr, (void*)(9*sizeof(float)));
+        glVertexAttribDivisor(5, 1);
 
         glBindVertexArray(0);
 
