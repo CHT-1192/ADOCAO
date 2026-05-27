@@ -22,7 +22,7 @@ if "%PORTABLE%"=="1" (
     echo === Building ADOCAO-Portable (static linked) ===
     cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DADOCAO_PORTABLE=ON -DCMAKE_C_COMPILER="%MINGW64%\bin\gcc.exe" -DCMAKE_CXX_COMPILER="%MINGW64%\bin\g++.exe"
 ) else (
-    cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="%MINGW64%\bin\gcc.exe" -DCMAKE_CXX_COMPILER="%MINGW64%\bin\g++.exe"
+    cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DADOCAO_PORTABLE=OFF -DCMAKE_C_COMPILER="%MINGW64%\bin\gcc.exe" -DCMAKE_CXX_COMPILER="%MINGW64%\bin\g++.exe"
 )
 
 cmake --build . --parallel
