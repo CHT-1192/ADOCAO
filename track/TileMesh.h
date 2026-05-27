@@ -22,7 +22,8 @@ struct ShapeGroup {
     GLuint vao = 0;
     GLuint vbo = 0;       // local-space vertex data (x,y,z, r,g,b)
     GLuint ebo = 0;
-    GLuint instVbo = 0;   // per-instance vec2 offsets
+    GLuint instVbo = 0;   // per-instance offsets (3 floats, updated per-frame)
+    GLuint colorVbo = 0;  // per-instance colors (7 floats, static)
     unsigned indexCount = 0;
     std::vector<TileInstance> instances;
 };

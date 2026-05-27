@@ -21,6 +21,7 @@ TileMesh& TileMesh::operator=(TileMesh&& o) noexcept { if(this!=&o){destroy();m_
 void TileMesh::destroy() {
     for (auto& s : m_shapes) {
         if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
+        if (s.colorVbo) glDeleteBuffers(1, &s.colorVbo);
         if (s.ebo) glDeleteBuffers(1, &s.ebo);
         if (s.vbo) glDeleteBuffers(1, &s.vbo);
         if (s.vao) glDeleteVertexArrays(1, &s.vao);
@@ -28,6 +29,7 @@ void TileMesh::destroy() {
     m_shapes.clear();
     for (auto& s : m_iconGroups) {
         if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
+        if (s.colorVbo) glDeleteBuffers(1, &s.colorVbo);
         if (s.ebo) glDeleteBuffers(1, &s.ebo);
         if (s.vbo) glDeleteBuffers(1, &s.vbo);
         if (s.vao) glDeleteVertexArrays(1, &s.vao);
@@ -160,27 +162,46 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sg.ebo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, idxCopy.size()*sizeof(unsigned), idxCopy.data(), GL_STATIC_DRAW);
 
-        // Instance VBO: [offX,offY,offZ, fillR,fillG,fillB, strokeR,strokeG,strokeB, opacity]
-        // 10 floats per instance, STRIDE = 10*sizeof(float)
-        GLsizei instStride = 10 * sizeof(float);
+        // Split instance data: positions (3 floats, updated per-frame) vs colors (7 floats, static)
+        // Build position-only array for instVbo
+        std::vector<float> posOnly;
+        posOnly.reserve(tileIndices.size() * 3);
+        std::vector<float> colorOnly;
+        colorOnly.reserve(tileIndices.size() * 7);
+        for (int i = 0; i < (int)tileIndices.size(); i++) {
+            posOnly.push_back(instData[i*10]);
+            posOnly.push_back(instData[i*10+1]);
+            posOnly.push_back(instData[i*10+2]);
+            colorOnly.push_back(instData[i*10+3]); // fillR
+            colorOnly.push_back(instData[i*10+4]); // fillG
+            colorOnly.push_back(instData[i*10+5]); // fillB
+            colorOnly.push_back(instData[i*10+6]); // strokeR
+            colorOnly.push_back(instData[i*10+7]); // strokeG
+            colorOnly.push_back(instData[i*10+8]); // strokeB
+            colorOnly.push_back(instData[i*10+9]); // opacity
+        }
+
+        // Instance pos VBO (location 2): vec3 offsets, updated per-frame
         glGenBuffers(1, &sg.instVbo);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferData(GL_ARRAY_BUFFER, instData.size()*sizeof(float), instData.data(), GL_DYNAMIC_DRAW);
-        // Location 2: aInstOffset (vec3 at offset 0)
+        glBufferData(GL_ARRAY_BUFFER, posOnly.size()*sizeof(float), posOnly.data(), GL_DYNAMIC_DRAW);
         glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, instStride, (void*)0);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
         glVertexAttribDivisor(2, 1);
-        // Location 3: iColor (vec3 at offset 3*sizeof(float))
+
+        // Instance color VBO (locations 3-5): colors, static
+        GLsizei cStride = 7 * sizeof(float);
+        glGenBuffers(1, &sg.colorVbo);
+        glBindBuffer(GL_ARRAY_BUFFER, sg.colorVbo);
+        glBufferData(GL_ARRAY_BUFFER, colorOnly.size()*sizeof(float), colorOnly.data(), GL_STATIC_DRAW);
         glEnableVertexAttribArray(3);
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, instStride, (void*)(3*sizeof(float)));
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, cStride, (void*)0);
         glVertexAttribDivisor(3, 1);
-        // Location 4: iBgColor (vec3 at offset 6*sizeof(float))
         glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, instStride, (void*)(6*sizeof(float)));
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, cStride, (void*)(3*sizeof(float)));
         glVertexAttribDivisor(4, 1);
-        // Location 5: iOpacity (float at offset 9*sizeof(float))
         glEnableVertexAttribArray(5);
-        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, instStride, (void*)(9*sizeof(float)));
+        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, cStride, (void*)(6*sizeof(float)));
         glVertexAttribDivisor(5, 1);
 
         glBindVertexArray(0);
@@ -226,24 +247,16 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
 
         if (cache.indices.empty()) continue;
 
-        // Recompute camera-relative offsets for visible instances: 10 floats per instance
-        cache.offsets.resize(cache.indices.size() * 10);
+        // Recompute camera-relative offsets: 3 floats per visible instance (position only)
+        cache.offsets.resize(cache.indices.size() * 3);
         for (size_t i = 0; i < cache.indices.size(); i++) {
             const auto& inst = sg.instances[cache.indices[i]];
-            cache.offsets[i * 10]     = (float)(inst.offX - camX);
-            cache.offsets[i * 10 + 1] = (float)(inst.offY - camY);
-            cache.offsets[i * 10 + 2] = inst.offZ;
-            cache.offsets[i * 10 + 3] = inst.fillR;
-            cache.offsets[i * 10 + 4] = inst.fillG;
-            cache.offsets[i * 10 + 5] = inst.fillB;
-            cache.offsets[i * 10 + 6] = inst.strokeR;
-            cache.offsets[i * 10 + 7] = inst.strokeG;
-            cache.offsets[i * 10 + 8] = inst.strokeB;
-            cache.offsets[i * 10 + 9] = inst.opacity;
+            cache.offsets[i * 3]     = (float)(inst.offX - camX);
+            cache.offsets[i * 3 + 1] = (float)(inst.offY - camY);
+            cache.offsets[i * 3 + 2] = inst.offZ;
         }
 
-        // Full re-upload (positions change per frame, colors static)
-        // For now upload all 10 floats per visible instance
+        // Upload position VBO only (colors are static in colorVbo)
         glBindVertexArray(sg.vao);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
         glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
@@ -366,21 +379,32 @@ void TileMesh::buildIcons(const LevelData& level) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sg.ebo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sc.indices.size()*sizeof(unsigned), sc.indices.data(), GL_STATIC_DRAW);
 
-        GLsizei istr = 10 * sizeof(float);
+        // Position VBO (3 floats)
+        std::vector<float> ipos; ipos.reserve(grp.size() * 3);
+        std::vector<float> icols; icols.reserve(grp.size() * 7);
+        for (int i = 0; i < (int)grp.size(); i++) {
+            ipos.push_back(instData[i*10]); ipos.push_back(instData[i*10+1]); ipos.push_back(instData[i*10+2]);
+            for (int j = 3; j < 10; j++) icols.push_back(instData[i*10+j]);
+        }
         glGenBuffers(1, &sg.instVbo);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferData(GL_ARRAY_BUFFER, instData.size()*sizeof(float), instData.data(), GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, ipos.size()*sizeof(float), ipos.data(), GL_DYNAMIC_DRAW);
         glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, istr, (void*)0);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
         glVertexAttribDivisor(2, 1);
+
+        GLsizei cstr = 7 * sizeof(float);
+        glGenBuffers(1, &sg.colorVbo);
+        glBindBuffer(GL_ARRAY_BUFFER, sg.colorVbo);
+        glBufferData(GL_ARRAY_BUFFER, icols.size()*sizeof(float), icols.data(), GL_STATIC_DRAW);
         glEnableVertexAttribArray(3);
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, istr, (void*)(3*sizeof(float)));
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, cstr, (void*)0);
         glVertexAttribDivisor(3, 1);
         glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, istr, (void*)(6*sizeof(float)));
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, cstr, (void*)(3*sizeof(float)));
         glVertexAttribDivisor(4, 1);
         glEnableVertexAttribArray(5);
-        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, istr, (void*)(9*sizeof(float)));
+        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, cstr, (void*)(6*sizeof(float)));
         glVertexAttribDivisor(5, 1);
 
         glBindVertexArray(0);
