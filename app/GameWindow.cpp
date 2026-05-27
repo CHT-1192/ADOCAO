@@ -267,11 +267,13 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
         camera.setAspect((float)vp.w, (float)vp.h);
 
-        // Draw tiles with depth test — Z order (2.0 - i*0.001) ensures correct layering
+        // Draw tiles (no depth test — all visible regardless of Z)
+        glDisable(GL_DEPTH_TEST);
         tileShader.use();
         tileShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
         float vl,vr,vb,vt; camera.frustumBounds(vl,vr,vb,vt);
         tileMesh.draw(vl, vr, vb, vt, camera.targetX(), camera.targetY());
+        glEnable(GL_DEPTH_TEST);
 
         // Draw trails behind planets (no depth test)
         if (playback.isPlaying() && playback.redPlanet() && playback.redPlanet()->trail) {
