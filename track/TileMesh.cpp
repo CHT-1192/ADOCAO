@@ -99,7 +99,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
 
             // Offset stroke Z + interleave: [x,y,z, type]
             for (size_t vi = 0; vi < sc.types.size(); vi++) {
-                if (sc.types[vi] == 0.0f) sc.verts[vi * 3 + 2] -= 0.001f;
+                if (sc.types[vi] == 0.0f) sc.verts[vi * 3 + 2] += 0.001f;
             }
             size_t vc = sc.verts.size() / 3;
             interleaved.reserve(vc * 4);
