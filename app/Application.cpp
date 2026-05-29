@@ -178,6 +178,33 @@ int runApplicationFromCLI(const LauncherConfig& cfg, bool debugConsole) {
           config.levelPath.c_str(), config.musicPath.c_str(),
           config.resolutionW, config.resolutionH, config.fullscreen);
 
+    if (config.exportHitsounds) {
+        LevelData lvl;
+        if (!lvl.loadFromFile(config.levelPath)) {
+            LOG_E("Failed to load level for export");
+            glfwTerminate();
+            return 1;
+        }
+        PlaybackEngine pb;
+        pb.init(lvl, true);
+        HitsoundManager hm;
+        hm.init();
+        auto groups = pb.getHitsoundTimestampGroups();
+        if (!hm.preSynthesize(groups, pb.totalDuration())) {
+            LOG_E("Export: pre-synthesis failed");
+            glfwTerminate();
+            return 1;
+        }
+        std::string outPath = config.levelPath;
+        auto dot = outPath.rfind('.');
+        if (dot != std::string::npos) outPath = outPath.substr(0, dot);
+        outPath += "_hitsounds.wav";
+        hm.writeWav(outPath);
+        LOG_I("Exported hitsounds to %s", outPath.c_str());
+        glfwTerminate();
+        return 0;
+    }
+
     LoadResult loadResult;
     long long cliFsize = fileSize(config.levelPath);
     if (cliFsize >= 0 && cliFsize < SKIP_LOADING_THRESHOLD) {

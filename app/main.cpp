@@ -20,8 +20,12 @@ int main(int argc, char* argv[]) {
         else if (strcmp(argv[i], "--no-auto-stroke") == 0)        cli.autoStroke = false;
         else if (strcmp(argv[i], "--no-hitsound") == 0)           cli.enableHitsounds = false;
         else if (strcmp(argv[i], "--no-trail") == 0)              cli.showTrail = false;
+        else if (strcmp(argv[i], "--export") == 0)                cli.exportHitsounds = true;
     }
 
+    if (cli.exportHitsounds && !cli.levelPath.empty()) {
+        return runApplicationFromCLI(cli, debug);
+    }
     if (!cli.levelPath.empty()) {
         return runApplicationFromCLI(cli, debug);
     }
