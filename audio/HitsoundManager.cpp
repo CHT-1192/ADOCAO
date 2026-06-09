@@ -155,8 +155,9 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
 
         std::string hp = hitsoundPath(g.type);
         if (hp.empty()) {
-            LOG_E("Hitsound: Unknown type '%s', skipping", g.type.c_str());
-            continue;
+            LOG_E("Hitsound: Unknown type '%s', redirecting to '%s'", g.type.c_str(), m_hitsoundType.c_str());
+            hp = hitsoundPath(m_hitsoundType);
+            if (hp.empty()) continue;
         }
         GroupData gd;
         if (!readWav(hp, gd.samples, gd.sr, gd.ch)) {
