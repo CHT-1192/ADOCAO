@@ -2,6 +2,7 @@
 
 #include "glad/gl_core.h"
 #include <string>
+#include <unordered_map>
 
 class Shader {
 public:
@@ -19,7 +20,7 @@ public:
 
     GLuint id() const { return m_program; }
 
-    // Uniform setters
+    // Uniform setters (location cached on first lookup)
     void setMat4(const char* name, const float* value) const;
     void setVec4(const char* name, float x, float y, float z, float w) const;
     void setFloat(const char* name, float v) const;
@@ -27,6 +28,9 @@ public:
 
 private:
     GLuint m_program = 0;
+    mutable std::unordered_map<std::string, GLint> m_uniformCache;
+
+    GLint getUniformLoc(const char* name) const;
 
     static GLuint compileShader(GLenum type, const char* src);
 };

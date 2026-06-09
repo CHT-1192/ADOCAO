@@ -5,6 +5,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
+#include <vector>
 
 Planet::Planet(const glm::vec3& color, bool showTrail, float r)
     : color(color), radius(r) {

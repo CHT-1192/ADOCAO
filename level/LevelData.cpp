@@ -309,6 +309,11 @@ void LevelData::processActions() {
 
     if (actions.is_null() || !actions.is_array()) return;
 
+    // Pre-index ColorTrack and SetHitsound events by floor for single-pass propagation
+    struct ColorEvt { std::string fc, sc; bool jtt; };
+    std::vector<ColorEvt> ctByFloor(n);
+    std::vector<std::string> hsByFloor(n);
+
     float currentBPM = settings.bpm;
 
     for (size_t i = 0; i < actions.size(); i++) {
@@ -339,22 +344,36 @@ void LevelData::processActions() {
             }
         } else if (etype == "SetHitsound") {
             std::string hs = a.value("hitsound", std::string());
-            if (!hs.empty() && floor >= 0 && floor < n) {
-                for (int k = floor; k < n; k++)
-                    tileHitsounds[k] = hs;
-            }
+            if (!hs.empty()) hsByFloor[floor] = hs;
         } else if (etype == "ColorTrack") {
             std::string fc = a.value("trackColor", std::string());
             std::string sc = a.value("secondaryTrackColor", std::string());
-            bool jtt = parseBool(a, "justThisTile", false);
-            if ((!fc.empty() || !sc.empty()) && floor >= 0 && floor < n) {
-                int end = jtt ? floor + 1 : n;
-                for (int k = floor; k < end; k++) {
-                    if (!fc.empty()) tileFillColors[k] = fc;
-                    if (!sc.empty()) tileStrokeColors[k] = sc;
-                }
-            }
+            if (!fc.empty() || !sc.empty())
+                ctByFloor[floor] = {fc, sc, parseBool(a, "justThisTile", false)};
         }
+    }
+
+    // Single-pass forward propagation: O(n) instead of O(n*m) per event type
+    std::string runningFill = settings.trackColor;
+    std::string runningStroke = settings.secondaryTrackColor;
+    std::string runningHS;
+    for (int k = 0; k < n; k++) {
+        // Save pre-event state for justThisTile revert
+        std::string preFill = runningFill, preStroke = runningStroke;
+
+        // Apply ColorTrack events at this floor
+        if (!ctByFloor[k].fc.empty()) runningFill = ctByFloor[k].fc;
+        if (!ctByFloor[k].sc.empty()) runningStroke = ctByFloor[k].sc;
+        tileFillColors[k] = runningFill;
+        tileStrokeColors[k] = runningStroke;
+        if (ctByFloor[k].jtt) {
+            runningFill  = preFill;
+            runningStroke = preStroke;
+        }
+
+        // Apply SetHitsound events at this floor
+        if (!hsByFloor[k].empty()) runningHS = hsByFloor[k];
+        if (!runningHS.empty()) tileHitsounds[k] = runningHS;
     }
 
     // Pre-index SetSpeed events by floor (O(m) instead of O(n*m) per-tile scan)

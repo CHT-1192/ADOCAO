@@ -198,7 +198,7 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
     unsigned int total = frameCount * devCh;
 
     // Fill with silence first
-    for (unsigned int i = 0; i < total; i++) out[i] = 0.0f;
+    std::memset(out, 0, total * sizeof(float));
 
     if (!self) return;
 

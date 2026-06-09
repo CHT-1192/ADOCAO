@@ -10,6 +10,8 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <thread>
+#include <chrono>
 
 namespace {
 
@@ -171,39 +173,43 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 #endif
     bool wasSpacePressed = false;
 
-    // Frame profiler: set #if 1 to enable, logs every ~1s
-#if 1
+#ifdef ADOCAO_PROFILER
     enum { PROF_N = 4 };
     const char* profName[PROF_N] = {"poll+update", "cam+clear", "draw", "swap"};
     double profAcc[PROF_N] = {};
     double profT0 = 0;
     int profFrame = 0;
-#endif
 #define TS() (glfwGetTime())
+#else
+#define TS() (0.0)
+#endif
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, GLFW_TRUE);
 
-        // Delta time with precise busy-wait cap (microsecond accuracy)
+        // Delta time with capped wait (sleep for bulk, spin for precision)
         double now = glfwGetTime();
         double elapsed = now - lastFrameTime;
         if (elapsed < targetFrameTime && elapsed > 0) {
+            double remaining = targetFrameTime - elapsed;
+            // Sleep for most of the wait time, spin for the last 1ms
+            if (remaining > 0.001) {
+                std::this_thread::sleep_for(std::chrono::duration<double>(remaining - 0.001));
+            }
             double target = lastFrameTime + targetFrameTime;
-            while ((now = glfwGetTime()) < target) { /* busy-wait */ }
+            while ((now = glfwGetTime()) < target) { /* spin for final precision */ }
             elapsed = targetFrameTime;
         }
         float deltaMs = (float)(elapsed * 1000.0);
         lastFrameTime = now;
-        if (deltaMs > 500.0f) deltaMs = 0.0f;
-        else if (deltaMs > 100.0f) deltaMs = 100.0f;
 
-#if 1
+#ifdef ADOCAO_PROFILER
         profT0 = TS();
 #endif
 
-#if 1
+#ifdef ADOCAO_PROFILER
         profAcc[0] += TS() - profT0;  profT0 = TS();
 #endif
         // Space toggles playback
@@ -273,7 +279,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
             camera.setTarget(input.baseTargetX+input.offsetX, input.baseTargetY+input.offsetY);
         }
 
-#if 1
+#ifdef ADOCAO_PROFILER
         profAcc[1] += TS() - profT0;  profT0 = TS();
 #endif
 
@@ -321,13 +327,13 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         tileMesh.drawIcons(vl, vr, vb, vt, camera.targetX(), camera.targetY());
         glEnable(GL_DEPTH_TEST);
 
-#if 1
+#ifdef ADOCAO_PROFILER
         profAcc[2] += TS() - profT0;  profT0 = TS();
 #endif
 
         glfwSwapBuffers(window);
 
-#if 1
+#ifdef ADOCAO_PROFILER
         profAcc[3] += TS() - profT0;
         if (++profFrame >= 60) {
             LOG_I("[perf] %d frames, delta=%.1fms, avg ms:", profFrame, deltaMs);

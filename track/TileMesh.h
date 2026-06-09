@@ -54,7 +54,7 @@ private:
     struct VisibilityCache {
         std::vector<int>   indices;   // visible instance indices (rebuilt on frustum change)
         std::vector<float> offsets;   // camera-relative offsets (recomputed each frame)
-        double vl=0, vr=0, vb=0, vt=0;
+        double camX=0, camY=0;
         bool valid = false;
     };
     mutable std::vector<VisibilityCache> m_visCaches;  // per-shape-group
@@ -62,4 +62,5 @@ private:
     void destroy();
     void buildIcons(const LevelData& level);
     static unsigned int hexToUInt(const std::string& hex);
+    static bool frustumChanged(const VisibilityCache& cache, double camX, double camY);
 };

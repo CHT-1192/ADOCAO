@@ -31,6 +31,7 @@ void TileMesh::destroy() {
         if (s.vao) glDeleteVertexArrays(1, &s.vao);
     }
     m_shapes.clear();
+    m_visCaches.clear();
     for (auto& s : m_iconGroups) {
         if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
         if (s.colorVbo) glDeleteBuffers(1, &s.colorVbo);
@@ -77,6 +78,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
 
     Scratch& sc = g_sc;
     m_shapes.resize(shapeGroups.size());
+    m_visCaches.resize(m_shapes.size());
     size_t shapeIdx = 0;
 
     for (auto& [key, tileIndices] : shapeGroups) {
@@ -237,10 +239,11 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
     buildIcons(level);
 }
 
-bool TileMesh::frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt) {
+bool TileMesh::frustumChanged(const VisibilityCache& cache, double camX, double camY) {
     if (!cache.valid) return true;
-    return std::abs((float)cache.vl - vl) > 0.5f || std::abs((float)cache.vr - vr) > 0.5f
-        || std::abs((float)cache.vb - vb) > 0.5f || std::abs((float)cache.vt - vt) > 0.5f;
+    double dx = camX - cache.camX, dy = camY - cache.camY;
+    // Invalidate only if camera moved more than ~0.3 world units (half tile width)
+    return (dx * dx + dy * dy) > 0.1;
 }
 
 void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const {
@@ -252,8 +255,8 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
         const auto& sg = m_shapes[si];
         auto& cache = m_visCaches[si];
 
-        // Rebuild visible set only when frustum moves enough
-        if (!cache.valid || frustumChanged(cache, (float)vl, (float)vr, (float)vb, (float)vt)) {
+        // Rebuild visible set only when camera moves enough
+        if (!cache.valid || frustumChanged(cache, camX, camY)) {
             cache.indices.clear();
             cache.indices.reserve(sg.instances.size());
             for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
@@ -262,7 +265,7 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
                     continue;
                 cache.indices.push_back(ii);
             }
-            cache.vl = vl; cache.vr = vr; cache.vb = vb; cache.vt = vt;
+            cache.camX = camX; cache.camY = camY;
             cache.valid = true;
         }
 
