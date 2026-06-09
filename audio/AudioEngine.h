@@ -5,7 +5,7 @@
 #include <cstdint>
 
 struct ma_device;
-struct stb_vorbis;
+struct ma_decoder;
 
 class AudioEngine {
 public:
@@ -31,36 +31,31 @@ public:
     bool hasMusic() const { return m_hasMusic; }
 
     void setVolume(float v);
-    bool hasHitsounds() const { return m_hitWav != nullptr; }
 
-    // Attach hitsound data: WAV samples + timestamps. Keeps pointers — caller owns data.
-    void attachHitsounds(const float* wav, int wavLen,
-                         const double* timestamps, int hitCount);
-    void setHitBaseTime();
+    // External audio source for mixing (hitsounds)
+    void attachExternal(const float* buffer, size_t totalFrames, int channels, int sampleRate,
+                        size_t* cursor, bool* playing);
+    void detachExternal();
 
 private:
     ma_device* m_device = nullptr;
-    stb_vorbis* m_vorbis = nullptr;
-    std::vector<uint8_t> m_fileData;
+    ma_decoder* m_decoder = nullptr;
+    std::vector<uint8_t> m_fileData;  // keep file memory alive for decoder
     int m_sampleRate = 44100;
-    int m_channels = 2;
+    uint64_t m_readCursor = 0;  // current decoder position in frames
     float m_duration = 0.0f;
     float m_volume = 1.0f;
     bool m_initialized = false;
     bool m_hasMusic = false;
     bool m_playing = false;
 
-    // Hitsound — independent AudioSource model (like Unity PlayScheduled)
-    const float*  m_hitWav = nullptr;
-    int           m_hitWavLen = 0;
-    const double* m_hitTimestamps = nullptr;
-    int           m_hitCount = 0;
-    int           m_hitCursor = 0;       // next timestamp to spawn
-    double        m_hitBaseTime = 0.0;
-    uint64_t      m_totalFrames = 0;     // no-music clock
-
-    struct ActiveHit { int cursor; };
-    std::vector<ActiveHit> m_active;
+    // External source (hitsounds)
+    const float* m_extBuffer = nullptr;
+    size_t m_extTotalFrames = 0;
+    int m_extChannels = 0;
+    int m_extSampleRate = 44100;
+    size_t* m_extCursor = nullptr;
+    bool* m_extPlaying = nullptr;
 
     static void dataCallback(ma_device* pDevice, void* pOutput, const void*, unsigned int frameCount);
 };

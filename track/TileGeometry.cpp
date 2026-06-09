@@ -2,20 +2,20 @@
 
 Scratch g_sc;
 
-void pushColor(std::vector<float>& c, float r, float g, float b, int n) {
-    for (int i = 0; i < n; i++) c.insert(c.end(), {r, g, b});
+void pushType(std::vector<float>& c, float type, int n) {
+    for (int i = 0; i < n; i++) c.push_back(type);
 }
 
-void createCircle(float cx, float cy, float radius, float cr, float cg, float cb,
+void createCircle(float cx, float cy, float radius, float type,
                   Scratch& sc, int res)
 {
     unsigned ci = (unsigned)sc.verts.size() / 3;
     sc.verts.insert(sc.verts.end(), {cx, cy, 0.0f});
-    sc.colors.insert(sc.colors.end(), {cr, cg, cb});
+    sc.types.push_back(type);
     for (int i = 0; i < res; i++) {
         float a = (2.0f * 3.14159265f * i) / res;
         sc.verts.insert(sc.verts.end(), {std::cos(a)*radius + cx, std::sin(a)*radius + cy, 0.0f});
-        sc.colors.insert(sc.colors.end(), {cr, cg, cb});
+        sc.types.push_back(type);
     }
     for (int i = 1; i < res; i++)
         sc.indices.insert(sc.indices.end(), {ci, ci+(unsigned)i, ci+(unsigned)(i+1)});
@@ -33,7 +33,7 @@ void createMidSpinMesh(float angle, Scratch& sc) {
         mx-w*m2,my+w*m1,0, mx+w*m2,my-w*m1,0,
         mx-w*m1,my-w*m2,0, mx+w*m2,my-w*m1,0, mx-w*m2,my+w*m1,0,
     });
-    pushColor(sc.colors,0,0,0,7);
+    pushType(sc.types, 0.0f,7);
     sc.indices.insert(sc.indices.end(),{b,b+1,b+2,b+2,b+3,b,b+4,b+5,b+6});
 
     float iw = TILE_WIDTH, il = TILE_WIDTH;
@@ -43,7 +43,7 @@ void createMidSpinMesh(float angle, Scratch& sc) {
         mx-iw*m2,my+iw*m1,0, mx+iw*m2,my-iw*m1,0,
         mx-iw*m1,my-iw*m2,0, mx+iw*m2,my-iw*m1,0, mx-iw*m2,my+iw*m1,0,
     });
-    pushColor(sc.colors,1,1,1,7);
+    pushType(sc.types, 1.0f,7);
     sc.indices.insert(sc.indices.end(),{b2,b2+1,b2+2,b2+2,b2+3,b2,b2+4,b2+5,b2+6});
 }
 
@@ -74,7 +74,7 @@ void createTileMesh(float startAngle, float endAngle, Scratch& sc) {
         // Outer (black) - accumulate outline
         width += OUTLINE; length += OUTLINE; rad += OUTLINE;
 
-        createCircle(cx,cy,rad,0,0,0,sc);
+        createCircle(cx,cy,rad, 0.0f, sc);
         unsigned cnt;
 
         cnt=(unsigned)sc.verts.size()/3;
@@ -83,7 +83,7 @@ void createTileMesh(float startAngle, float endAngle, Scratch& sc) {
             rad*std::sin(a0)+cx,-rad*std::cos(a0)+cy,0,width*std::sin(a0),-width*std::cos(a0),0,
             0,0,0,-width*std::sin(a1),width*std::cos(a1),0,
         });
-        pushColor(sc.colors,0,0,0,6);
+        pushType(sc.types, 0.0f,6);
         sc.indices.insert(sc.indices.end(),{cnt,cnt+1,cnt+5,cnt+4,cnt+1,cnt+5,cnt+2,cnt+3,cnt+4,cnt+1,cnt+3,cnt+4});
 
         cnt=(unsigned)sc.verts.size()/3;
@@ -93,13 +93,13 @@ void createTileMesh(float startAngle, float endAngle, Scratch& sc) {
             length*m21+width*m22,length*m22-width*m21,0,length*m21-width*m22,length*m22+width*m21,0,
             -width*m22,width*m21,0,width*m22,-width*m21,0,
         });
-        pushColor(sc.colors,0,0,0,8);
+        pushType(sc.types, 0.0f,8);
         sc.indices.insert(sc.indices.end(),{cnt,cnt+1,cnt+2,cnt+2,cnt+3,cnt,cnt+4,cnt+5,cnt+6,cnt+6,cnt+7,cnt+4});
 
         // Inner (white) - shrink from accumulated by 2*OUTLINE
         width -= OUTLINE*2; length -= OUTLINE*2; rad -= OUTLINE*2;
         if (rad<0){rad=0;cx=(-width/std::sin(ang/2))*std::cos(mid);cy=(-width/std::sin(ang/2))*std::sin(mid);}
-        createCircle(cx,cy,rad,1,1,1,sc);
+        createCircle(cx,cy,rad, 1.0f, sc);
 
         cnt=(unsigned)sc.verts.size()/3;
         sc.verts.insert(sc.verts.end(),{
@@ -107,7 +107,7 @@ void createTileMesh(float startAngle, float endAngle, Scratch& sc) {
             rad*std::sin(a0)+cx,-rad*std::cos(a0)+cy,0,width*std::sin(a0),-width*std::cos(a0),0,
             0,0,0,-width*std::sin(a1),width*std::cos(a1),0,
         });
-        pushColor(sc.colors,1,1,1,6);
+        pushType(sc.types, 1.0f,6);
         sc.indices.insert(sc.indices.end(),{cnt,cnt+1,cnt+5,cnt+4,cnt+1,cnt+5,cnt+2,cnt+3,cnt+4,cnt+1,cnt+3,cnt+4});
 
         cnt=(unsigned)sc.verts.size()/3;
@@ -117,7 +117,7 @@ void createTileMesh(float startAngle, float endAngle, Scratch& sc) {
             length*m21+width*m22,length*m22-width*m21,0,length*m21-width*m22,length*m22+width*m21,0,
             -width*m22,width*m21,0,width*m22,-width*m21,0,
         });
-        pushColor(sc.colors,1,1,1,8);
+        pushType(sc.types, 1.0f,8);
         sc.indices.insert(sc.indices.end(),{cnt,cnt+1,cnt+2,cnt+2,cnt+3,cnt,cnt+4,cnt+5,cnt+6,cnt+6,cnt+7,cnt+4});
 
     } else if (ang > 0) {
@@ -128,7 +128,7 @@ void createTileMesh(float startAngle, float endAngle, Scratch& sc) {
 
         cnt=(unsigned)sc.verts.size()/3;
         sc.verts.insert(sc.verts.end(),{cx,cy,0,width*std::sin(a0),-width*std::cos(a0),0,0,0,0,-width*std::sin(a1),width*std::cos(a1),0});
-        pushColor(sc.colors,0,0,0,4);
+        pushType(sc.types, 0.0f,4);
         sc.indices.insert(sc.indices.end(),{cnt,cnt+1,cnt+2,cnt+2,cnt+3,cnt});
 
         cnt=(unsigned)sc.verts.size()/3;
@@ -138,7 +138,7 @@ void createTileMesh(float startAngle, float endAngle, Scratch& sc) {
             length*m21+width*m22,length*m22-width*m21,0,length*m21-width*m22,length*m22+width*m21,0,
             -width*m22,width*m21,0,width*m22,-width*m21,0,
         });
-        pushColor(sc.colors,0,0,0,8);
+        pushType(sc.types, 0.0f,8);
         sc.indices.insert(sc.indices.end(),{cnt,cnt+1,cnt+2,cnt+2,cnt+3,cnt,cnt+4,cnt+5,cnt+6,cnt+6,cnt+7,cnt+4});
 
         // Inner (white) - shrink from accumulated by 2*OUTLINE
@@ -147,7 +147,7 @@ void createTileMesh(float startAngle, float endAngle, Scratch& sc) {
 
         cnt=(unsigned)sc.verts.size()/3;
         sc.verts.insert(sc.verts.end(),{cx,cy,0,width*std::sin(a0),-width*std::cos(a0),0,0,0,0,-width*std::sin(a1),width*std::cos(a1),0});
-        pushColor(sc.colors,1,1,1,4);
+        pushType(sc.types, 1.0f,4);
         sc.indices.insert(sc.indices.end(),{cnt,cnt+1,cnt+2,cnt+2,cnt+3,cnt});
 
         cnt=(unsigned)sc.verts.size()/3;
@@ -157,29 +157,29 @@ void createTileMesh(float startAngle, float endAngle, Scratch& sc) {
             length*m21+width*m22,length*m22-width*m21,0,length*m21-width*m22,length*m22+width*m21,0,
             -width*m22,width*m21,0,width*m22,-width*m21,0,
         });
-        pushColor(sc.colors,1,1,1,8);
+        pushType(sc.types, 1.0f,8);
         sc.indices.insert(sc.indices.end(),{cnt,cnt+1,cnt+2,cnt+2,cnt+3,cnt,cnt+4,cnt+5,cnt+6,cnt+6,cnt+7,cnt+4});
 
     } else {
         length=width; width+=OUTLINE; length+=OUTLINE;
         float m1=m11,m2=m12,mx=-m1*0.04f,my=-m2*0.04f;
-        createCircle(mx,my,width,0,0,0,sc);
+        createCircle(mx,my,width, 0.0f, sc);
         unsigned cnt=(unsigned)sc.verts.size()/3;
         sc.verts.insert(sc.verts.end(),{
             mx+length*m1+width*m2,my+length*m2-width*m1,0,mx+length*m1-width*m2,my+length*m2+width*m1,0,
             mx-width*m2,my+width*m1,0,mx+width*m2,my-width*m1,0,
         });
-        pushColor(sc.colors,0,0,0,4);
+        pushType(sc.types, 0.0f,4);
         sc.indices.insert(sc.indices.end(),{cnt,cnt+1,cnt+2,cnt+2,cnt+3,cnt});
 
         width-=OUTLINE*2; length-=OUTLINE*2;
-        createCircle(mx,my,width,1,1,1,sc);
+        createCircle(mx,my,width, 1.0f, sc);
         cnt=(unsigned)sc.verts.size()/3;
         sc.verts.insert(sc.verts.end(),{
             mx+length*m1+width*m2,my+length*m2-width*m1,0,mx+length*m1-width*m2,my+length*m2+width*m1,0,
             mx-width*m2,my+width*m1,0,mx+width*m2,my-width*m1,0,
         });
-        pushColor(sc.colors,1,1,1,4);
+        pushType(sc.types, 1.0f,4);
         sc.indices.insert(sc.indices.end(),{cnt,cnt+1,cnt+2,cnt+2,cnt+3,cnt});
     }
 }

@@ -10,6 +10,7 @@ permissions:
 jobs:
   windows:
     strategy:
+      fail-fast: false
       matrix:
         portable: [false, true]
     runs-on: windows-latest

@@ -13,7 +13,7 @@
 
 // Fast parser: extract angleData float array from JSON without DOM allocation.
 // Returns the parsed array and writes the end position (after ']') to `outArrayEnd`.
-static std::vector<float> parseAngleDataFast(const char* json, size_t len, size_t& outArrayEnd) {
+static std::vector<double> parseAngleDataFast(const char* json, size_t len, size_t& outArrayEnd) {
     const char* key = "\"angleData\"";
     const char* pos = (const char*)std::memchr(json, '"', len);
     while (pos) {
@@ -31,7 +31,7 @@ static std::vector<float> parseAngleDataFast(const char* json, size_t len, size_
     }
     if (!pos) return {};
 
-    std::vector<float> result;
+    std::vector<double> result;
     while (pos < json + len) {
         while (pos < json + len && (*pos == ' ' || *pos == '\t' || *pos == '\n' || *pos == '\r'))
             pos++;
@@ -39,7 +39,7 @@ static std::vector<float> parseAngleDataFast(const char* json, size_t len, size_
         if (*pos == ']') { outArrayEnd = pos - json + 1; break; }
         if (*pos == ',') { pos++; continue; }
         char* end;
-        float val = strtof(pos, &end);
+        double val = strtod(pos, &end);
         if (end == pos) { pos++; continue; }
         result.push_back(val);
         pos = end;
@@ -142,7 +142,7 @@ bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress
         if (onProgress) onProgress(0.15f, "Extracting level data...");
         // angleData already parsed via fast path above; fallback to nlohmann if not found
         if (angleData.empty() && root.contains("angleData") && root["angleData"].is_array()) {
-            angleData = root["angleData"].get<std::vector<float>>();
+            angleData = root["angleData"].get<std::vector<double>>();
         }
 
         // settings
@@ -210,7 +210,7 @@ void LevelData::calculateTilePositions() {
     // Build "floats" array: 999 = midspin (previous + 180)
     std::vector<float> floats(n);
     for (int i = 0; i < n; i++) {
-        if (angleData[i] == 999.0f) {
+        if (angleData[i] == 999.0) {
             floats[i] = (i > 0 ? floats[i - 1] : 0.0f) + 180.0f;
         } else {
             floats[i] = angleData[i];
@@ -302,7 +302,10 @@ void LevelData::processActions() {
     tileBPMs.assign(n, settings.bpm);
     tileHasTwirl.assign(n, false);
     tileHasSetSpeed.assign(n, false);
+    tileHitsounds.assign(n, "");
     tilePositionOffsets.assign(n, {});
+    tileFillColors.assign(n, settings.trackColor);
+    tileStrokeColors.assign(n, settings.secondaryTrackColor);
 
     if (actions.is_null() || !actions.is_array()) return;
 
@@ -333,6 +336,23 @@ void LevelData::processActions() {
                 tilePositionOffsets[floor].offsetX = a["positionOffset"][0].get<float>();
                 tilePositionOffsets[floor].offsetY = a["positionOffset"][1].get<float>();
                 tilePositionOffsets[floor].justThisTile = parseBool(a, "justThisTile", false);
+            }
+        } else if (etype == "SetHitsound") {
+            std::string hs = a.value("hitsound", std::string());
+            if (!hs.empty() && floor >= 0 && floor < n) {
+                for (int k = floor; k < n; k++)
+                    tileHitsounds[k] = hs;
+            }
+        } else if (etype == "ColorTrack") {
+            std::string fc = a.value("trackColor", std::string());
+            std::string sc = a.value("secondaryTrackColor", std::string());
+            bool jtt = parseBool(a, "justThisTile", false);
+            if ((!fc.empty() || !sc.empty()) && floor >= 0 && floor < n) {
+                int end = jtt ? floor + 1 : n;
+                for (int k = floor; k < end; k++) {
+                    if (!fc.empty()) tileFillColors[k] = fc;
+                    if (!sc.empty()) tileStrokeColors[k] = sc;
+                }
             }
         }
     }
@@ -385,6 +405,17 @@ void LevelData::applyPositionTrackOffsets() {
             cumY = 0.0;
         }
     }
+}
+
+void LevelData::releaseMemory() {
+    // Free large arrays no longer needed after loading
+    std::vector<double>().swap(angleData);
+    actions = nlohmann::json();
+    decorations = nlohmann::json();
+    tilePositionOffsets.clear(); tilePositionOffsets.shrink_to_fit();
+    tileBPMs.clear(); tileBPMs.shrink_to_fit();
+    tileFillColors.clear(); tileFillColors.shrink_to_fit();
+    tileStrokeColors.clear(); tileStrokeColors.shrink_to_fit();
 }
 
 void LevelData::convertPathToAngles() {

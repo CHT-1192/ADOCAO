@@ -4,9 +4,6 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
-#define STB_VORBIS_HEADER_ONLY
-#include "stb_vorbis.c"
-
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -60,9 +57,10 @@ void AudioEngine::shutdown() {
         delete m_device;
         m_device = nullptr;
     }
-    if (m_vorbis) {
-        stb_vorbis_close(m_vorbis);
-        m_vorbis = nullptr;
+    if (m_decoder) {
+        ma_decoder_uninit(m_decoder);
+        delete m_decoder;
+        m_decoder = nullptr;
     }
     m_fileData.clear();
     m_initialized = false;
@@ -73,9 +71,10 @@ void AudioEngine::shutdown() {
 bool AudioEngine::loadMusic(const std::string& filepath) {
     if (!m_device) return false;
 
-    if (m_vorbis) {
-        stb_vorbis_close(m_vorbis);
-        m_vorbis = nullptr;
+    if (m_decoder) {
+        ma_decoder_uninit(m_decoder);
+        delete m_decoder;
+        m_decoder = nullptr;
         m_hasMusic = false;
     }
     m_fileData.clear();
@@ -108,30 +107,31 @@ bool AudioEngine::loadMusic(const std::string& filepath) {
 #endif
     }
 
-    int error = 0;
-    m_vorbis = stb_vorbis_open_memory(data.data(), (int)data.size(), &error, nullptr);
-    if (!m_vorbis) {
-        LOG_E("AudioEngine: Failed to decode OGG [stb_err=%d]: %s", error, filepath.c_str());
+    m_decoder = new ma_decoder;
+    ma_decoder_config dc = ma_decoder_config_init(ma_format_f32, 2, 44100);
+    if (ma_decoder_init_memory(data.data(), data.size(), &dc, m_decoder) != MA_SUCCESS) {
+        LOG_E("AudioEngine: Unsupported format: %s", filepath.c_str());
+        delete m_decoder;
+        m_decoder = nullptr;
         return false;
     }
-    m_fileData = std::move(data);  // keep data alive for vorbis
 
-    stb_vorbis_info info = stb_vorbis_get_info(m_vorbis);
-    m_sampleRate = info.sample_rate;
-    m_channels = info.channels;
-
-    unsigned int totalSamples = stb_vorbis_stream_length_in_samples(m_vorbis);
-    m_duration = (m_sampleRate > 0) ? (float)totalSamples / (float)m_sampleRate : 0.0f;
+    ma_uint64 total = 0;
+    ma_decoder_get_length_in_pcm_frames(m_decoder, &total);
+    m_sampleRate = 44100;
+    m_readCursor = 0;
+    m_duration = (m_sampleRate > 0) ? (float)total / (float)m_sampleRate : 0.0f;
+    m_fileData = std::move(data);  // keep alive for memory-backed decoder
 
     m_hasMusic = true;
-    LOG_I("AudioEngine: Loaded (%dHz, %dch, %.1fs): %s",
-          m_sampleRate, m_channels, m_duration, filepath.c_str());
+    LOG_I("AudioEngine: Loaded (%dHz, stereo, %.1fs): %s",
+          m_sampleRate, m_duration, filepath.c_str());
     return true;
 }
 
 void AudioEngine::play() {
     if (!m_device) return;
-    if (m_vorbis) stb_vorbis_seek_start(m_vorbis);  // always start from beginning
+    if (m_decoder) { ma_decoder_seek_to_pcm_frame(m_decoder, 0); m_readCursor = 0; }
     m_playing = true;
     if (ma_device_is_started(m_device) == MA_FALSE)
         ma_device_start(m_device);
@@ -150,32 +150,21 @@ void AudioEngine::pause() {
 
 void AudioEngine::stop() {
     m_playing = false;
-    if (m_vorbis) stb_vorbis_seek_start(m_vorbis);
+    if (m_decoder) { ma_decoder_seek_to_pcm_frame(m_decoder, 0); m_readCursor = 0; }
     if (m_device && ma_device_is_started(m_device) != MA_FALSE)
         ma_device_stop(m_device);
 }
 
 void AudioEngine::seek(float seconds) {
-    if (!m_vorbis || m_sampleRate <= 0) return;
-    int target = (int)(seconds * (float)m_sampleRate);
-    if (stb_vorbis_seek(m_vorbis, target) != 0) return;  // success
-
-    // stb_vorbis_seek failed (no seek table) — discard samples to advance
-    LOG_I("AudioEngine: seek failed, discarding %d samples to reach %.1fs", target, seconds);
-    float* tmp = (float*)alloca(4096 * (unsigned)m_channels * sizeof(float));
-    int skipped = 0;
-    while (skipped < target) {
-        int n = stb_vorbis_get_samples_float_interleaved(
-            m_vorbis, m_channels, tmp,
-            std::min(4096 * m_channels, (target - skipped) * m_channels));
-        if (n <= 0) break;
-        skipped += n;
-    }
+    if (!m_decoder || m_sampleRate <= 0) return;
+    ma_uint64 frame = (ma_uint64)(seconds * (float)m_sampleRate);
+    ma_decoder_seek_to_pcm_frame(m_decoder, frame);
+    m_readCursor = frame;
 }
 
 float AudioEngine::position() const {
-    if (!m_vorbis || m_sampleRate <= 0) return 0.0f;
-    return (float)stb_vorbis_get_sample_offset(m_vorbis) / (float)m_sampleRate;
+    if (!m_decoder || m_sampleRate <= 0) return 0.0f;
+    return (float)m_readCursor / (float)m_sampleRate;
 }
 
 float AudioEngine::duration() const {
@@ -186,23 +175,20 @@ void AudioEngine::setVolume(float v) {
     m_volume = std::max(0.0f, std::min(1.0f, v));
 }
 
-void AudioEngine::attachHitsounds(const float* wav, int wavLen,
-                                   const double* timestamps, int hitCount) {
-    m_hitWav = wav;
-    m_hitWavLen = wavLen;
-    m_hitTimestamps = timestamps;
-    m_hitCount = hitCount;
-    m_hitCursor = 0;
-    m_hitBaseTime = 0.0;
-    m_totalFrames = 0;
-    m_active.clear();
+void AudioEngine::attachExternal(const float* buffer, size_t totalFrames, int channels, int sampleRate,
+                                  size_t* cursor, bool* playing) {
+    m_extBuffer = buffer;
+    m_extTotalFrames = totalFrames;
+    m_extChannels = channels;
+    m_extSampleRate = sampleRate;
+    m_extCursor = cursor;
+    m_extPlaying = playing;
 }
 
-void AudioEngine::setHitBaseTime() {
-    if (m_vorbis && m_sampleRate > 0)
-        m_hitBaseTime = (double)stb_vorbis_get_sample_offset(m_vorbis) / (double)m_sampleRate;
-    else
-        m_hitBaseTime = 0.0;
+void AudioEngine::detachExternal() {
+    m_extBuffer = nullptr;
+    m_extCursor = nullptr;
+    m_extPlaying = nullptr;
 }
 
 void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, unsigned int frameCount) {
@@ -216,83 +202,34 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
 
     if (!self) return;
 
-    // --- Music source ---
-    if (self->m_vorbis && self->m_playing) {
-        float* musicBuf = (float*)alloca(frameCount * (unsigned)self->m_channels * sizeof(float));
-        int decoded = stb_vorbis_get_samples_float_interleaved(
-            self->m_vorbis, self->m_channels, musicBuf, (int)frameCount * self->m_channels);
+    // --- Music source (ma_decoder: stereo f32 @ 44100) ---
+    if (self->m_decoder && self->m_playing) {
+        float* musicBuf = (float*)alloca(frameCount * 2 * sizeof(float));
+        ma_uint64 decoded = 0;
+        ma_decoder_read_pcm_frames(self->m_decoder, musicBuf, frameCount, &decoded);
+        self->m_readCursor += decoded;
 
         if (decoded > 0) {
-            // Mix into output (mono/stereo → device channels)
-            for (int i = 0; i < decoded; i++) {
-                for (int c = 0; c < (int)self->m_channels && c < (int)devCh; c++) {
-                    out[i * devCh + c] += musicBuf[i * self->m_channels + c] * self->m_volume;
-                }
+            for (ma_uint64 i = 0; i < decoded; i++) {
+                out[i * devCh]     += musicBuf[i * 2]     * self->m_volume;
+                out[i * devCh + 1] += musicBuf[i * 2 + 1] * self->m_volume;
             }
         }
         if (decoded == 0) self->m_playing = false;
     }
 
-    // --- Hitsounds — independent AudioSource model ---
-    if (self->m_hitWav && self->m_playing) {
-        double audioTime;
-        if (self->m_vorbis && self->m_sampleRate > 0)
-            audioTime = (double)stb_vorbis_get_sample_offset(self->m_vorbis) / (double)self->m_sampleRate;
-        else
-            audioTime = (double)(self->m_totalFrames) / (double)pDevice->sampleRate;
-        self->m_totalFrames += frameCount;
+    // --- External source (hitsounds) ---
+    if (self->m_extBuffer && self->m_extPlaying && *self->m_extPlaying && self->m_extCursor) {
+        size_t cursor = *self->m_extCursor;
+        size_t extTotal = self->m_extTotalFrames;
+        int extCh = self->m_extChannels;
 
-        double relTime = audioTime - self->m_hitBaseTime;
-        double frameDur = (double)frameCount / (double)pDevice->sampleRate;
-
-        // 1. Mix ongoing hits (simple cursor advance, like Unity AudioSource)
-        for (size_t hi = 0; hi < self->m_active.size(); ) {
-            auto& h = self->m_active[hi];
-            int remain = self->m_hitWavLen - h.cursor;
-            int n = remain < (int)frameCount ? remain : (int)frameCount;
-            for (int j = 0; j < n; j++) {
-                float v = self->m_hitWav[h.cursor + j];
-                out[j * devCh]     += v;
-                out[j * devCh + 1] += v;
-            }
-            h.cursor += n;
-            if (h.cursor >= self->m_hitWavLen) {
-                self->m_active[hi] = self->m_active.back();
-                self->m_active.pop_back();
-            } else {
-                hi++;
+        for (unsigned int i = 0; i < frameCount && cursor < extTotal; i++, cursor++) {
+            for (int c = 0; c < extCh && c < (int)devCh; c++) {
+                out[i * devCh + c] += self->m_extBuffer[cursor * extCh + c];
             }
         }
-
-        // 2. Spawn new hits whose timestamp falls within this frame
-        int batchMax = self->m_hitCursor + 1024;
-        while (self->m_hitCursor < self->m_hitCount
-               && self->m_hitCursor < batchMax
-               && self->m_hitTimestamps[self->m_hitCursor] < relTime + frameDur) {
-            double ts = self->m_hitTimestamps[self->m_hitCursor];
-
-            int dstStart = (int)((ts - relTime) * (double)pDevice->sampleRate);
-            int srcSkip = 0;
-            if (dstStart < 0) {
-                srcSkip = -dstStart;
-                if (srcSkip >= self->m_hitWavLen) { self->m_hitCursor++; continue; }
-                dstStart = 0;
-            }
-            int n = self->m_hitWavLen - srcSkip;
-            int dstEnd = dstStart + n;
-            if (dstEnd > (int)frameCount) n = (int)frameCount - dstStart;
-
-            for (int j = 0; j < n; j++) {
-                float v = self->m_hitWav[srcSkip + j];
-                int si = (dstStart + j) * devCh;
-                out[si]     += v;
-                out[si + 1] += v;
-            }
-
-            if (srcSkip + n < self->m_hitWavLen)
-                self->m_active.push_back({srcSkip + n});
-
-            self->m_hitCursor++;
-        }
+        *self->m_extCursor = cursor;
+        if (cursor >= extTotal) *self->m_extPlaying = false;
     }
 }

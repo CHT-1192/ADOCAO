@@ -25,6 +25,7 @@ public:
     Planet& operator=(Planet&&) noexcept;
 
     void update(float currentTime);
+    void setTrailPoints(const float* xy, int count);
     void clearTrail();
 
     bool buildGPU();

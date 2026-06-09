@@ -2,6 +2,7 @@
 
 #include "level/LevelData.h"
 #include "Planet.h"
+#include "audio/HitsoundManager.h"
 #include <memory>
 #include <vector>
 
@@ -34,6 +35,9 @@ public:
     float totalDuration() const;
     double startWallClock() const { return m_startWallClock; }
     std::vector<double> getHitsoundTimestamps() const;
+    std::vector<struct HitsoundTimestampGroup> getHitsoundTimestampGroups() const;
+    void computePlanetTrails() const;
+    void computePositionsAtTime(float t, glm::vec2& redOut, glm::vec2& blueOut) const;
 
 private:
     const LevelData* m_level = nullptr;

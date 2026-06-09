@@ -16,6 +16,7 @@ struct LauncherConfig {
     int  resolutionH = 720;
     bool fullscreen = false;
     bool showTrail = true;
+    bool exportHitsounds = false;
     bool cancelled = false;
 };
 

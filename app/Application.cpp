@@ -98,6 +98,33 @@ int runApplication(bool debugConsole) {
           cfg.levelPath.c_str(), cfg.musicPath.c_str(),
           cfg.resolutionW, cfg.resolutionH, cfg.fullscreen);
 
+    // Export hitsounds to WAV and exit (no game window)
+    if (cfg.exportHitsounds) {
+        LevelData lvl;
+        if (!lvl.loadFromFile(cfg.levelPath)) {
+            LOG_E("Failed to load level for export");
+            glfwTerminate();
+            return 1;
+        }
+        PlaybackEngine pb;
+        pb.init(lvl, true);
+        HitsoundManager hm;
+        hm.init();
+        if (!hm.preSynthesize(pb.getHitsoundTimestampGroups(), pb.totalDuration())) {
+            LOG_E("Export: pre-synthesis failed");
+            glfwTerminate();
+            return 1;
+        }
+        std::string outPath = cfg.levelPath;
+        auto dot = outPath.rfind('.');
+        if (dot != std::string::npos) outPath = outPath.substr(0, dot);
+        outPath += "_hitsounds.wav";
+        hm.writeWav(outPath);
+        LOG_I("Exported hitsounds to %s", outPath.c_str());
+        glfwTerminate();
+        return 0;
+    }
+
     // Stage 2: Loading (skip progress window for small files)
     LoadResult loadResult;
     long long fsize = fileSize(cfg.levelPath);
@@ -150,6 +177,33 @@ int runApplicationFromCLI(const LauncherConfig& cfg, bool debugConsole) {
     LOG_I("CLI: level=%s, music=%s, resolution=%dx%d, fullscreen=%d",
           config.levelPath.c_str(), config.musicPath.c_str(),
           config.resolutionW, config.resolutionH, config.fullscreen);
+
+    if (config.exportHitsounds) {
+        LevelData lvl;
+        if (!lvl.loadFromFile(config.levelPath)) {
+            LOG_E("Failed to load level for export");
+            glfwTerminate();
+            return 1;
+        }
+        PlaybackEngine pb;
+        pb.init(lvl, true);
+        HitsoundManager hm;
+        hm.init();
+        auto groups = pb.getHitsoundTimestampGroups();
+        if (!hm.preSynthesize(groups, pb.totalDuration())) {
+            LOG_E("Export: pre-synthesis failed");
+            glfwTerminate();
+            return 1;
+        }
+        std::string outPath = config.levelPath;
+        auto dot = outPath.rfind('.');
+        if (dot != std::string::npos) outPath = outPath.substr(0, dot);
+        outPath += "_hitsounds.wav";
+        hm.writeWav(outPath);
+        LOG_I("Exported hitsounds to %s", outPath.c_str());
+        glfwTerminate();
+        return 0;
+    }
 
     LoadResult loadResult;
     long long cliFsize = fileSize(config.levelPath);

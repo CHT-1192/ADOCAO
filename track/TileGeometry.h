@@ -6,10 +6,10 @@
 // Scratch buffer for geometry generation
 struct Scratch {
     std::vector<float> verts;      // local xyz
-    std::vector<float> colors;     // r,g,b per vertex
+    std::vector<float> types;      // 0.0=stroke, 1.0=fill per vertex
     std::vector<unsigned> indices;
 
-    void clear() { verts.clear(); colors.clear(); indices.clear(); }
+    void clear() { verts.clear(); types.clear(); indices.clear(); }
 };
 
 extern Scratch g_sc;
@@ -23,9 +23,9 @@ constexpr float OUTLINE = 0.025f;
 inline float fmodWrap(float x, float y) { return x >= 0 ? std::fmod(x, y) : std::fmod(x, y) + y; }
 inline float lerp(float a, float b, float t) { return a + (b - a) * t; }
 
-void pushColor(std::vector<float>& c, float r, float g, float b, int n);
+void pushType(std::vector<float>& c, float type, int n);
 
 // Geometry generators (local-space, origin-centered)
-void createCircle(float cx, float cy, float radius, float cr, float cg, float cb, Scratch& sc, int res = 32);
+void createCircle(float cx, float cy, float radius, float type, Scratch& sc, int res = 32);
 void createMidSpinMesh(float angle, Scratch& sc);
 void createTileMesh(float startAngle, float endAngle, Scratch& sc);

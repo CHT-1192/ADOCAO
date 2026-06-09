@@ -35,7 +35,7 @@ struct LevelData {
     };
 
     Settings settings;
-    std::vector<float> angleData;
+    std::vector<double> angleData;
     std::string        pathData;       // raw pathData string (alternative to angleData)
     std::vector<Tile>  tiles;
     nlohmann::json     actions;       // raw JSON array
@@ -51,7 +51,12 @@ struct LevelData {
     std::vector<float> tileBPMs;      // BPM for each tile (after SetSpeed events)
     std::vector<bool>  tileHasTwirl;  // true if tile has a Twirl event
     std::vector<bool>  tileHasSetSpeed; // true if tile has a SetSpeed event
+    std::vector<std::string> tileHitsounds;  // per-tile hitsound type override
     std::vector<TilePositionOffset> tilePositionOffsets;
+    std::vector<std::string> tileFillColors;   // per-tile fill hex color
+    std::vector<std::string> tileStrokeColors; // per-tile stroke hex color
+
+    void releaseMemory();  // free data no longer needed after loading
 
     using ProgressCb = std::function<void(float pct, const char* stage)>;
 

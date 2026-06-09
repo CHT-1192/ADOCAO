@@ -341,11 +341,12 @@ LauncherConfig showLauncher() {
 
         bool valid = (levelBuf[0] != '\0') && fillOk && strokeOk && bgOk;
 
-        // Start button (centered at bottom)
+        // Start + Export buttons (centered at bottom)
         ImGui::SetCursorPosY((float)winH - 60 * S);
-        ImGui::SetCursorPosX((float)(winW - 120 * S) / 2.0f);
+        float btnW = 120 * S;
+        ImGui::SetCursorPosX((float)(winW - (btnW * 2 + 12 * S)) / 2.0f);
         if (!valid) ImGui::BeginDisabled();
-        if (ImGui::Button("Start", ImVec2(120 * S, 36 * S))) {
+        if (ImGui::Button("Start", ImVec2(btnW, 36 * S))) {
             cfg.levelPath        = levelBuf;
             cfg.musicPath        = musicBuf;
             cfg.trackFillColor   = fillBuf;
@@ -355,6 +356,15 @@ LauncherConfig showLauncher() {
             cfg.enableHitsounds  = enableHitsounds;
             cfg.resolutionW      = resoW[resoIdx];
             cfg.resolutionH      = resoH[resoIdx];
+            cfg.cancelled        = false;
+            done = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Export", ImVec2(btnW, 36 * S))) {
+            cfg.levelPath        = levelBuf;
+            cfg.musicPath        = musicBuf;
+            cfg.enableHitsounds  = true;
+            cfg.exportHitsounds  = true;
             cfg.cancelled        = false;
             done = true;
         }
