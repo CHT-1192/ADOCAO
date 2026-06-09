@@ -15,7 +15,7 @@ if(NOT CMAKE_C_COMPILER AND NOT CMAKE_CXX_COMPILER)
     endif()
 endif()
 
-project(ADOCAO VERSION 0.5.0 LANGUAGES CXX C)
+project(ADOCAO VERSION 0.7.0 LANGUAGES CXX C)
 
 option(ADOCAO_PORTABLE "Build a static-linked portable executable" OFF)
 option(ADOCAO_HIGH_FPS "Raise FPS cap from 320 to 1000" OFF)
