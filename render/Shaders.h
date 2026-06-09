@@ -3,11 +3,12 @@
 namespace Shaders {
 
 // Instanced tile rendering. Vertex type (0=stroke, 1=fill) mixes per-instance colors.
+// Camera-relative offsets computed on CPU side.
 constexpr const char* kTileVertSrc = R"(
 #version 330 core
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in float aType;        // 0.0=stroke, 1.0=fill
-layout(location = 2) in vec3 aInstOffset;   // per-instance world offset
+layout(location = 2) in vec3 aInstOffset;   // per-instance camera-relative offset
 layout(location = 3) in vec3 iColor;         // fill color (per-instance)
 layout(location = 4) in vec3 iBgColor;      // stroke color (per-instance)
 layout(location = 5) in float iOpacity;     // opacity (per-instance)
