@@ -154,7 +154,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
     glfwSetScrollCallback(window, [](GLFWwindow* w, double, double dy) {
         auto* in = static_cast<GameInput*>(glfwGetWindowUserPointer(w));
         float z = in->camera->zoom() * (1.0f + (float)dy * 0.1f);
-        if (z<5)z=5; if (z>500)z=500;
+        if (z<5)z=5; if (z>1000)z=1000;
         in->camera->setZoom(z);
     });
     glfwSetWindowUserPointer(window, &input);
