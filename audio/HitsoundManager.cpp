@@ -16,35 +16,44 @@ static std::unordered_map<std::string, std::vector<float>> s_wavCache;
 #include <windows.h>
 #endif
 
+static bool iequals(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); i++)
+        if (std::tolower(a[i]) != std::tolower(b[i])) return false;
+    return true;
+}
+
 static const char* hitsoundKey(const std::string& type) {
-    if (type == "Kick")              return "Kick.wav";
-    if (type == "KickHouse")         return "KickHouse.wav";
-    if (type == "KickChroma")        return "KickChroma.wav";
-    if (type == "KickRupture")       return "KickRupture.wav";
-    if (type == "Snare")             return "SnareAcoustic2.wav";
-    if (type == "SnareHouse")        return "SnareHouse.wav";
-    if (type == "SnareVapor")        return "SnareVapor.wav";
-    if (type == "Clap")              return "ClapHit.wav";
-    if (type == "ClapHit")           return "ClapHit.wav";
-    if (type == "ClapHitEcho")       return "ClapHitEcho.wav";
-    if (type == "Hat")               return "Hat.wav";
-    if (type == "HatHouse")          return "HatHouse.wav";
-    if (type == "Chuck")             return "Chuck.wav";
-    if (type == "Hammer")            return "Hammer.wav";
-    if (type == "Shaker")            return "Shaker.wav";
-    if (type == "ShakerLoud")        return "ShakerLoud.wav";
-    if (type == "Sidestick")         return "Sidestick.wav";
-    if (type == "Stick")             return "Stick.wav";
-    if (type == "ReverbClack")       return "ReverbClack.wav";
-    if (type == "ReverbClap")        return "ReverbClap.wav";
-    if (type == "Squareshot")        return "Squareshot.wav";
-    if (type == "FireTile")          return "FireTile.wav";
-    if (type == "IceTile")           return "IceTile.wav";
-    if (type == "PowerUp")           return "PowerUp.wav";
-    if (type == "PowerDown")         return "PowerDown.wav";
-    if (type == "VehiclePositive")   return "VehiclePositive.wav";
-    if (type == "VehicleNegative")   return "VehicleNegative.wav";
-    if (type == "Sizzle")            return "Sizzle.wav";
+    // Case-insensitive matching (ADOFAI levels may use mixed case)
+    if (type.empty()) return nullptr;
+    if (iequals(type, "Kick"))              return "Kick.wav";
+    if (iequals(type, "KickHouse"))         return "KickHouse.wav";
+    if (iequals(type, "KickChroma"))        return "KickChroma.wav";
+    if (iequals(type, "KickRupture"))       return "KickRupture.wav";
+    if (iequals(type, "Snare"))             return "SnareAcoustic2.wav";
+    if (iequals(type, "SnareHouse"))        return "SnareHouse.wav";
+    if (iequals(type, "SnareVapor"))        return "SnareVapor.wav";
+    if (iequals(type, "Clap"))              return "ClapHit.wav";
+    if (iequals(type, "ClapHit"))           return "ClapHit.wav";
+    if (iequals(type, "ClapHitEcho"))       return "ClapHitEcho.wav";
+    if (iequals(type, "Hat"))               return "Hat.wav";
+    if (iequals(type, "HatHouse"))          return "HatHouse.wav";
+    if (iequals(type, "Chuck"))             return "Chuck.wav";
+    if (iequals(type, "Hammer"))            return "Hammer.wav";
+    if (iequals(type, "Shaker"))            return "Shaker.wav";
+    if (iequals(type, "ShakerLoud"))        return "ShakerLoud.wav";
+    if (iequals(type, "Sidestick"))         return "Sidestick.wav";
+    if (iequals(type, "Stick"))             return "Stick.wav";
+    if (iequals(type, "ReverbClack"))       return "ReverbClack.wav";
+    if (iequals(type, "ReverbClap"))        return "ReverbClap.wav";
+    if (iequals(type, "Squareshot"))        return "Squareshot.wav";
+    if (iequals(type, "FireTile"))          return "FireTile.wav";
+    if (iequals(type, "IceTile"))           return "IceTile.wav";
+    if (iequals(type, "PowerUp"))           return "PowerUp.wav";
+    if (iequals(type, "PowerDown"))         return "PowerDown.wav";
+    if (iequals(type, "VehiclePositive"))   return "VehiclePositive.wav";
+    if (iequals(type, "VehicleNegative"))   return "VehicleNegative.wav";
+    if (iequals(type, "Sizzle"))            return "Sizzle.wav";
     return nullptr;
 }
 
