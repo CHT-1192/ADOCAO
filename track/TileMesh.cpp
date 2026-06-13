@@ -275,7 +275,7 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
             glad_BindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, sg.instVbo);
 
             glad_DispatchCompute((sg.instanceCount + 63) / 64, 1, 1);
-            glad_MemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+            glad_MemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
 
             glad_BindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
             glad_BindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, 0);
