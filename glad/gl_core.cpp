@@ -71,6 +71,9 @@ PFNGLBINDBUFFERBASEPROC          glad_BindBufferBase;
 PFNGLMEMORYBARRIERPROC           glad_MemoryBarrier;
 PFNGLDRAWELEMENTSINDIRECTPROC    glad_DrawElementsIndirect;
 
+PFNGLMAPBUFFERPROC   glad_MapBuffer;
+PFNGLUNMAPBUFFERPROC glad_UnmapBuffer;
+
 PFNGLGETSTRINGPROC glad_GetString;
 PFNGLGETERRORPROC  glad_GetError;
 
@@ -151,6 +154,8 @@ bool loadGLCore() {
     loadGL(glad_DrawArrays,   "glDrawArrays");
     loadGL(glad_DrawElements, "glDrawElements");
     loadGL(glad_DrawElementsInstanced, "glDrawElementsInstanced");
+    loadGL(glad_MapBuffer,   "glMapBuffer");
+    loadGL(glad_UnmapBuffer, "glUnmapBuffer");
     loadGL(glad_Enable,       "glEnable");
     loadGL(glad_Disable,      "glDisable");
     loadGL(glad_BlendFunc,    "glBlendFunc");

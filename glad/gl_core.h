@@ -82,6 +82,9 @@ extern PFNGLMEMORYBARRIERPROC           glad_MemoryBarrier;
 // Indirect draw (OpenGL 4.0+)
 extern PFNGLDRAWELEMENTSINDIRECTPROC glad_DrawElementsIndirect;
 
+extern PFNGLMAPBUFFERPROC   glad_MapBuffer;
+extern PFNGLUNMAPBUFFERPROC glad_UnmapBuffer;
+
 extern PFNGLGETSTRINGPROC glad_GetString;
 extern PFNGLGETERRORPROC  glad_GetError;
 

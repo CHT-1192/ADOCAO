@@ -20,6 +20,7 @@ TileMesh& TileMesh::operator=(TileMesh&& o) noexcept { if(this!=&o){destroy();m_
 
 void TileMesh::destroy() {
     for (auto& s : m_shapes) {
+        if (s.worldSbo) glDeleteBuffers(1, &s.worldSbo);
         if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
         if (s.colorVbo) glDeleteBuffers(1, &s.colorVbo);
         if (s.ebo) glDeleteBuffers(1, &s.ebo);
@@ -28,6 +29,7 @@ void TileMesh::destroy() {
     }
     m_shapes.clear();
     for (auto& s : m_iconGroups) {
+        if (s.worldSbo) glDeleteBuffers(1, &s.worldSbo);
         if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
         if (s.colorVbo) glDeleteBuffers(1, &s.colorVbo);
         if (s.ebo) glDeleteBuffers(1, &s.ebo);
@@ -217,6 +219,22 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, cStride, (void*)(6*sizeof(float)));
         glVertexAttribDivisor(5, 1);
 
+        // World position SSBO (vec4 per instance, for GPU compute culling)
+        {
+            std::vector<float> worldPos4(sg.instances.size() * 4, 0.0f);
+            for (size_t i = 0; i < sg.instances.size(); i++) {
+                worldPos4[i * 4]     = (float)sg.instances[i].offX;
+                worldPos4[i * 4 + 1] = (float)sg.instances[i].offY;
+                worldPos4[i * 4 + 2] = sg.instances[i].offZ;
+            }
+            glGenBuffers(1, &sg.worldSbo);
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, sg.worldSbo);
+            glBufferData(GL_SHADER_STORAGE_BUFFER, worldPos4.size() * sizeof(float),
+                         worldPos4.data(), GL_STATIC_DRAW);
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        }
+        sg.instanceCount = (unsigned)sg.instances.size();
+
         glBindVertexArray(0);
         shapeIdx++;
     }
@@ -235,47 +253,73 @@ bool TileMesh::frustumChanged(const VisibilityCache& cache, float vl, float vr, 
         || std::abs((float)cache.vb - vb) > 0.5f || std::abs((float)cache.vt - vt) > 0.5f;
 }
 
-void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const {
+void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY,
+                    bool gpuCulling, GLuint computeShader) const {
     double margin = 20.0;
     double vl = viewL - margin, vr = viewR + margin;
     double vb = viewB - margin, vt = viewT + margin;
 
-    for (size_t si = 0; si < m_shapes.size(); si++) {
-        const auto& sg = m_shapes[si];
-        auto& cache = m_visCaches[si];
+    if (gpuCulling && computeShader) {
+        // ---- GPU compute path: GPU writes camera-relative offsets for ALL instances,
+        //      then draw all (skip CPU culling). For large levels, use --cpu-culling. ----
+        float camVec[2] = {(float)camX, (float)camY};
+        for (size_t si = 0; si < m_shapes.size(); si++) {
+            const auto& sg = m_shapes[si];
+            if (!sg.instanceCount) continue;
 
-        // Rebuild visible set only when frustum moves enough
-        if (!cache.valid || frustumChanged(cache, (float)vl, (float)vr, (float)vb, (float)vt)) {
-            cache.indices.clear();
-            cache.indices.reserve(sg.instances.size());
-            for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
-                const auto& inst = sg.instances[ii];
-                if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
-                    continue;
-                cache.indices.push_back(ii);
+            glUseProgram(computeShader);
+            glUniform2f(glGetUniformLocation(computeShader, "uCamera.camWorld"),
+                        camVec[0], camVec[1]);
+
+            glad_BindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sg.worldSbo);
+            glad_BindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, sg.instVbo);
+
+            glad_DispatchCompute((sg.instanceCount + 63) / 64, 1, 1);
+            glad_MemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+            glad_BindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
+            glad_BindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, 0);
+
+            glBindVertexArray(sg.vao);
+            glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
+                                    nullptr, (GLsizei)sg.instanceCount);
+            glBindVertexArray(0);
+        }
+    } else {
+        // ---- CPU path (original) ----
+        for (size_t si = 0; si < m_shapes.size(); si++) {
+            const auto& sg = m_shapes[si];
+            auto& cache = m_visCaches[si];
+
+            if (!cache.valid || frustumChanged(cache, (float)vl, (float)vr, (float)vb, (float)vt)) {
+                cache.indices.clear();
+                cache.indices.reserve(sg.instances.size());
+                for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
+                    const auto& inst = sg.instances[ii];
+                    if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
+                        continue;
+                    cache.indices.push_back(ii);
+                }
+                cache.vl = vl; cache.vr = vr; cache.vb = vb; cache.vt = vt;
+                cache.valid = true;
             }
-            cache.vl = vl; cache.vr = vr; cache.vb = vb; cache.vt = vt;
-            cache.valid = true;
+            if (cache.indices.empty()) continue;
+
+            cache.offsets.resize(cache.indices.size() * 3);
+            for (size_t i = 0; i < cache.indices.size(); i++) {
+                const auto& inst = sg.instances[cache.indices[i]];
+                cache.offsets[i * 3]     = (float)(inst.offX - camX);
+                cache.offsets[i * 3 + 1] = (float)(inst.offY - camY);
+                cache.offsets[i * 3 + 2] = inst.offZ;
+            }
+
+            glBindVertexArray(sg.vao);
+            glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
+            glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
+                                    nullptr, (GLsizei)(cache.indices.size()));
+            glBindVertexArray(0);
         }
-
-        if (cache.indices.empty()) continue;
-
-        // Recompute camera-relative offsets: 3 floats per visible instance (position only)
-        cache.offsets.resize(cache.indices.size() * 3);
-        for (size_t i = 0; i < cache.indices.size(); i++) {
-            const auto& inst = sg.instances[cache.indices[i]];
-            cache.offsets[i * 3]     = (float)(inst.offX - camX);
-            cache.offsets[i * 3 + 1] = (float)(inst.offY - camY);
-            cache.offsets[i * 3 + 2] = inst.offZ;
-        }
-
-        // Upload position VBO only (colors are static in colorVbo)
-        glBindVertexArray(sg.vao);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
-        glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
-                                nullptr, (GLsizei)(cache.indices.size()));
-        glBindVertexArray(0);
     }
 }
 

@@ -105,6 +105,12 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         LOG_E("Trail shader failed"); glfwDestroyWindow(window); return;
     }
 
+    // Compute shader (GPU culling, OpenGL 4.3+)
+    Shader tileOffsetShader;
+    bool gpuCullAvail = playback.gpuCulling() && tileOffsetShader.compileCompute(Shaders::kTileOffsetCompSrc);
+    if (!gpuCullAvail && playback.gpuCulling())
+        LOG_I("GPU culling unavailable, using CPU path");
+
     // ---- Track ----
     TileMesh tileMesh;
     tileMesh.build(*level, cfg.trackFillColor, cfg.trackStrokeColor);
@@ -287,7 +293,8 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         tileShader.use();
         tileShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
         float vl,vr,vb,vt; camera.frustumBounds(vl,vr,vb,vt);
-        tileMesh.draw(vl, vr, vb, vt, camera.targetX(), camera.targetY());
+        tileMesh.draw(vl, vr, vb, vt, camera.targetX(), camera.targetY(),
+                      gpuCullAvail, tileOffsetShader.id());
         glEnable(GL_DEPTH_TEST);
 
         // Draw trails behind planets (no depth test)
