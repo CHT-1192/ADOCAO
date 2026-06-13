@@ -14,6 +14,7 @@ struct LauncherConfig {
     bool   enableHitsounds = true;
     bool   forceHitsounds = false;  // force "None" hitsound → "Kick"
     bool   autoPlay = false;       // auto-start playback after loading
+    bool   gpuCulling = true;      // use GPU compute culling (default on)
     int  resolutionW = 1280;
     int  resolutionH = 720;
     bool fullscreen = false;

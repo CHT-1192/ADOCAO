@@ -43,6 +43,7 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
     report(progress, 0.45f, "Precalculating timeline...");
     result.playback.init(*result.level, cfg.showTrail);
     result.playback.setForceHitsounds(cfg.forceHitsounds);
+    result.playback.setGpuCulling(cfg.gpuCulling);
 
     // Wait for background audio init to finish (if started)
     if (audioFuture.valid()) {

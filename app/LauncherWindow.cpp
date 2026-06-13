@@ -222,6 +222,7 @@ LauncherConfig showLauncher() {
     bool autoStroke = true;
     bool enableHitsounds = true;
     bool forceHitsounds = false;
+    bool gpuCulling = true;
     int  resoIdx = 0;
     const std::array<const char*, 4> resoNames = {"1280x720", "1920x1080", "2560x1440", "3840x2160"};
     const std::array<int, 4> resoW = {1280, 1920, 2560, 3840};
@@ -301,6 +302,8 @@ LauncherConfig showLauncher() {
         ImGui::Checkbox("Hitsounds", &enableHitsounds);
         ImGui::SameLine();
         ImGui::Checkbox("Force HS", &forceHitsounds);
+        ImGui::SameLine();
+        ImGui::Checkbox("GPU Cull", &gpuCulling);
 
         ImGui::Spacing();
 
@@ -358,6 +361,7 @@ LauncherConfig showLauncher() {
             cfg.autoStroke       = autoStroke;
             cfg.enableHitsounds  = enableHitsounds;
             cfg.forceHitsounds   = forceHitsounds;
+            cfg.gpuCulling       = gpuCulling;
             cfg.resolutionW      = resoW[resoIdx];
             cfg.resolutionH      = resoH[resoIdx];
             cfg.cancelled        = false;
