@@ -2,10 +2,16 @@
 setlocal
 set "PORTABLE=0"
 set "EXTREME_ZOOM=0"
+set "HIGH_FPS=0"
 if /I "%~1"=="portable" set "PORTABLE=1"
 if /I "%~1"=="extreme" set "EXTREME_ZOOM=1"
+if /I "%~1"=="highfps" set "HIGH_FPS=1"
 if /I "%~2"=="portable" set "PORTABLE=1"
 if /I "%~2"=="extreme" set "EXTREME_ZOOM=1"
+if /I "%~2"=="highfps" set "HIGH_FPS=1"
+if /I "%~3"=="portable" set "PORTABLE=1"
+if /I "%~3"=="extreme" set "EXTREME_ZOOM=1"
+if /I "%~3"=="highfps" set "HIGH_FPS=1"
 
 :: Find MinGW
 set "MINGW64=%LocalAppData%\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT.LLVM_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64"
@@ -23,7 +29,7 @@ if not exist build mkdir build
 cd build
 
 echo === Building ADOCAO%PORTABLE==1 (static)%EXTREME_ZOOM==1 (max zoom 4000) ===
-cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DADOCAO_PORTABLE=%PORTABLE% -DADOCAO_EXTREME_ZOOM=%EXTREME_ZOOM% -DCMAKE_C_COMPILER="%MINGW64%\bin\gcc.exe" -DCMAKE_CXX_COMPILER="%MINGW64%\bin\g++.exe"
+cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DADOCAO_PORTABLE=%PORTABLE% -DADOCAO_EXTREME_ZOOM=%EXTREME_ZOOM% -DADOCAO_HIGH_FPS=%HIGH_FPS% -DCMAKE_C_COMPILER="%MINGW64%\bin\gcc.exe" -DCMAKE_CXX_COMPILER="%MINGW64%\bin\g++.exe"
 
 cmake --build . --parallel
 if %ERRORLEVEL% NEQ 0 (

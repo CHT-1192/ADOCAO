@@ -174,7 +174,11 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
     // ---- Main loop ----
     double lastFrameTime = glfwGetTime();
-    constexpr double targetFrameTime = 1.0 / 320.0;  // 320 FPS soft cap
+#ifdef ADOCAO_HIGH_FPS
+    constexpr double targetFrameTime = 1.0 / 1000.0;  // 1000 FPS
+#else
+    constexpr double targetFrameTime = 1.0 / 320.0;   // 320 FPS soft cap
+#endif
     bool wasSpacePressed = false;
     double autoPlayTriggerTime = glfwGetTime() + (cfg.autoPlay ? 0.5 : 999999.0);
 
