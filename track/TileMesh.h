@@ -24,9 +24,7 @@ struct ShapeGroup {
     GLuint ebo = 0;
     GLuint instVbo = 0;   // per-instance offsets (3 floats, updated per-frame)
     GLuint colorVbo = 0;  // per-instance colors (7 floats, static)
-    GLuint worldSbo = 0;  // SSBO: world positions (vec4 per instance, GPU culling)
     unsigned indexCount = 0;
-    unsigned instanceCount = 0;
     std::vector<TileInstance> instances;
 };
 
@@ -44,8 +42,7 @@ public:
                const std::string& fillColorHex = "FFFFFF",
                const std::string& strokeColorHex = "000000");
 
-    void draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY,
-              bool gpuCulling, GLuint computeShader) const;
+    void draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const;
     void drawIcons(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const;
 
     bool empty() const;
