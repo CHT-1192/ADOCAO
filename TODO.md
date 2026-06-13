@@ -23,13 +23,15 @@
 - [ ] depthWrite + renderOrder (reverted — Z-fighting with overlap)
 - [ ] `setPoints` trail: `computePositionsAtTime` returns positions but render broken
 - [ ] MoveTrack (tile position/rotation/scale animation)
+- [x] Compute shader infrastructure (OpenGL 4.3, SSBO, indirect draw)
+- [ ] Wire up GPU compute culling in draw loop (Phase 4)
 - [ ] Spatial grid culling (O(1) vs current O(N) with cache)
 
 ## 功能
 - [x] JSON cleaner: Python literals, missing commas
 - [x] angleData double precision (16 decimal places)
 - [x] Memory: releaseMemory() after loading
-- [x] Window resizable + letterbox
+- [x] OpenGL 4.3 upgrade + compute shader functions (GPU culling ready)
 - [x] `--auto-play` CLI flag
 - [x] DPI awareness + CPU pin to big cores
 - [ ] MoveCamera (5 relativeTo modes)
