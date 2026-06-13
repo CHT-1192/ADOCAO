@@ -42,6 +42,7 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
     // ---- Phase 2: Precalculate timing (45-75%) ----
     report(progress, 0.45f, "Precalculating timeline...");
     result.playback.init(*result.level, cfg.showTrail);
+    result.playback.setForceHitsounds(cfg.forceHitsounds);
 
     // Wait for background audio init to finish (if started)
     if (audioFuture.valid()) {

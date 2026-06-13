@@ -413,7 +413,7 @@ void LevelData::releaseMemory() {
     actions = nlohmann::json();
     decorations = nlohmann::json();
     tilePositionOffsets.clear(); tilePositionOffsets.shrink_to_fit();
-    tileBPMs.clear(); tileBPMs.shrink_to_fit();
+    // tileBPMs kept: needed by buildIcons() for SetSpeed icon coloring
     tileFillColors.clear(); tileFillColors.shrink_to_fit();
     tileStrokeColors.clear(); tileStrokeColors.shrink_to_fit();
 }

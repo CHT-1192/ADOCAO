@@ -221,6 +221,7 @@ LauncherConfig showLauncher() {
     char bgBuf[8]     = "000000";
     bool autoStroke = true;
     bool enableHitsounds = true;
+    bool forceHitsounds = false;
     int  resoIdx = 0;
     const std::array<const char*, 4> resoNames = {"1280x720", "1920x1080", "2560x1440", "3840x2160"};
     const std::array<int, 4> resoW = {1280, 1920, 2560, 3840};
@@ -298,6 +299,8 @@ LauncherConfig showLauncher() {
         ImGui::SameLine();
         ImGui::Spacing(); ImGui::SameLine();
         ImGui::Checkbox("Hitsounds", &enableHitsounds);
+        ImGui::SameLine();
+        ImGui::Checkbox("Force HS", &forceHitsounds);
 
         ImGui::Spacing();
 
@@ -354,6 +357,7 @@ LauncherConfig showLauncher() {
             cfg.backgroundColor  = bgBuf;
             cfg.autoStroke       = autoStroke;
             cfg.enableHitsounds  = enableHitsounds;
+            cfg.forceHitsounds   = forceHitsounds;
             cfg.resolutionW      = resoW[resoIdx];
             cfg.resolutionH      = resoH[resoIdx];
             cfg.cancelled        = false;

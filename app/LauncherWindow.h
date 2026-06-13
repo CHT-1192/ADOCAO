@@ -12,6 +12,7 @@ struct LauncherConfig {
     std::string backgroundColor  = "000000";  // 6-char hex
     bool   autoStroke   = true;
     bool   enableHitsounds = true;
+    bool   forceHitsounds = false;  // force "None" hitsound → "Kick"
     int  resolutionW = 1280;
     int  resolutionH = 720;
     bool fullscreen = false;
