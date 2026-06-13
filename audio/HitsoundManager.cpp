@@ -11,6 +11,7 @@
 #include <future>
 
 static std::unordered_map<std::string, std::vector<float>> s_wavCache;
+static std::unordered_map<std::string, std::vector<int16_t>> s_wavRawCache;
 
 #ifdef _WIN32
 #include <windows.h>
@@ -139,7 +140,8 @@ bool HitsoundManager::readWav(const std::string& filepath,
 
     samples.resize(raw.size());
     for (size_t i=0;i<raw.size();i++) samples[i]=(float)raw[i]/32768.0f;
-    s_wavCache[filepath] = samples;  // cache for later reuse
+    s_wavCache[filepath] = samples;     // cache for later reuse
+    s_wavRawCache[filepath] = raw;     // cache raw int16 for hard-clip mixing
     return true;
 }
 
@@ -152,8 +154,10 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
         return false;
     }
 
-    // Load all WAV files per group (cached)
-    struct GroupData { std::vector<float> samples; int lenFrames; int sr; int ch; };
+    // Load all WAV files per group (cached). We keep a pointer to the raw
+    // int16 data so the mixing loop can use 16-bit hard-clip (matching the
+    // original HitSoundGenerator.exe: clamp(sum, -32768, 32767) each step).
+    struct GroupData { const std::vector<int16_t>* rawSamples; int lenFrames; int sr; int ch; };
     std::unordered_map<std::string, GroupData> wavData;
     float maxHitSec = 0.0f;
 
@@ -168,15 +172,19 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
             hp = hitsoundPath(m_hitsoundType);
             if (hp.empty()) continue;
         }
-        GroupData gd;
-        if (!readWav(hp, gd.samples, gd.sr, gd.ch)) {
-            LOG_E("Hitsound: Failed to read WAV for '%s'", g.type.c_str());
-            continue;
+        {
+            std::vector<float> tmpSamples;
+            GroupData gd;
+            if (!readWav(hp, tmpSamples, gd.sr, gd.ch)) {
+                LOG_E("Hitsound: Failed to read WAV for '%s'", g.type.c_str());
+                continue;
+            }
+            gd.rawSamples = &s_wavRawCache[hp];  // guaranteed populated by readWav
+            gd.lenFrames = (int)gd.rawSamples->size() / gd.ch;
+            float dur = (float)gd.lenFrames / (float)gd.sr;
+            if (dur > maxHitSec) maxHitSec = dur;
+            wavData[g.type] = gd;
         }
-        gd.lenFrames = (int)gd.samples.size() / gd.ch;
-        float dur = (float)gd.lenFrames / (float)gd.sr;
-        if (dur > maxHitSec) maxHitSec = dur;
-        wavData[g.type] = gd;
     }
     if (wavData.empty()) return false;
     if (onProgress) onProgress(5.0f);
@@ -186,7 +194,8 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
     int totalFrames = (int)((totalDuration + maxHitSec + 1.0f) * sr);
     size_t bufSize = (size_t)totalFrames * 2;
 
-    m_buffer.assign(bufSize, 0.0f);
+    // 16-bit hard-clip mixing buffer — matches HitSoundGenerator.exe
+    std::vector<int16_t> mixBuf(bufSize, 0);
 
     int totalHits = 0;
     for (auto& g : groups) totalHits += (int)g.timestamps.size();
@@ -199,6 +208,7 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
 
         auto& gd = it->second;
         float volScale = g.volume / 100.0f;
+        auto& raw  = *gd.rawSamples;
 
         auto sorted = g.timestamps;
         std::sort(sorted.begin(), sorted.end());
@@ -210,14 +220,24 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
             if (sf + cl > totalFrames) cl = totalFrames - sf;
             if (cl <= 0) continue;
             for (int i = 0; i < cl; i++) {
-                float hv = gd.samples[(size_t)i * (size_t)gd.ch] * volScale;
-                size_t pos = (size_t)(sf + i) * 2;
-                m_buffer[pos]     += hv;
-                m_buffer[pos + 1] += hv;
+                int add = (int)(raw[(size_t)i * (size_t)gd.ch] * volScale);
+                int idx = (sf + i) * 2;
+                // 16-bit hard-clip: clamp each addition individually
+                int sumL = (int)mixBuf[idx]     + add;
+                int sumR = (int)mixBuf[idx + 1] + add;
+                if (sumL > 32767) sumL = 32767; else if (sumL < -32768) sumL = -32768;
+                if (sumR > 32767) sumR = 32767; else if (sumR < -32768) sumR = -32768;
+                mixBuf[idx]     = (int16_t)sumL;
+                mixBuf[idx + 1] = (int16_t)sumR;
             }
             processed++;
         }
     }
+
+    // Convert mixed int16 buffer back to float for playback
+    m_buffer.resize(bufSize);
+    for (size_t i = 0; i < bufSize; i++)
+        m_buffer[i] = (float)mixBuf[i] / 32768.0f;
 
     if (onProgress) onProgress(100.0f);
     LOG_I("Hitsound: Synthesized %d hits from %zu groups into %.1fs buffer",
