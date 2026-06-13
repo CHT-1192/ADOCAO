@@ -27,9 +27,12 @@ A [Vulkan 1.2 port](https://github.com/CHT-1192/ADOCAV) is also available.
 
 ### Windows
 ```bash
-build.bat          # dynamic-link build
-build.bat portable # static-link portable build
-build.bat highfps  # 1000 FPS cap
+build.bat                     # default: 320 FPS, zoom max 1000
+build.bat highfps             # 1000 FPS cap
+build.bat extreme             # max zoom 4000
+build.bat highfps extreme     # both
+build.bat portable            # static-linked portable build
+build.bat portable highfps    # portable + 1000 FPS
 ```
 
 ### Linux
@@ -37,6 +40,14 @@ build.bat highfps  # 1000 FPS cap
 chmod +x build.sh
 ./build.sh
 ```
+
+### CMake Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `ADOCAO_PORTABLE` | OFF | Static-link portable build |
+| `ADOCAO_HIGH_FPS` | OFF | 1000 FPS cap (default 320) |
+| `ADOCAO_EXTREME_ZOOM` | OFF | Max zoom 4000 (default 1000) |
 
 ## Build Dependencies
 
@@ -58,7 +69,7 @@ All dependencies are fetched automatically via CMake `FetchContent`:
 adocao.exe --level <file> --music <file> [--width N] [--height N]
            [--fullscreen] [--fill HEX] [--stroke HEX] [--bg HEX]
            [--no-auto-stroke] [--no-hitsound] [--no-trail] [--debug]
-           [--force-hitsound] [--auto-play] [--export]
+           [--force-hitsound] [--auto-play] [--export] [--cpu-culling]
 ```
 
 Without `--level`, falls through to the ImGui launcher.
