@@ -13,6 +13,7 @@ struct LauncherConfig {
     bool   autoStroke   = true;
     bool   enableHitsounds = true;
     bool   forceHitsounds = false;  // force "None" hitsound → "Kick"
+    bool   autoPlay = false;       // auto-start playback after loading
     int  resolutionW = 1280;
     int  resolutionH = 720;
     bool fullscreen = false;

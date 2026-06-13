@@ -10,6 +10,8 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <chrono>
+#include <thread>
 
 namespace {
 
@@ -61,7 +63,7 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         const GLFWvidmode* mode = glfwGetVideoMode(targetMonitor);
         window = glfwCreateWindow(mode->width, mode->height, "ADOCAO", targetMonitor, nullptr);
     } else {
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
         glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
         window = glfwCreateWindow(cfg.resolutionW, cfg.resolutionH, "ADOCAO", nullptr, nullptr);
 
@@ -166,18 +168,25 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
     double lastFrameTime = glfwGetTime();
     constexpr double targetFrameTime = 1.0 / 320.0;  // 320 FPS soft cap
     bool wasSpacePressed = false;
+    double autoPlayTriggerTime = glfwGetTime() + (cfg.autoPlay ? 0.5 : 999999.0);
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, GLFW_TRUE);
 
-        // Delta time with precise busy-wait cap (microsecond accuracy)
+        // Delta time with sleep + spin cap (CPU-efficient)
         double now = glfwGetTime();
         double elapsed = now - lastFrameTime;
         if (elapsed < targetFrameTime && elapsed > 0) {
-            double target = lastFrameTime + targetFrameTime;
-            while ((now = glfwGetTime()) < target) { /* busy-wait */ }
+            double remaining = targetFrameTime - elapsed;
+            if (remaining > 0.002) {
+                std::this_thread::sleep_for(
+                    std::chrono::duration<double>(remaining - 0.001));
+            }
+            while ((now = glfwGetTime()) < lastFrameTime + targetFrameTime) {
+                // Spin last ~1ms for precision
+            }
             elapsed = targetFrameTime;
         }
         float deltaMs = (float)(elapsed * 1000.0);
@@ -185,9 +194,11 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         if (deltaMs > 500.0f) deltaMs = 0.0f;
         else if (deltaMs > 100.0f) deltaMs = 100.0f;
 
-        // Space toggles playback
-        bool spacePressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS);
+        // Space toggles playback (or auto-play trigger)
+        bool spacePressed = (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+                         || (cfg.autoPlay && now >= autoPlayTriggerTime && !playback.isPlaying());
         if (spacePressed && !wasSpacePressed) {
+            autoPlayTriggerTime = 999999.0;  // only fire once
             if (!playback.isPlaying()) {
                 playback.start(glfwGetTime());
 

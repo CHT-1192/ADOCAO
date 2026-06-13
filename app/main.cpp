@@ -20,6 +20,7 @@ int main(int argc, char* argv[]) {
         else if (strcmp(argv[i], "--no-auto-stroke") == 0)        cli.autoStroke = false;
         else if (strcmp(argv[i], "--no-hitsound") == 0)           cli.enableHitsounds = false;
         else if (strcmp(argv[i], "--force-hitsound") == 0)      cli.forceHitsounds = true;
+        else if (strcmp(argv[i], "--auto-play") == 0)           cli.autoPlay = true;
         else if (strcmp(argv[i], "--no-trail") == 0)              cli.showTrail = false;
         else if (strcmp(argv[i], "--export") == 0)                cli.exportHitsounds = true;
     }
