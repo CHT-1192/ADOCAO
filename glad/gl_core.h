@@ -74,6 +74,14 @@ extern PFNGLLINEWIDTHPROC    glad_LineWidth;
 extern PFNGLDEPTHFUNCPROC    glad_DepthFunc;
 
 // Misc
+// Compute shader (OpenGL 4.3+)
+extern PFNGLDISPATCHCOMPUTEPROC         glad_DispatchCompute;
+extern PFNGLDISPATCHCOMPUTEINDIRECTPROC glad_DispatchComputeIndirect;
+extern PFNGLBINDBUFFERBASEPROC          glad_BindBufferBase;
+extern PFNGLMEMORYBARRIERPROC           glad_MemoryBarrier;
+// Indirect draw (OpenGL 4.0+)
+extern PFNGLDRAWELEMENTSINDIRECTPROC glad_DrawElementsIndirect;
+
 extern PFNGLGETSTRINGPROC glad_GetString;
 extern PFNGLGETERRORPROC  glad_GetError;
 

@@ -65,6 +65,12 @@ PFNGLBLENDFUNCPROC    glad_BlendFunc;
 PFNGLLINEWIDTHPROC    glad_LineWidth;
 PFNGLDEPTHFUNCPROC    glad_DepthFunc;
 
+PFNGLDISPATCHCOMPUTEPROC         glad_DispatchCompute;
+PFNGLDISPATCHCOMPUTEINDIRECTPROC glad_DispatchComputeIndirect;
+PFNGLBINDBUFFERBASEPROC          glad_BindBufferBase;
+PFNGLMEMORYBARRIERPROC           glad_MemoryBarrier;
+PFNGLDRAWELEMENTSINDIRECTPROC    glad_DrawElementsIndirect;
+
 PFNGLGETSTRINGPROC glad_GetString;
 PFNGLGETERRORPROC  glad_GetError;
 
@@ -150,6 +156,14 @@ bool loadGLCore() {
     loadGL(glad_BlendFunc,    "glBlendFunc");
     loadGL(glad_LineWidth,    "glLineWidth");
     loadGL(glad_DepthFunc,   "glDepthFunc");
+
+    // Compute shader (OpenGL 4.3+)
+    loadGL(glad_DispatchCompute,         "glDispatchCompute");
+    loadGL(glad_DispatchComputeIndirect, "glDispatchComputeIndirect");
+    loadGL(glad_BindBufferBase,          "glBindBufferBase");
+    loadGL(glad_MemoryBarrier,           "glMemoryBarrier");
+    // Indirect draw (OpenGL 4.0+)
+    loadGL(glad_DrawElementsIndirect,    "glDrawElementsIndirect");
 
     // Misc
     loadGL(glad_GetString, "glGetString");

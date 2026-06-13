@@ -58,13 +58,17 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
     GLFWmonitor* targetMonitor = cfg.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
     float targetAspect = (float)cfg.resolutionW / (float)cfg.resolutionH;
 
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
+
     GLFWwindow* window;
     if (targetMonitor) {
         const GLFWvidmode* mode = glfwGetVideoMode(targetMonitor);
         window = glfwCreateWindow(mode->width, mode->height, "ADOCAO", targetMonitor, nullptr);
     } else {
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-        glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
         window = glfwCreateWindow(cfg.resolutionW, cfg.resolutionH, "ADOCAO", nullptr, nullptr);
 
         GLFWmonitor* monitor = glfwGetPrimaryMonitor();

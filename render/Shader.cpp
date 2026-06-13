@@ -27,12 +27,36 @@ GLuint Shader::compileShader(GLenum type, const char* src) {
     if (!success) {
         char log[1024];
         glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
-        fprintf(stderr, "[Shader] %s compile error:\n%s\n",
-                type == GL_VERTEX_SHADER ? "Vertex" : "Fragment", log);
+        const char* name = type == GL_VERTEX_SHADER ? "Vertex"
+                         : type == GL_FRAGMENT_SHADER ? "Fragment"
+                         : "Compute";
+        fprintf(stderr, "[Shader] %s compile error:\n%s\n", name, log);
         glDeleteShader(shader);
         return 0;
     }
     return shader;
+}
+
+bool Shader::compileCompute(const char* compSrc) {
+    destroy();
+    GLuint cs = compileShader(GL_COMPUTE_SHADER, compSrc);
+    if (!cs) return false;
+
+    m_program = glCreateProgram();
+    glAttachShader(m_program, cs);
+    glLinkProgram(m_program);
+
+    GLint success;
+    glGetProgramiv(m_program, GL_LINK_STATUS, &success);
+    if (!success) {
+        char log[1024];
+        glGetProgramInfoLog(m_program, sizeof(log), nullptr, log);
+        fprintf(stderr, "[Shader] Compute link error:\n%s\n", log);
+        destroy();
+    }
+
+    glDeleteShader(cs);
+    return m_program != 0;
 }
 
 bool Shader::compile(const char* vertSrc, const char* fragSrc) {
@@ -66,6 +90,11 @@ bool Shader::compile(const char* vertSrc, const char* fragSrc) {
 
 void Shader::use() const {
     glUseProgram(m_program);
+}
+
+void Shader::dispatch(GLuint x, GLuint y, GLuint z) const {
+    glUseProgram(m_program);
+    glad_DispatchCompute(x, y, z);
 }
 
 void Shader::setMat4(const char* name, const float* value) const {
