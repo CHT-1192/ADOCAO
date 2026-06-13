@@ -144,6 +144,8 @@ void AudioEngine::resume() {
 
 void AudioEngine::pause() {
     m_playing = false;
+    if (m_device && ma_device_is_started(m_device) != MA_FALSE)
+        ma_device_stop(m_device);
 }
 
 void AudioEngine::stop() {
