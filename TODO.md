@@ -24,8 +24,7 @@
 - [ ] `setPoints` trail: `computePositionsAtTime` returns positions but render broken
 - [ ] MoveTrack (tile position/rotation/scale animation)
 - [x] Compute shader infrastructure (OpenGL 4.3, SSBO, indirect draw)
-- [x] GPU compute offset: tile_offset shader computes camera-relative offsets on GPU
-- [ ] GPU frustum culling with indirect draw (multi-draw, Phase 5)
+- [ ] Wire up GPU compute culling in draw loop (Phase 4)
 - [ ] Spatial grid culling (O(1) vs current O(N) with cache)
 
 ## 功能
