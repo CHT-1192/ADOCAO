@@ -309,12 +309,19 @@ void LevelData::processActions() {
 
     if (actions.is_null() || !actions.is_array()) return;
 
-    float currentBPM = settings.bpm;
+    // Per-floor event data (populated in single pass, propagated in O(n) after)
+    struct SS { float multiplier = 0.0f; float bpm = 0.0f; bool isMultiplier = false; };
+    std::vector<SS> setSpeedByFloor(n);
+
+    // SetHitsound / ColorTrack: collect floors+values, then forward-propagate in O(n+m)
+    struct HSChange { int floor; std::string type; };
+    std::vector<HSChange> hsChanges;
+    struct CCChange { int floor; bool jtt; std::string fc, sc; };
+    std::vector<CCChange> ccChanges;
 
     for (size_t i = 0; i < actions.size(); i++) {
         auto& a = actions[i];
-        if (!a.is_object()) continue;
-        if (!a.contains("floor") || !a.contains("eventType")) continue;
+        if (!a.is_object() || !a.contains("floor") || !a.contains("eventType")) continue;
 
         int floor = a["floor"].get<int>();
         if (floor < 0 || floor >= n) continue;
@@ -325,12 +332,13 @@ void LevelData::processActions() {
             tileHasTwirl[floor] = true;
         } else if (etype == "SetSpeed") {
             tileHasSetSpeed[floor] = true;
-            std::string stype = a.value("speedType", std::string("Bpm"));
-            if (stype == "Multiplier") {
-                currentBPM *= a.value("bpmMultiplier", 1.0f);
-            } else {
-                currentBPM = a.value("beatsPerMinute", currentBPM);
-            }
+            std::string st = a.value("speedType", std::string("Bpm"));
+            SS& ev = setSpeedByFloor[floor];
+            ev.isMultiplier = (st == "Multiplier");
+            if (ev.isMultiplier)
+                ev.multiplier = a.value("bpmMultiplier", 1.0f);
+            else
+                ev.bpm = a.value("beatsPerMinute", 0.0f);
         } else if (etype == "PositionTrack") {
             if (a.contains("positionOffset") && a["positionOffset"].is_array() && a["positionOffset"].size() >= 2) {
                 tilePositionOffsets[floor].offsetX = a["positionOffset"][0].get<float>();
@@ -339,42 +347,19 @@ void LevelData::processActions() {
             }
         } else if (etype == "SetHitsound") {
             std::string hs = a.value("hitsound", std::string());
-            if (!hs.empty() && floor >= 0 && floor < n) {
-                for (int k = floor; k < n; k++)
-                    tileHitsounds[k] = hs;
-            }
+            if (!hs.empty())
+                hsChanges.push_back({floor, hs});
         } else if (etype == "ColorTrack") {
             std::string fc = a.value("trackColor", std::string());
             std::string sc = a.value("secondaryTrackColor", std::string());
-            bool jtt = parseBool(a, "justThisTile", false);
-            if ((!fc.empty() || !sc.empty()) && floor >= 0 && floor < n) {
-                int end = jtt ? floor + 1 : n;
-                for (int k = floor; k < end; k++) {
-                    if (!fc.empty()) tileFillColors[k] = fc;
-                    if (!sc.empty()) tileStrokeColors[k] = sc;
-                }
-            }
+            if (!fc.empty() || !sc.empty())
+                ccChanges.push_back({floor, parseBool(a, "justThisTile", false), fc, sc});
         }
     }
 
-    // Pre-index SetSpeed events by floor (O(m) instead of O(n*m) per-tile scan)
-    struct SS { float multiplier; float bpm; bool isMultiplier; };
-    std::vector<SS> setSpeedByFloor(n);  // 0 = no event
-    for (size_t j = 0; j < actions.size(); j++) {
-        auto& a = actions[j];
-        if (!a.is_object() || !a.contains("floor") || !a.contains("eventType")) continue;
-        int floor = a["floor"].get<int>();
-        if (floor < 0 || floor >= n) continue;
-        if (a["eventType"].get<std::string>() != "SetSpeed") continue;
-        std::string st = a.value("speedType", std::string("Bpm"));
-        SS ev;
-        ev.isMultiplier = (st == "Multiplier");
-        ev.multiplier = ev.isMultiplier ? a.value("bpmMultiplier", 1.0f) : 0.0f;
-        ev.bpm = ev.isMultiplier ? 0.0f : a.value("beatsPerMinute", 0.0f);
-        setSpeedByFloor[floor] = ev;
-    }
+    // ---- Forward propagation (O(n+m) instead of O(n*m)) ----
 
-    // Propagate BPM forward in O(n)
+    // BPM
     float runningBPM = settings.bpm;
     for (int i = 0; i < n; i++) {
         if (setSpeedByFloor[i].isMultiplier)
@@ -382,6 +367,47 @@ void LevelData::processActions() {
         else if (setSpeedByFloor[i].bpm > 0.0f)
             runningBPM = setSpeedByFloor[i].bpm;
         tileBPMs[i] = runningBPM;
+    }
+
+    // Hitsound types: forward-fill from sorted event floors
+    if (!hsChanges.empty()) {
+        std::string curHS = settings.hitsound;
+        size_t ci = 0;
+        for (int i = 0; i < n; i++) {
+            while (ci < hsChanges.size() && hsChanges[ci].floor <= i) {
+                curHS = hsChanges[ci].type;
+                ci++;
+            }
+            tileHitsounds[i] = curHS;
+        }
+    }
+
+    // ColorTrack colors: forward-fill (justThisTile reverts after one tile)
+    if (!ccChanges.empty()) {
+        std::string curFC = settings.trackColor, curSC = settings.secondaryTrackColor;
+        size_t ci = 0;
+        int revertFill = -1, revertStroke = -1;
+        for (int i = 0; i < n; i++) {
+            // Apply pending justThisTile reverts
+            if (i == revertFill)  curFC = settings.trackColor;
+            if (i == revertStroke) curSC = settings.secondaryTrackColor;
+            // Apply events at this floor
+            while (ci < ccChanges.size() && ccChanges[ci].floor <= i) {
+                auto& ch = ccChanges[ci];
+                if (!ch.fc.empty()) {
+                    curFC = ch.fc;
+                    revertFill = ch.jtt ? i + 1 : -1;
+                }
+                if (!ch.sc.empty()) {
+                    curSC = ch.sc;
+                    revertStroke = ch.jtt ? i + 1 : -1;
+                }
+                if (!ch.jtt) { revertFill = -1; revertStroke = -1; }
+                ci++;
+            }
+            tileFillColors[i]   = curFC;
+            tileStrokeColors[i] = curSC;
+        }
     }
 }
 
