@@ -151,9 +151,11 @@ void PlanetTrail::ensureGPUResources() const {
     glGenVertexArrays(1, &m_vao);
     glBindVertexArray(m_vao);
 
-    // Pre-allocate max buffer sizes
-    int maxVerts = m_maxPoints * 2;   // left + right per point
-    int maxIndices = (m_maxPoints - 1) * 6;
+    // Pre-allocate max buffer sizes (accounts for 4x spline subdivision)
+    constexpr int segsPerPoint = 4;
+    int maxSegments = (m_maxPoints - 1) * segsPerPoint;
+    int maxVerts = (maxSegments + 1) * 2;  // left + right per vertex
+    int maxIndices = maxSegments * 6;
 
     glGenBuffers(1, &m_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
