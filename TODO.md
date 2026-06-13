@@ -21,7 +21,7 @@
 - [x] Camera-relative offsets on CPU (removed uCam from shader)
 - [x] Event icons: Twirl (purple), SetSpeed (red/blue)
 - [ ] depthWrite + renderOrder (reverted — Z-fighting with overlap)
-- [ ] `setPoints` trail: `computePositionsAtTime` returns positions but render broken
+- [x] `setPoints` trail: buffer under-allocation fixed (segsPerPoint=4 factor)
 - [ ] MoveTrack (tile position/rotation/scale animation)
 - [x] Compute shader infrastructure (OpenGL 4.3, SSBO, indirect draw)
 - [ ] Wire up GPU compute culling in draw loop (Phase 4)
