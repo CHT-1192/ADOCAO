@@ -18,6 +18,11 @@ endif()
 project(ADOCAO VERSION 0.5.0 LANGUAGES CXX C)
 
 option(ADOCAO_PORTABLE "Build a static-linked portable executable" OFF)
+option(ADOCAO_EXTREME_ZOOM "Max zoom 4000 instead of 1000" OFF)
+
+if(ADOCAO_EXTREME_ZOOM)
+    add_compile_definitions(ADOCAO_EXTREME_ZOOM)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

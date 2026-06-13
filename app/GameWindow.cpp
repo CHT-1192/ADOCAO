@@ -159,8 +159,12 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
     });
     glfwSetScrollCallback(window, [](GLFWwindow* w, double, double dy) {
         auto* in = static_cast<GameInput*>(glfwGetWindowUserPointer(w));
+        float maxZoom = 1000.0f;
+#ifdef ADOCAO_EXTREME_ZOOM
+        maxZoom = 4000.0f;
+#endif
         float z = in->camera->zoom() * (1.0f + (float)dy * 0.1f);
-        if (z<5)z=5; if (z>1000)z=1000;
+        if (z<5)z=5; if (z>maxZoom)z=maxZoom;
         in->camera->setZoom(z);
     });
     glfwSetWindowUserPointer(window, &input);
