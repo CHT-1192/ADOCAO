@@ -4,14 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A native C++ / OpenGL "A Dance of Fire and Ice" (冰与火之舞) level viewer. Plays `.adofai` custom levels on Windows and Linux (Wayland). Reference implementations at `../re_adojas/` (Three.js), `../ADOFAN_PIXI/` (PixiJS), and `../ADOFAI-JS/` (core angle parsing).
+A native C++ / OpenGL "A Dance of Fire and Ice" (冰与火之舞) level viewer. Plays `.adofai` custom levels on Windows and Linux (Wayland).
 
-A WinUI 3 C# launcher is in a separate repo at `../ADOCAO_WinUI3_Launcher/`. It calls ADOCAO via CLI arguments (`--level`, `--music`, `--width`, etc.).
+A Vulkan port exists at `../ADOCAV/` (same game logic, Vulkan 1.2 backend with GPU compute culling).
+
+Reference implementations:
+- `../ADOFAI-JS/` — Core angle parsing
+- `../Re_ADOJAS/` — Three.js web player (hitsound, camera, decorations)
+- `../ADOFAN_PIXI/` — PixiJS web player
+- `../ADOFAI/A Dance of Fire and Ice/` — Original Unity game. Use dnSpy to decompile `Assembly-CSharp.dll`
+
+A WinUI 3 C# launcher is in a separate repo at `../ADOCAO_WinUI3_Launcher/`.
 
 ## Branches
 
-- `master` — Independent AudioSource hit model (like Unity PlayScheduled)
-- `pre-synth-v1` — First-gen pre-synthesis with 16-bit hard-clip (matches original HitSoundGenerator.exe), per-instance colors, ColorTrack parsing, visibility cache
+- `master` — Current development branch (OpenGL 4.3, compute shaders ready)
+- `pre-synth-v1` — Same as master (merged)
 
 ## Floating-Point Precision Rules
 
@@ -26,7 +34,7 @@ A WinUI 3 C# launcher is in a separate repo at `../ADOCAO_WinUI3_Launcher/`. It 
 **Linux:** `chmod +x build.sh && ./build.sh`
 **Manual:** `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . --parallel`
 
-Minimum CMake 3.20. C++20. Dependencies via FetchContent (GLFW, glm, nlohmann/json, Dear ImGui, miniaudio, tinyfiledialogs).
+Minimum CMake 3.20. C++20. OpenGL 4.3+ required. Dependencies via FetchContent (GLFW, glm, nlohmann/json, Dear ImGui, miniaudio, tinyfiledialogs).
 
 `--debug` flag enables debug console, disables hitsounds by default.
 
@@ -36,6 +44,7 @@ Minimum CMake 3.20. C++20. Dependencies via FetchContent (GLFW, glm, nlohmann/js
 adocao.exe --level <file> --music <file> [--width N] [--height N]
            [--fullscreen] [--fill HEX] [--stroke HEX] [--bg HEX]
            [--no-auto-stroke] [--no-hitsound] [--no-trail] [--debug]
+           [--force-hitsound] [--auto-play] [--export]
 ```
 
 Without `--level`, falls through to the ImGui launcher.
@@ -43,24 +52,30 @@ Without `--level`, falls through to the ImGui launcher.
 ## Audio System
 
 ### Music
-`ma_decoder` (miniaudio) — supports AIFF, OGG, WAV, FLAC. File read into memory + `ma_decoder_init_memory()`. Output: stereo f32 @ 44100Hz. Device period: 1024 frames (~23ms) for best quality. `m_fileData` kept alive for decoder lifetime.
+`ma_decoder` (miniaudio) — supports AIFF, OGG, WAV, FLAC. File read into memory + `ma_decoder_init_memory()`. Output: stereo f32 @ 44100Hz. Device period: 1024 frames (~23ms) for best quality. `m_fileData` kept alive for decoder lifetime. Pause stops the audio device (not just sets a flag).
 
-### Hitsounds (pre-synth-v1)
+### Hitsounds
 Pre-synthesis with 16-bit hard-clip integer mixing (matches `HitSoundGenerator.exe`):
-- Multi-type support via `TimestampGroup` (SetHitsound events)
-- Per-group WAV loading with volume scaling
+- Multi-type support via `TimestampGroup` (SetHitsound events), 27 hit types
+- Case-insensitive type matching (ADOFAI levels may use mixed case)
+- Unknown type fallback: redirects to default type if WAV not found
+- `--force-hitsound`: override "None" type → "Kick" (GUI: "Force HS" checkbox)
+- Per-group WAV loading with volume scaling, cached in `s_wavCache` + `s_wavRawCache`
 - `preSynthesize()` → stereo float buffer → streamed via `attachExternal()`
-- Export: launcher Export button writes `<level>_hitsounds.wav`
+- Export: launcher Export button or `--export` CLI writes `<level>_hitsounds.wav`
 
 ## Playback Engine
 
-Direction-based angle algorithm matching ADOFAI-JS `_parseAngle`. BPM propagation via pre-indexed SetSpeed events (O(n+m)). Twirl toggles `isCW` before computing angle — affects current tile. Full rotation only when `delta < 0.0001` (not 0.01°). Double precision throughout.
+Direction-based angle algorithm matching ADOFAI-JS `_parseAngle`. BPM propagation via pre-indexed SetSpeed events (O(n+m)). Twirl toggles `isCW` before computing angle — affects current tile. Full rotation only when `delta < 0.0001`. Double precision throughout. `--auto-play` flag auto-starts playback 0.5s after loading.
 
 ## Coordinate System
 
 OpenGL world space: X right, Y up. View matrix always at origin — camera-relative offsets computed in double, converted to float for GPU.
 
-## Rendering (pre-synth-v1)
+## Rendering
+
+### OpenGL 4.3 Core Profile
+Compute shader ready: GPU frustum culling (`kTileCullCompSrc`) and offset computation (`kTileOffsetCompSrc`) shaders available. SSBO + indirect draw functions loaded. Not yet wired into the draw loop (Phase 4).
 
 ### Per-instance color attributes
 Vertex shader: `aType` (0=stroke, 1=fill) mixes `iColor`/`iBgColor` per-instance.
@@ -69,16 +84,19 @@ Vertex shader: `aType` (0=stroke, 1=fill) mixes `iColor`/`iBgColor` per-instance
 - Instance color VBO: `[fillR,fillG,fillB, strokeR,strokeG,strokeB, opacity]` — 7 floats, static
 
 ### Visibility cache
-`draw()` caches visible instance indices per shape group. Rebuilt only when frustum moves >0.5 units. Camera-relative offsets recomputed each frame on cached set.
+`draw()` caches visible instance indices per shape group. Rebuilt when frustum bounds change (position or zoom). Camera-relative offsets recomputed each frame on cached set. Uses `frustumChanged()` checking both position and viewport size.
 
 ### ColorTrack
-Parsed via `processActions()` → per-tile `tileFillColors[]`/`tileStrokeColors[]`. Applied during `TileMesh::build()` as per-instance colors.
+Parsed via `processActions()` → per-tile `tileFillColors[]`/`tileStrokeColors[]`. Applied during `TileMesh::build()` as per-instance colors. ColorTrack events (basic parsing done, COLOR_FUNCS/Pulse/RecolorTrack runtime TBD).
 
 ### Memory management
-`LevelData::releaseMemory()` frees angleData, actions/decorations JSON, tilePositionOffsets, tileBPMs, tileFillColors, tileStrokeColors after loading.
+`LevelData::releaseMemory()` frees angleData, actions/decorations JSON, tilePositionOffsets, tileFillColors, tileStrokeColors after loading. `tileBPMs` kept — needed by `buildIcons()` for SetSpeed icon coloring.
 
 ### Tiles drawn without depth test
-Z offset `2.0 - i*0.001` for basic layering. Icons drawn last with depth test off (always on top).
+Descending instance order for basic layering. Icons drawn last with depth test off (always on top).
+
+### Frame pacing
+Sleep-based: `sleep_for(remaining - 1ms)` + spin last 1ms for precision. 320 FPS soft cap (1000 with highfps build). DPI awareness + CPU pin to performance cores on Windows.
 
 ## Reference Implementations
 
@@ -86,3 +104,4 @@ Z offset `2.0 - i*0.001` for basic layering. Icons drawn last with depth test of
 - `../Re_ADOJAS/` — Three.js web player (hitsound, camera, decorations)
 - `../ADOFAN_PIXI/` — PixiJS web player
 - `../ADOFAI/A Dance of Fire and Ice/` — Original Unity game. Use dnSpy to decompile `Assembly-CSharp.dll`
+- `../ADOCAV/` — Vulkan 1.2 port (same game logic, GPU compute culling)

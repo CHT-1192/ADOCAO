@@ -1,20 +1,27 @@
 # ADOCAO - A Dance of C++ and OpenGL
 
-A native high-performance viewer for [A Dance of Fire and Ice](https://store.steampowered.com/app/977950/A_Dance_of_Fire_and_Ice/) custom levels (`.adofai` format), written in C++20 and OpenGL.
+A native high-performance viewer for [A Dance of Fire and Ice](https://store.steampowered.com/app/977950/A_Dance_of_Fire_and_Ice/) custom levels (`.adofai` format), written in C++20 and OpenGL 4.3.
 
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue)
-![OpenGL](https://img.shields.io/badge/OpenGL-3.3-green)
+![OpenGL](https://img.shields.io/badge/OpenGL-4.3-red)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)
+
+A [Vulkan 1.2 port](https://github.com/CHT-1192/ADOCAV) is also available.
 
 ## Features
 
 - Full ADOFAI playback engine with relative angle computation (matches [ADOFAI-JS](https://github.com/adofaiex/ADOFAI-JS))
-- Music playback (.ogg) via stb_vorbis + miniaudio (WASAPI/PulseAudio)
-- Pre-synthesized hitsound tracks (27 hit types)
+- Music playback via miniaudio (WASAPI/PulseAudio): AIFF, OGG, WAV, FLAC
+- Pre-synthesized hitsound tracks (27 hit types) with 16-bit hard-clip mixing
 - Instanced GPU rendering with frustum culling and visibility cache
-- DPI-aware launcher with auto-stroke color, background color, and resolution selection
+- Per-tile ColorTrack support (fill + stroke colors)
 - Planet movement with trail rendering (Catmull-Rom spline)
+- Event icons: Twirl (purple), SetSpeed (red/blue)
+- DPI-aware launcher with auto-stroke color, background color, and resolution selection
+- OpenGL 4.3 compute shaders ready (GPU frustum culling)
 - `SetSpeed`, `Twirl`, `Pause`, `Midspin`, `PositionTrack` support
+- `--auto-play` for automatic playback
+- `--force-hitsound` to override level hitsound type
 
 ## Quick Start
 
@@ -22,6 +29,7 @@ A native high-performance viewer for [A Dance of Fire and Ice](https://store.ste
 ```bash
 build.bat          # dynamic-link build
 build.bat portable # static-link portable build
+build.bat highfps  # 1000 FPS cap
 ```
 
 ### Linux
@@ -44,14 +52,25 @@ All dependencies are fetched automatically via CMake `FetchContent`:
 | stb_vorbis | latest | OGG decoding |
 | tinyfiledialogs | 2.9.3 | File open dialogs |
 
+## CLI Usage
+
+```
+adocao.exe --level <file> --music <file> [--width N] [--height N]
+           [--fullscreen] [--fill HEX] [--stroke HEX] [--bg HEX]
+           [--no-auto-stroke] [--no-hitsound] [--no-trail] [--debug]
+           [--force-hitsound] [--auto-play] [--export]
+```
+
+Without `--level`, falls through to the ImGui launcher.
+
 ## Project Structure
 
 ```
 app/         Application layer (windows, launcher, game loop)
-audio/       Music playback + hitsound synthesis
-camera/      Orthographic camera with orbit controls
+audio/       Music playback + hitsound synthesis (miniaudio)
+camera/      Orthographic camera
 game/        Planet rendering + playback engine
-glad/        OpenGL 3.3 Core loader
+glad/        OpenGL 4.3 Core loader (custom minimal loader)
 level/       .adofai parser + JSON cleaner
 render/      Shader programs + planet trail
 track/       Tile mesh generation + instanced rendering
@@ -67,7 +86,7 @@ assets/
 | Space | Start/stop playback |
 | Esc | Close game window |
 | Mouse drag | Pan camera (when stopped) |
-| Scroll | Zoom in/out |
+| Scroll | Zoom in/out (5–1000) |
 
 ## Acknowledgements
 
