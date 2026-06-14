@@ -129,7 +129,6 @@ bool AudioEngine::loadMusic(const std::string& filepath) {
 
 void AudioEngine::play() {
     if (!m_device) return;
-    if (m_decoder) { ma_decoder_seek_to_pcm_frame(m_decoder, 0); m_readCursor = 0; }
     m_playing = true;
     if (ma_device_is_started(m_device) == MA_FALSE)
         ma_device_start(m_device);

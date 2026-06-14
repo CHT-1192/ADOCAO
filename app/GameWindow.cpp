@@ -237,8 +237,8 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
                 float bpm = bpmArr.size() > 0 ? bpmArr[0] : level->settings.bpm;
                 float offsetSec = level->settings.offset / 1000.0f;
 
-                // Reset hitsounds cursor for new playback
-                hitsoundMgr.reset();
+                // Seek hitsounds cursor to offset position
+                hitsoundMgr.resetAt(offsetSec);
 
                 if (audioEngine.hasMusic()) {
                     audioEngine.seek(offsetSec);
