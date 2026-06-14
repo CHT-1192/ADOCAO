@@ -127,17 +127,8 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
             double wx = tiles[i].position[0];
             double wy = tiles[i].position[1];
             float wz = 0.0f;  // constant Z — draw order (descending) handles layering
-            // Per-tile color from ColorTrack events, fallback to global
             float fr = fillR, fg = fillG, fb = fillB;
             float sr = outR, sg = outG, sb = outB;
-            if (i < (int)level.tileFillColors.size() && !level.tileFillColors[i].empty()) {
-                unsigned fv = hexToUInt(level.tileFillColors[i]);
-                fr = ((fv>>16)&0xFF)/255.0f; fg = ((fv>>8)&0xFF)/255.0f; fb = (fv&0xFF)/255.0f;
-            }
-            if (i < (int)level.tileStrokeColors.size() && !level.tileStrokeColors[i].empty()) {
-                unsigned sv = hexToUInt(level.tileStrokeColors[i]);
-                sr = ((sv>>16)&0xFF)/255.0f; sg = ((sv>>8)&0xFF)/255.0f; sb = (sv&0xFF)/255.0f;
-            }
             instData.push_back((float)wx);
             instData.push_back((float)wy);
             instData.push_back(wz);

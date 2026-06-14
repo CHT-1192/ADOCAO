@@ -47,6 +47,26 @@ Viewport computeLetterbox(int fbW, int fbH, float targetAspect) {
     return vp;
 }
 
+// Jump playback to a specific tile floor
+static void jumpToTile(PlaybackEngine& pb, AudioEngine& audio, HitsoundManager& hs,
+                        const LevelData& level, int floor) {
+    if (floor < 0 || floor >= (int)level.tiles.size()) return;
+    double targetTime = pb.tileStartTimes()[floor];
+    float offsetSec = level.settings.offset / 1000.0f;
+    float audioPos = (float)(targetTime + offsetSec);
+    if (audioPos < 0) audioPos = 0;
+
+    pb.start(glfwGetTime());
+    pb.syncToAudio(audioPos, offsetSec);
+    hs.reset();
+    if (audio.hasMusic()) {
+        audio.seek(audioPos);
+        audio.play();
+    } else {
+        audio.play();
+    }
+}
+
 } // namespace
 
 void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
@@ -233,6 +253,35 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
             }
         }
         wasSpacePressed = spacePressed;
+
+        // Bookmark navigation: Ctrl+Left/Right
+        bool ctrlHeld = (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+                     || (glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
+        if (ctrlHeld && !level->bookmarkFloors.empty()) {
+            static bool wasLeft = false, wasRight = false;
+            bool left = (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS);
+            bool right = (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS);
+            if (left && !wasLeft) {
+                // Find nearest bookmark before current tile
+                int cur = playback.currentTileIndex();
+                int target = -1;
+                for (int b : level->bookmarkFloors) {
+                    if (b < cur) target = b;
+                    else break;
+                }
+                if (target >= 0) jumpToTile(playback, audioEngine, hitsoundMgr, *level, target);
+            }
+            if (right && !wasRight) {
+                // Find nearest bookmark after current tile
+                int cur = playback.currentTileIndex();
+                int target = -1;
+                for (int b : level->bookmarkFloors) {
+                    if (b > cur) { target = b; break; }
+                }
+                if (target >= 0) jumpToTile(playback, audioEngine, hitsoundMgr, *level, target);
+            }
+            wasLeft = left; wasRight = right;
+        }
 
         // Update playback — sync to audio clock when music playing, else wall-clock
         if (playback.isPlaying()) {

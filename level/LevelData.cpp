@@ -304,8 +304,6 @@ void LevelData::processActions() {
     tileHasSetSpeed.assign(n, false);
     tileHitsounds.assign(n, "");
     tilePositionOffsets.assign(n, {});
-    tileFillColors.assign(n, settings.trackColor);
-    tileStrokeColors.assign(n, settings.secondaryTrackColor);
 
     if (actions.is_null() || !actions.is_array()) return;
 
@@ -316,9 +314,6 @@ void LevelData::processActions() {
     // SetHitsound / ColorTrack: collect floors+values, then forward-propagate in O(n+m)
     struct HSChange { int floor; std::string type; };
     std::vector<HSChange> hsChanges;
-    struct CCChange { int floor; bool jtt; std::string fc, sc; };
-    std::vector<CCChange> ccChanges;
-
     for (size_t i = 0; i < actions.size(); i++) {
         auto& a = actions[i];
         if (!a.is_object() || !a.contains("floor") || !a.contains("eventType")) continue;
@@ -349,11 +344,8 @@ void LevelData::processActions() {
             std::string hs = a.value("hitsound", std::string());
             if (!hs.empty())
                 hsChanges.push_back({floor, hs});
-        } else if (etype == "ColorTrack") {
-            std::string fc = a.value("trackColor", std::string());
-            std::string sc = a.value("secondaryTrackColor", std::string());
-            if (!fc.empty() || !sc.empty())
-                ccChanges.push_back({floor, parseBool(a, "justThisTile", false), fc, sc});
+        } else if (etype == "Bookmark") {
+            bookmarkFloors.push_back(floor);
         }
     }
 
@@ -382,33 +374,8 @@ void LevelData::processActions() {
         }
     }
 
-    // ColorTrack colors: forward-fill (justThisTile reverts after one tile)
-    if (!ccChanges.empty()) {
-        std::string curFC = settings.trackColor, curSC = settings.secondaryTrackColor;
-        size_t ci = 0;
-        int revertFill = -1, revertStroke = -1;
-        for (int i = 0; i < n; i++) {
-            // Apply pending justThisTile reverts
-            if (i == revertFill)  curFC = settings.trackColor;
-            if (i == revertStroke) curSC = settings.secondaryTrackColor;
-            // Apply events at this floor
-            while (ci < ccChanges.size() && ccChanges[ci].floor <= i) {
-                auto& ch = ccChanges[ci];
-                if (!ch.fc.empty()) {
-                    curFC = ch.fc;
-                    revertFill = ch.jtt ? i + 1 : -1;
-                }
-                if (!ch.sc.empty()) {
-                    curSC = ch.sc;
-                    revertStroke = ch.jtt ? i + 1 : -1;
-                }
-                if (!ch.jtt) { revertFill = -1; revertStroke = -1; }
-                ci++;
-            }
-            tileFillColors[i]   = curFC;
-            tileStrokeColors[i] = curSC;
-        }
-    }
+    // Sort bookmarks for binary search navigation
+    std::sort(bookmarkFloors.begin(), bookmarkFloors.end());
 }
 
 void LevelData::applyPositionTrackOffsets() {
@@ -440,8 +407,7 @@ void LevelData::releaseMemory() {
     decorations = nlohmann::json();
     tilePositionOffsets.clear(); tilePositionOffsets.shrink_to_fit();
     // tileBPMs kept: needed by buildIcons() for SetSpeed icon coloring
-    tileFillColors.clear(); tileFillColors.shrink_to_fit();
-    tileStrokeColors.clear(); tileStrokeColors.shrink_to_fit();
+    bookmarkFloors.clear(); bookmarkFloors.shrink_to_fit();
 }
 
 void LevelData::convertPathToAngles() {
