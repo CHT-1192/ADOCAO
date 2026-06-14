@@ -253,10 +253,10 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         }
         wasSpacePressed = spacePressed;
 
-        // Bookmark navigation: Ctrl+Left/Right
+        // Bookmark navigation: Ctrl+Left/Right (only when stopped)
         bool ctrlHeld = (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
                      || (glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
-        if (ctrlHeld && !level->bookmarkFloors.empty()) {
+        if (!playback.isPlaying() && ctrlHeld && !level->bookmarkFloors.empty()) {
             static bool wasLeft = false, wasRight = false;
             bool left = (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS);
             bool right = (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS);
