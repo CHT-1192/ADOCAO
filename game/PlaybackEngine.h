@@ -17,6 +17,7 @@ public:
     void init(const LevelData& level, bool showTrail = true);
 
     void start(double wallClockSec);
+    void startAt(double wallClockSec, float audioPosSec, float offsetSec);
     void stop();
     void update(float deltaMs);
     void updateWallClock(double wallClockSec);  // jump to absolute time (window drag/sleep)

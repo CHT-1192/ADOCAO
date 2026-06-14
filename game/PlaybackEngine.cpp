@@ -221,10 +221,26 @@ void PlaybackEngine::start(double wallClockSec) {
         m_bluePlanet->clearTrail();
     }
 
-    // Compute correct initial positions (matching reference: calls updatePlanetPositions in start)
     updatePlanetPositions();
-
     LOG_I("Playback started");
+}
+
+void PlaybackEngine::startAt(double wallClockSec, float audioPosSec, float offsetSec) {
+    if (m_isPlaying) return;
+    m_isPlaying = true;
+    m_elapsedTime = ((double)audioPosSec - (double)offsetSec) * 1000.0;
+    if (m_elapsedTime < 0.0) m_elapsedTime = 0.0;
+    m_startWallClock = wallClockSec - (m_elapsedTime / 1000.0);
+    m_currentTileIndex = findTileIndex(timeInLevel());
+    m_reportedEnd = false;
+
+    // Place planets at correct mid-playback positions
+    glm::vec2 r(0), b(0);
+    computePositionsAtTime(timeInLevel(), r, b);
+    if (m_redPlanet)  { m_redPlanet->position  = glm::vec3(r.x, r.y, 3.0f); m_redPlanet->clearTrail(); }
+    if (m_bluePlanet) { m_bluePlanet->position = glm::vec3(b.x, b.y, 3.0f); m_bluePlanet->clearTrail(); }
+
+    LOG_I("Playback started mid-level at tile %d, time=%.3fs", m_currentTileIndex, timeInLevel());
 }
 
 void PlaybackEngine::stop() {
