@@ -24,8 +24,8 @@
 - [x] `setPoints` trail: buffer under-allocation fixed (segsPerPoint=4 factor)
 - [ ] MoveTrack (tile position/rotation/scale animation)
 - [x] Compute shader infrastructure (OpenGL 4.3, SSBO, indirect draw)
-- [ ] Wire up GPU compute culling in draw loop (Phase 4)
-- [ ] Spatial grid culling (O(1) vs current O(N) with cache)
+- [ ] Wire up GPU compute culling in draw loop (Phase 4, reverted — retry based on ADOCAV)
+- [x] Multithreaded CPU culling (>= 64 groups → std::async parallel)
 
 ## 功能
 - [x] JSON cleaner: Python literals, missing commas
@@ -34,6 +34,8 @@
 - [x] OpenGL 4.3 upgrade + compute shader functions (GPU culling ready)
 - [x] `--auto-play` CLI flag
 - [x] DPI awareness + CPU pin to big cores
+- [x] Planet trail: Catmull-Rom spline + GPU rendering
+- [x] CMake options: HIGH_FPS, EXTREME_ZOOM, PORTABLE
 - [ ] MoveCamera (5 relativeTo modes)
 - [ ] PositionTrack: relativeTo, rotation, scale, opacity, stickToFloors
 - [ ] Bloom / Flash 特效
@@ -44,6 +46,8 @@
 - [x] Frame profiler (per-section timing)
 - [x] High-FPS build option (1000fps)
 - [x] Sleep-based frame pacing (CPU-efficient)
+- [x] processActions() O(n+m) optimization (removed O(n*m) per-event fills)
+- [x] Multithreaded CPU culling (parallel frustum test + offset compute)
 - [ ] precalculateTiming 多线程化
 
 ## 音频
