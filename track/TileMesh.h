@@ -47,10 +47,6 @@ public:
 
     bool empty() const;
 
-private:
-    std::vector<ShapeGroup> m_shapes;
-    std::vector<ShapeGroup> m_iconGroups;
-
     // Visibility cache: avoid recomputing visible set when camera hasn't moved
     struct VisibilityCache {
         std::vector<int>   indices;   // visible instance indices (rebuilt on frustum change)
@@ -58,10 +54,21 @@ private:
         double vl=0, vr=0, vb=0, vt=0;
         bool valid = false;
     };
+
+    // Exposed for parallel culling
+    static bool frustumCheck(const VisibilityCache& cache, float vl, float vr, float vb, float vt) {
+        if (!cache.valid) return true;
+        return std::abs((float)cache.vl - vl) > 0.5f || std::abs((float)cache.vr - vr) > 0.5f
+            || std::abs((float)cache.vb - vb) > 0.5f || std::abs((float)cache.vt - vt) > 0.5f;
+    }
+    static bool frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt);
+
+private:
+    std::vector<ShapeGroup> m_shapes;
+    std::vector<ShapeGroup> m_iconGroups;
     mutable std::vector<VisibilityCache> m_visCaches;  // per-shape-group
 
     void destroy();
     void buildIcons(const LevelData& level);
     static unsigned int hexToUInt(const std::string& hex);
-    static bool frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt);
 };

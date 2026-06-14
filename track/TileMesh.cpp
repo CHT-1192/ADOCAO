@@ -6,6 +6,8 @@
 #include <map>
 #include <tuple>
 #include <unordered_map>
+#include <future>
+#include <thread>
 
 // Geometry cache (persists across builds)
 struct CachedGeo { std::vector<float> interleaved; std::vector<unsigned> indices; unsigned idxCount=0; };
@@ -230,22 +232,21 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
 }
 
 bool TileMesh::frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt) {
-    if (!cache.valid) return true;
-    return std::abs((float)cache.vl - vl) > 0.5f || std::abs((float)cache.vr - vr) > 0.5f
-        || std::abs((float)cache.vb - vb) > 0.5f || std::abs((float)cache.vt - vt) > 0.5f;
+    return frustumCheck(cache, vl, vr, vb, vt);
 }
 
-void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const {
-    double margin = 20.0;
-    double vl = viewL - margin, vr = viewR + margin;
-    double vb = viewB - margin, vt = viewT + margin;
+// Phase 1: CPU culling + offset computation (thread-safe, no GL calls)
+static void cullAndOffsetGroups(const std::vector<ShapeGroup>& groups,
+                                 std::vector<TileMesh::VisibilityCache>& caches,
+                                 size_t start, size_t end,
+                                 double vl, double vr, double vb, double vt,
+                                 double camX, double camY) {
+    for (size_t si = start; si < end; si++) {
+        const auto& sg = groups[si];
+        auto& cache = caches[si];
 
-    for (size_t si = 0; si < m_shapes.size(); si++) {
-        const auto& sg = m_shapes[si];
-        auto& cache = m_visCaches[si];
-
-        // Rebuild visible set only when frustum moves enough
-        if (!cache.valid || frustumChanged(cache, (float)vl, (float)vr, (float)vb, (float)vt)) {
+        if (!cache.valid || TileMesh::frustumCheck(cache,
+                (float)vl, (float)vr, (float)vb, (float)vt)) {
             cache.indices.clear();
             cache.indices.reserve(sg.instances.size());
             for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
@@ -260,7 +261,6 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
 
         if (cache.indices.empty()) continue;
 
-        // Recompute camera-relative offsets: 3 floats per visible instance (position only)
         cache.offsets.resize(cache.indices.size() * 3);
         for (size_t i = 0; i < cache.indices.size(); i++) {
             const auto& inst = sg.instances[cache.indices[i]];
@@ -268,8 +268,43 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
             cache.offsets[i * 3 + 1] = (float)(inst.offY - camY);
             cache.offsets[i * 3 + 2] = inst.offZ;
         }
+    }
+}
 
-        // Upload position VBO only (colors are static in colorVbo)
+void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const {
+    double margin = 20.0;
+    double vl = viewL - margin, vr = viewR + margin;
+    double vb = viewB - margin, vt = viewT + margin;
+
+    size_t n = m_shapes.size();
+    if (n == 0) return;
+
+    // Phase 1: CPU culling + offset computation (parallel for many groups)
+    constexpr size_t PARALLEL_THRESHOLD = 64;
+    if (n >= PARALLEL_THRESHOLD) {
+        unsigned int hw = std::thread::hardware_concurrency();
+        unsigned int numThreads = std::max(2u, std::min(hw, unsigned(n / 16)));
+        size_t chunk = (n + numThreads - 1) / numThreads;
+        std::vector<std::future<void>> futures;
+        for (unsigned int t = 0; t < numThreads; t++) {
+            size_t start = t * chunk;
+            size_t end = std::min(start + chunk, n);
+            if (start >= end) break;
+            futures.push_back(std::async(std::launch::async,
+                cullAndOffsetGroups, std::cref(m_shapes), std::ref(m_visCaches),
+                start, end, vl, vr, vb, vt, camX, camY));
+        }
+        for (auto& f : futures) f.wait();
+    } else {
+        cullAndOffsetGroups(m_shapes, m_visCaches, 0, n, vl, vr, vb, vt, camX, camY);
+    }
+
+    // Phase 2: Upload + draw (serial, OpenGL must be on main thread)
+    for (size_t si = 0; si < n; si++) {
+        const auto& sg = m_shapes[si];
+        auto& cache = m_visCaches[si];
+        if (cache.indices.empty()) continue;
+
         glBindVertexArray(sg.vao);
         glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
         glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
