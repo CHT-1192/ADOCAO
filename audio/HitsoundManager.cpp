@@ -251,6 +251,12 @@ void HitsoundManager::reset() {
     m_playing = true;
 }
 
+void HitsoundManager::resetAt(float audioPosSec) {
+    m_readCursor = (size_t)(audioPosSec * (float)m_sampleRate);
+    if (m_readCursor >= m_buffer.size() / 2) m_readCursor = 0;
+    m_playing = true;
+}
+
 void HitsoundManager::stop() {
     m_playing = false;
 }

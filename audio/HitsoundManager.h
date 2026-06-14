@@ -39,6 +39,7 @@ public:
     bool* playing() { return &m_playing; }
 
     void reset();
+    void resetAt(float audioPosSec);  // seek cursor to position
     void stop();
     bool isSynthesized() const { return m_synthesized; }
     bool writeWav(const std::string& filepath);  // export pre-mixed buffer to WAV

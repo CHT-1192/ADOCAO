@@ -57,7 +57,7 @@ static void jumpToTile(PlaybackEngine& pb, AudioEngine& audio, HitsoundManager& 
     if (audioPos < 0) audioPos = 0;
 
     pb.startAt(glfwGetTime(), audioPos, offsetSec);
-    hs.reset();
+    hs.resetAt(audioPos);
     if (audio.hasMusic()) {
         audio.seek(audioPos);
         audio.play();
