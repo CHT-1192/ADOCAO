@@ -126,6 +126,11 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         LOG_E("Trail shader failed"); glfwDestroyWindow(window); return;
     }
 
+    Shader highlightShader;
+    if (!highlightShader.compile(Shaders::kHighlightVertSrc, Shaders::kHighlightFragSrc)) {
+        LOG_E("Highlight shader failed"); glfwDestroyWindow(window); return;
+    }
+
     // ---- Track ----
     TileMesh tileMesh;
     tileMesh.build(*level, cfg.trackFillColor, cfg.trackStrokeColor);
@@ -418,8 +423,8 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         if (!playback.isPlaying() && input.selectedTile >= 0) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ZERO);
-            tileShader.use();
-            tileShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
+            highlightShader.use();
+            highlightShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
             tileMesh.drawHighlightedTile(input.selectedTile, camera.targetX(), camera.targetY());
             glDisable(GL_BLEND);
         }

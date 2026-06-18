@@ -70,6 +70,26 @@ void main() {
 }
 )";
 
+// Highlight shader: same vertex layout as tile, fragment outputs white (for inversion blend)
+constexpr const char* kHighlightVertSrc = R"(
+#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in float aType;
+layout(location = 2) in vec3 aInstOffset;
+uniform mat4 uVP;
+void main() {
+    gl_Position = uVP * vec4(aPos + aInstOffset, 1.0);
+}
+)";
+
+constexpr const char* kHighlightFragSrc = R"(
+#version 330 core
+out vec4 fragColor;
+void main() {
+    fragColor = vec4(1.0);  // white → glBlendFunc(ONE_MINUS_DST_COLOR, ZERO) inverts
+}
+)";
+
 // ---- Compute shaders (OpenGL 4.3+) ----
 
 // GPU frustum culling: tests all tile AABBs against 6 frustum planes.
