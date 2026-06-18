@@ -70,23 +70,29 @@ void main() {
 }
 )";
 
-// Highlight shader: same vertex layout as tile, fragment outputs white (for inversion blend)
+// Highlight shader: same vertex layout as tile, fragment inverts the original track color
 constexpr const char* kHighlightVertSrc = R"(
 #version 330 core
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in float aType;
 layout(location = 2) in vec3 aInstOffset;
+layout(location = 3) in vec3 iColor;
+layout(location = 4) in vec3 iBgColor;
+layout(location = 5) in float iOpacity;
 uniform mat4 uVP;
+out vec3 vColor;
 void main() {
+    vColor = mix(iBgColor, iColor, aType);
     gl_Position = uVP * vec4(aPos + aInstOffset, 1.0);
 }
 )";
 
 constexpr const char* kHighlightFragSrc = R"(
 #version 330 core
+in vec3 vColor;
 out vec4 fragColor;
 void main() {
-    fragColor = vec4(1.0, 1.0, 1.0, 0.3);  // bright white overlay, semi-transparent
+    fragColor = vec4(1.0 - vColor, 1.0);  // inverted track color
 }
 )";
 
