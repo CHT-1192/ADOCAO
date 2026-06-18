@@ -44,6 +44,7 @@ public:
 
     void draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const;
     void drawIcons(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const;
+    void drawHighlightedTile(int tileIdx, double camX, double camY) const;
 
     bool empty() const;
 
@@ -67,6 +68,8 @@ private:
     std::vector<ShapeGroup> m_shapes;
     std::vector<ShapeGroup> m_iconGroups;
     mutable std::vector<VisibilityCache> m_visCaches;  // per-shape-group
+    std::vector<int> m_tileToShape;     // tile index → shape group index
+    std::vector<int> m_tileToInstance;  // tile index → instance within shape group
 
     void destroy();
     void buildIcons(const LevelData& level);

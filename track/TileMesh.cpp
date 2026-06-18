@@ -69,6 +69,8 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
 
     Scratch& sc = g_sc;
     m_shapes.resize(shapeGroups.size());
+    m_tileToShape.assign(n, -1);
+    m_tileToInstance.assign(n, -1);
     size_t shapeIdx = 0;
 
     for (auto& [key, tileIndices] : shapeGroups) {
@@ -150,6 +152,15 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         ShapeGroup& sg = m_shapes[shapeIdx];
         sg.indexCount = idxCount;
         sg.instances  = std::move(instances);
+
+        // Tile→instance mapping for selection highlighting
+        for (size_t k = 0; k < tileIndices.size(); k++) {
+            int ti = tileIndices[k];
+            if (ti >= 0 && ti < n) {
+                m_tileToShape[ti]    = (int)shapeIdx;
+                m_tileToInstance[ti] = (int)k;
+            }
+        }
 
         glGenVertexArrays(1, &sg.vao);
         glBindVertexArray(sg.vao);
@@ -479,6 +490,30 @@ void TileMesh::drawIcons(float viewL, float viewR, float viewB, float viewT, dou
                                 nullptr, (GLsizei)(visOffsets.size() / 3));
         glBindVertexArray(0);
     }
+}
+
+void TileMesh::drawHighlightedTile(int tileIdx, double camX, double camY) const {
+    if (tileIdx < 0 || tileIdx >= (int)m_tileToShape.size()) return;
+    int sgIdx = m_tileToShape[tileIdx];
+    int instIdx = m_tileToInstance[tileIdx];
+    if (sgIdx < 0 || instIdx < 0) return;
+
+    const auto& sg = m_shapes[sgIdx];
+    if (instIdx >= (int)sg.instances.size()) return;
+    const auto& inst = sg.instances[instIdx];
+
+    float off[3] = {
+        (float)(inst.offX - camX),
+        (float)(inst.offY - camY),
+        inst.offZ
+    };
+
+    glBindVertexArray(sg.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(off), off);
+    glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
+                            nullptr, 1);
+    glBindVertexArray(0);
 }
 
 unsigned int TileMesh::hexToUInt(const std::string& hex) {

@@ -414,26 +414,13 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         tileMesh.drawIcons(vl, vr, vb, vt, camera.targetX(), camera.targetY());
         glEnable(GL_DEPTH_TEST);
 
-        // Highlight selected tile: invert colors via blend
-        if (!playback.isPlaying() && input.selectedTile >= 0
-            && input.selectedTile < (int)level->tiles.size()) {
-            auto& tp = level->tiles[input.selectedTile].position;
-            auto model = glm::translate(glm::mat4(1.0f),
-                glm::vec3((float)(tp[0] - camera.targetX()),
-                          (float)(tp[1] - camera.targetY()), 0.0f));
-            auto mvp = camera.viewProj() * model;
+        // Highlight selected tile: invert track colors via blend
+        if (!playback.isPlaying() && input.selectedTile >= 0) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ZERO);
-            planetShader.use();
-            planetShader.setMat4("uMVP", glm::value_ptr(mvp));
-            planetShader.setVec4("uColor", 0.5f, 0.5f, 0.5f, 1.0f);
-            // Draw circle at tile position using planet's geometry
-            if (playback.redPlanet() && playback.redPlanet()->gpuBuilt()) {
-                glBindVertexArray(playback.redPlanet()->vao());
-                glDrawElements(GL_TRIANGLE_STRIP, playback.redPlanet()->indexCount(),
-                              GL_UNSIGNED_INT, nullptr);
-                glBindVertexArray(0);
-            }
+            tileShader.use();
+            tileShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
+            tileMesh.drawHighlightedTile(input.selectedTile, camera.targetX(), camera.targetY());
             glDisable(GL_BLEND);
         }
 
