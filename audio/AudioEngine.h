@@ -4,6 +4,8 @@
 #include <vector>
 #include <cstdint>
 
+constexpr int AUDIO_SAMPLE_RATE = 48000;
+
 struct ma_device;
 struct ma_decoder;
 

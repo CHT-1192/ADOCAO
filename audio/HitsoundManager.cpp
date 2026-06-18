@@ -1,4 +1,5 @@
 #include "HitsoundManager.h"
+#include "AudioEngine.h"
 #include "util/Logger.h"
 
 #include <cmath>
@@ -105,7 +106,7 @@ bool HitsoundManager::readWav(const std::string& filepath,
     // Check cache first
     auto it = s_wavCache.find(filepath);
     if (it != s_wavCache.end()) {
-        sampleRate = 44100; channels = 1;  // cached data is always mono 44100
+        sampleRate = AUDIO_SAMPLE_RATE; channels = 1;  // cached data is always mono AUDIO_SAMPLE_RATE
         samples = it->second;
         return true;
     }
@@ -189,7 +190,7 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
     if (wavData.empty()) return false;
     if (onProgress) onProgress(5.0f);
 
-    int sr = 44100;
+    int sr = AUDIO_SAMPLE_RATE;
     m_sampleRate = sr;
     int totalFrames = (int)((totalDuration + maxHitSec + 1.0f) * sr);
     size_t bufSize = (size_t)totalFrames * 2;
@@ -278,7 +279,7 @@ bool HitsoundManager::writeWav(const std::string& filepath) {
     auto w32 = [&](uint32_t v) { fwrite(&v, 4, 1, f); };
     auto w16 = [&](uint16_t v) { fwrite(&v, 2, 1, f); };
     fwrite("RIFF", 1, 4, f); w32(riffSize); fwrite("WAVE", 1, 4, f);
-    fwrite("fmt ", 1, 4, f); w32(16); w16(1); w16(2); w32(44100); w32(44100 * 4); w16(4); w16(16);
+    fwrite("fmt ", 1, 4, f); w32(16); w16(1); w16(2); w32(AUDIO_SAMPLE_RATE); w32(AUDIO_SAMPLE_RATE * 4); w16(4); w16(16);
     fwrite("data", 1, 4, f); w32(dataSize);
     fwrite(raw.data(), sizeof(int16_t), raw.size(), f);
     fclose(f);

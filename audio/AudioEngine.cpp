@@ -28,7 +28,7 @@ bool AudioEngine::init() {
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format   = ma_format_f32;
     config.playback.channels = 2;
-    config.sampleRate        = 44100;
+    config.sampleRate        = AUDIO_SAMPLE_RATE;
     config.dataCallback      = dataCallback;
     config.pUserData         = this;
 
@@ -106,7 +106,7 @@ bool AudioEngine::loadMusic(const std::string& filepath) {
     }
 
     m_decoder = new ma_decoder;
-    ma_decoder_config dc = ma_decoder_config_init(ma_format_f32, 2, 44100);
+    ma_decoder_config dc = ma_decoder_config_init(ma_format_f32, 2, AUDIO_SAMPLE_RATE);
     if (ma_decoder_init_memory(data.data(), data.size(), &dc, m_decoder) != MA_SUCCESS) {
         LOG_E("AudioEngine: Unsupported format: %s", filepath.c_str());
         delete m_decoder;
@@ -116,7 +116,7 @@ bool AudioEngine::loadMusic(const std::string& filepath) {
 
     ma_uint64 total = 0;
     ma_decoder_get_length_in_pcm_frames(m_decoder, &total);
-    m_sampleRate = 44100;
+    m_sampleRate = AUDIO_SAMPLE_RATE;
     m_readCursor = 0;
     m_duration = (m_sampleRate > 0) ? (float)total / (float)m_sampleRate : 0.0f;
     m_fileData = std::move(data);  // keep alive for memory-backed decoder
@@ -201,7 +201,7 @@ void AudioEngine::dataCallback(ma_device* pDevice, void* pOutput, const void*, u
 
     if (!self) return;
 
-    // --- Music source (ma_decoder: stereo f32 @ 44100) ---
+    // --- Music source (ma_decoder: stereo f32 @ AUDIO_SAMPLE_RATE) ---
     if (self->m_decoder && self->m_playing) {
         float* musicBuf = (float*)alloca(frameCount * 2 * sizeof(float));
         ma_uint64 decoded = 0;
