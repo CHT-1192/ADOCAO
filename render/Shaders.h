@@ -86,7 +86,7 @@ constexpr const char* kHighlightFragSrc = R"(
 #version 330 core
 out vec4 fragColor;
 void main() {
-    fragColor = vec4(1.0);  // white → glBlendFunc(ONE_MINUS_DST_COLOR, ZERO) inverts
+    fragColor = vec4(1.0, 1.0, 1.0, 0.3);  // bright white overlay, semi-transparent
 }
 )";
 

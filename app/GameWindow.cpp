@@ -419,10 +419,10 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         tileMesh.drawIcons(vl, vr, vb, vt, camera.targetX(), camera.targetY());
         glEnable(GL_DEPTH_TEST);
 
-        // Highlight selected tile: invert track colors via blend
+        // Highlight selected tile: semi-transparent bright overlay
         if (!playback.isPlaying() && input.selectedTile >= 0) {
             glEnable(GL_BLEND);
-            glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ZERO);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE);  // additive blend, brightens track
             highlightShader.use();
             highlightShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
             tileMesh.drawHighlightedTile(input.selectedTile, camera.targetX(), camera.targetY());
