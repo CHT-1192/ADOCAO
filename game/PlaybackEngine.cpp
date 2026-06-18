@@ -280,6 +280,7 @@ std::vector<HitsoundTimestampGroup> PlaybackEngine::getHitsoundTimestampGroups()
     if (n < 2) return groups;
 
     float countdown = (float)m_level->settings.countdownTicks * (60.0f / m_level->settings.bpm);
+    float offsetSec = m_level->settings.offset / 1000.0f;
     float defaultVol = m_level->settings.hitsoundVolume;
     const std::string& defaultType = m_level->settings.hitsound;
 
@@ -299,7 +300,7 @@ std::vector<HitsoundTimestampGroup> PlaybackEngine::getHitsoundTimestampGroups()
             groupMap[key] = groups.size();
             groups.push_back({type, vol, {}});
         }
-        groups[groupMap[key]].timestamps.push_back(m_tileStartTimes[i] + countdown);
+        groups[groupMap[key]].timestamps.push_back(m_tileStartTimes[i] + countdown + offsetSec);
     }
     return groups;
 }
