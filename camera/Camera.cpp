@@ -20,7 +20,7 @@ void Camera::update() {
     float halfH = 6.0f / (m_zoom / 100.0f);
     float halfW = halfH * m_aspect;
 
-    m_proj = glm::ortho(-halfW, halfW, -halfH, halfH, 0.1f, 50000.0f);
+    m_proj = glm::ortho(-halfW, halfW, -halfH, halfH, 0.1f, 200.0f);
 
     // View at origin — instance offsets handle camera-relative translation
     m_view = glm::lookAt(

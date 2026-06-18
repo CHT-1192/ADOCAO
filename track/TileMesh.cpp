@@ -101,9 +101,9 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
             else
                 createTileMesh(startAngle, endAngle, sc);
 
-            // Offset stroke Z + interleave: [x,y,z, type]
+            // Offset fill Z slightly in front of stroke (depth test ON: fill must pass over stroke)
             for (size_t vi = 0; vi < sc.types.size(); vi++) {
-                if (sc.types[vi] == 0.0f) sc.verts[vi * 3 + 2] += 0.001f;
+                if (sc.types[vi] == 1.0f) sc.verts[vi * 3 + 2] += 0.001f;
             }
             size_t vc = sc.verts.size() / 3;
             interleaved.reserve(vc * 4);
@@ -128,7 +128,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         for (int i : tileIndices) {
             double wx = tiles[i].position[0];
             double wy = tiles[i].position[1];
-            float wz = 0.0f;  // constant Z — draw order (descending) handles layering
+            float wz = tileZForIndex(i, n);  // Z encodes far-to-near order; depth buffer handles layering
             float fr = fillR, fg = fillG, fb = fillB;
             float sr = outR, sg = outG, sb = outB;
             instData.push_back((float)wx);
@@ -320,8 +320,7 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
 
 static constexpr float ICON_RADIUS = 0.11f;     // matches Re_ADOJAS 0.275*0.8/2
 static constexpr int   ICON_SEGMENTS = 16;
-static constexpr float DECO_Z = 0.01f;         // Z offset above tile to prevent Z-fight
-static constexpr float DECO_Z_EXTRA = 0.005f;  // extra Z for SetSpeed when Twirl also present
+// Z-depth offsets (TileMesh::kIconZBase, kIconZExtra used via tileZForIndex)
 
 static const float TWIRL_COLOR[3]      = {0.502f, 0.0f, 0.502f};
 static const float SPEED_UP_COLOR[3]   = {1.0f, 0.0f, 0.0f};
@@ -349,17 +348,17 @@ void TileMesh::buildIcons(const LevelData& level) {
         bool hasTwirl = i < (int)level.tileHasTwirl.size() && level.tileHasTwirl[i];
         bool hasSetSpeed = i < (int)level.tileHasSetSpeed.size() && level.tileHasSetSpeed[i];
 
-        float tileZ = 1.0f - (float)i / (float)n * 0.5f;  // tile 0 at Z=1.0, last at Z=0.5
+        float tileZ = tileZForIndex(i, n);  // same Z as the tile body
 
         if (hasTwirl) {
-            colorGroups[0].push_back({i, tileZ + DECO_Z});
+            colorGroups[0].push_back({i, tileZ + kIconZBase});
         }
         if (hasSetSpeed && i > 0 && i < (int)level.tileBPMs.size()) {
             float ratio = level.tileBPMs[i] / level.tileBPMs[i - 1];
             if (ratio > 1.05f || ratio < 0.95f) {
                 int cg = (ratio > 1.05f) ? 1 : 2;
-                float extraZ = hasTwirl ? DECO_Z_EXTRA : 0.0f;
-                colorGroups[cg].push_back({i, tileZ + DECO_Z + extraZ});
+                float speedZOffset = kIconZBase + (hasTwirl ? kIconZExtra : (kIconZBase * 0.5f));
+                colorGroups[cg].push_back({i, tileZ + speedZOffset});
             }
         }
     }
@@ -524,4 +523,9 @@ unsigned int TileMesh::hexToUInt(const std::string& hex) {
         else if (c>='A'&&c<='F')v|=c-'A'+10;
         else break; }
     return v;
+}
+
+float TileMesh::tileZForIndex(int i, int n) {
+    if (n <= 1) return kMaxTileZ * 0.5f;
+    return kMaxTileZ * (1.0f - (float)i / (float)(n - 1));
 }

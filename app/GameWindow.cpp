@@ -391,39 +391,35 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
         camera.setAspect((float)vp.w, (float)vp.h);
 
-        // Draw tiles (no depth test — all visible regardless of Z)
-        glDisable(GL_DEPTH_TEST);
+        // Draw tiles (depth test ON — Z-depth resolves far-to-near layering)
         tileShader.use();
         tileShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
         float vl,vr,vb,vt; camera.frustumBounds(vl,vr,vb,vt);
         tileMesh.draw(vl, vr, vb, vt, camera.targetX(), camera.targetY());
-        glEnable(GL_DEPTH_TEST);
 
-        // Draw trails behind planets (no depth test)
+        // Draw trails (blend enabled, depth test OFF — handled internally by PlanetTrail::draw)
         if (playback.isPlaying() && playback.redPlanet() && playback.redPlanet()->trail) {
-            glDisable(GL_DEPTH_TEST);
             playback.redPlanet()->trail->draw(trailShader, camera, camera.targetX(), camera.targetY());
             playback.bluePlanet()->trail->draw(trailShader, camera, camera.targetX(), camera.targetY());
-            glEnable(GL_DEPTH_TEST);
         }
 
-        // Draw planets on top
+        // Draw planets on top (depth test ON, Z=9.5 > max tile Z=9.0)
         if (playback.isPlaying() && playback.redPlanet() && playback.redPlanet()->gpuBuilt()) {
             playback.redPlanet()->draw(planetShader, camera, camera.targetX(), camera.targetY());
             playback.bluePlanet()->draw(planetShader, camera, camera.targetX(), camera.targetY());
         }
 
-        // Draw event icons on top of everything (no depth test)
-        glDisable(GL_DEPTH_TEST);
+        // Draw event icons (depth test ON — icon Z = tileZ + offset, appears above its tile)
         tileShader.use();
         tileMesh.drawIcons(vl, vr, vb, vt, camera.targetX(), camera.targetY());
-        glEnable(GL_DEPTH_TEST);
 
-        // Highlight selected tile: draw with inverted colors
+        // Highlight selected tile: draw with inverted colors (depth test OFF ensures visibility over icons)
         if (!playback.isPlaying() && input.selectedTile >= 0) {
+            glDisable(GL_DEPTH_TEST);
             highlightShader.use();
             highlightShader.setMat4("uVP", glm::value_ptr(camera.viewProj()));
             tileMesh.drawHighlightedTile(input.selectedTile, camera.targetX(), camera.targetY());
+            glEnable(GL_DEPTH_TEST);
         }
 
         glfwSwapBuffers(window);

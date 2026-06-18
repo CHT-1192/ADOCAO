@@ -64,6 +64,15 @@ public:
     }
     static bool frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt);
 
+    // Z-depth tile ordering constants
+    static constexpr float kMaxTileZ = 9.0f;
+    static constexpr float kStrokeZOffset = 0.001f;
+    static constexpr float kIconZBase = 0.002f;
+    static constexpr float kIconZExtra = 0.003f;
+
+    /// Returns world Z for tile at index i (0 = nearest, n-1 = farthest)
+    static float tileZForIndex(int i, int n);
+
 private:
     std::vector<ShapeGroup> m_shapes;
     std::vector<ShapeGroup> m_iconGroups;

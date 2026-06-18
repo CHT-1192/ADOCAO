@@ -3,6 +3,8 @@
 #include <GLFW/glfw3.h>
 #include <cmath>
 #include <algorithm>
+#include <future>
+#include <thread>
 
 void PlaybackEngine::init(const LevelData& level, bool showTrail) {
     m_level = &level;
@@ -20,8 +22,92 @@ void PlaybackEngine::init(const LevelData& level, bool showTrail) {
     m_bluePlanet = std::make_unique<Planet>(glm::vec3(0.0f, 0.0f, 1.0f), showTrail);
 }
 
+// Phase 2 worker: compute per-tile geometry for tiles [start, end).
+// Each tile is independent — reads pre-computed state arrays and const level data.
+static void precalcTileRange(
+    const LevelData& level,
+    const std::vector<uint8_t>& preIsCW,
+    const std::vector<float>&   preBPM,
+    const std::vector<float>&   preAngleDir,
+    const std::vector<float>&   preExtraRot,
+    std::vector<float>& outStartAngles,
+    std::vector<float>& outTotalAngles,
+    std::vector<float>& outDurations,
+    std::vector<float>& outStartDist,
+    std::vector<float>& outEndDist,
+    int start, int end, int n)
+{
+    const auto& tiles = level.tiles;
+    const auto& angleData = level.angleData;
+
+    for (int i = start; i < end; i++) {
+        bool isCW = (preIsCW[i] != 0);
+        float currentBPM = preBPM[i];
+
+        // ---- Start angle from tile positions ----
+        float startAngle;
+        if (i == 0) {
+            startAngle = (level.settings.rotation + 180.0f) * 3.14159265f / 180.0f;
+        } else {
+            const auto& pivotPos = tiles[i].position;
+            const auto& prevPos  = tiles[i - 1].position;
+            startAngle = std::atan2(prevPos[1] - pivotPos[1], prevPos[0] - pivotPos[0]);
+        }
+        outStartAngles[i] = startAngle;
+
+        // ---- Relative angle from absolute direction (ADOFAI-JS _parseAngle) ----
+        double rawAngleData = (i < (int)angleData.size()) ? angleData[i] : 180.0;
+        double relAngle;
+        if (rawAngleData == 999.0) {
+            relAngle = 0.0;
+        } else {
+            double delta = std::fmod((double)preAngleDir[i] - rawAngleData, 360.0);
+            if (delta < 0) delta += 360.0;
+            if (!isCW) {
+                relAngle = 360.0 - delta;
+                if (relAngle >= 360.0) relAngle -= 360.0;
+            } else {
+                relAngle = delta;
+            }
+            if (delta < 0.0001) relAngle = 360.0;
+        }
+        float totalAngle = (float)relAngle * 3.14159265f / 180.0f;
+        if (isCW) totalAngle = -totalAngle;
+
+        // Pause extra rotation
+        if (isCW) totalAngle -= preExtraRot[i] * 2.0f * 3.14159265f;
+        else      totalAngle += preExtraRot[i] * 2.0f * 3.14159265f;
+
+        outTotalAngles[i] = totalAngle;
+
+        // Duration: rotationAmount * 2 * secPerBeat
+        float rotationAmount = std::abs(totalAngle) / (2.0f * 3.14159265f);
+        float duration = rotationAmount * 2.0f * (60.0f / currentBPM);
+        outDurations[i] = duration;
+
+        // Start/end distances
+        float distToPrev = 1.0f, distToNext = 1.0f;
+        const auto& p = tiles[i].position;
+        if (i > 0) {
+            const auto& pp = tiles[i - 1].position;
+            float dx = p[0] - pp[0], dy = p[1] - pp[1];
+            distToPrev = std::sqrt(dx * dx + dy * dy);
+            if (distToPrev < 0.01f) distToPrev = 1.0f;
+        }
+        if (i + 1 < n) {
+            const auto& np = tiles[i + 1].position;
+            float dx = np[0] - p[0], dy = np[1] - p[1];
+            distToNext = std::sqrt(dx * dx + dy * dy);
+            if (distToNext < 0.01f) distToNext = 1.0f;
+        }
+        outStartDist[i] = distToPrev;
+        outEndDist[i]   = distToNext;
+    }
+}
+
 // Precalculate per-tile timing arrays from absolute angleData (ADOFAI-JS _parseAngle algorithm).
-// Computes relative rotation, duration, start times, and processes events (Twirl/SetSpeed/Pause).
+// Splits into 4 phases: (0) actions-by-floor index, (1) sequential state propagation,
+// (2) parallel tile geometry, (3) sequential prefix sum, (4) last-tile handling.
 void PlaybackEngine::precalculateTiming() {
     const auto& tiles = m_level->tiles;
     const auto& angleData = m_level->angleData;
@@ -37,12 +123,7 @@ void PlaybackEngine::precalculateTiming() {
     m_tileStartDist.resize(n);
     m_tileEndDist.resize(n);
 
-    bool isCW = true;
-    float currentBPM = m_level->settings.bpm;
-    double totalTime = 0.0;
-    float angleDir = 180.0f;
-
-    // Pre-index actions by floor (O(m) instead of O(n*m) per-tile scan)
+    // ---- Phase 0: Pre-index actions by floor (O(m), unchanged) ----
     std::vector<std::vector<size_t>> actionsByFloor(n);
     if (!m_level->actions.is_null() && m_level->actions.is_array()) {
         for (size_t j = 0; j < m_level->actions.size(); j++) {
@@ -53,10 +134,22 @@ void PlaybackEngine::precalculateTiming() {
         }
     }
 
+    // ---- Phase 1 (sequential): Forward-propagate state arrays ----
+    // Compute isCW, BPM, angleDir, and Pause extra rotation for every tile.
+    // These depend on all previous tiles' events, so must be serial.
+    std::vector<uint8_t> preIsCW(n);
+    std::vector<float>   preBPM(n);
+    std::vector<float>   preAngleDir(n - 1);
+    std::vector<float>   preExtraRot(n - 1, 0.0f);
+
+    bool isCW = true;
+    float currentBPM = m_level->settings.bpm;
+    float angleDir = 180.0f;
+
     for (int i = 0; i < n - 1; i++) {
+        preAngleDir[i] = angleDir;
         float extraRotation = 0.0f;
 
-        // Process events on this floor (O(1) lookup)
         for (size_t j : actionsByFloor[i]) {
             auto& a = m_level->actions[j];
             std::string etype = a["eventType"].get<std::string>();
@@ -75,92 +168,85 @@ void PlaybackEngine::precalculateTiming() {
             }
         }
 
-        m_tileIsCW[i] = isCW;
-        m_tileBPM[i] = currentBPM;
+        preIsCW[i] = isCW ? 1 : 0;
+        preBPM[i] = currentBPM;
+        preExtraRot[i] = extraRotation;
 
-        // --- Geometry: start angle from tile positions ---
-        float startAngle;
-        if (i == 0) {
-            startAngle = (m_level->settings.rotation + 180.0f) * 3.14159265f / 180.0f;
-        } else {
-            const auto& pivotPos = tiles[i].position;
-            const auto& prevPos  = tiles[i - 1].position;
-            startAngle = std::atan2(prevPos[1] - pivotPos[1], prevPos[0] - pivotPos[0]);
-        }
-        m_tileStartAngles[i] = startAngle;
-
-        // --- Relative angle from absolute direction (ADOFAI-JS _parseAngle) ---
+        // Propagate angleDir to next tile
         double rawAngleData = (i < (int)angleData.size()) ? angleData[i] : 180.0;
-        double relAngle;
         if (rawAngleData == 999.0) {
-            relAngle = 0.0;
             double prevAbs = (i > 0) ? angleData[i - 1] : 0.0;
-            angleDir = std::fmod(prevAbs, 360.0);
-            if (angleDir < 0) angleDir += 360.0;
+            angleDir = (float)std::fmod(prevAbs, 360.0);
+            if (angleDir < 0) angleDir += 360.0f;
         } else {
-            double delta = std::fmod(angleDir - rawAngleData, 360.0);
-            if (delta < 0) delta += 360.0f;
-            if (!isCW) {
-                relAngle = 360.0 - delta;
-                if (relAngle >= 360.0) relAngle -= 360.0;
-            } else {
-                relAngle = delta;
-            }
-            if (delta < 0.0001) relAngle = 360.0;
-            angleDir = std::fmod(rawAngleData + 180.0, 360.0);
-            if (angleDir < 0) angleDir += 360.0;
+            angleDir = (float)std::fmod(rawAngleData + 180.0, 360.0);
+            if (angleDir < 0) angleDir += 360.0f;
         }
-        float totalAngle = relAngle * 3.14159265f / 180.0f;
-        if (isCW) totalAngle = -totalAngle;
-
-        // Pause extra rotation
-        if (isCW) totalAngle -= extraRotation * 2.0f * 3.14159265f;
-        else      totalAngle += extraRotation * 2.0f * 3.14159265f;
-
-        m_tileTotalAngles[i] = totalAngle;
-
-        // Duration: rotationAmount * 2 * secPerBeat
-        float rotationAmount = std::abs(totalAngle) / (2.0f * 3.14159265f);
-        float duration = rotationAmount * 2.0f * (60.0f / currentBPM);
-        m_tileDurations[i] = duration;
-
-        // Start/end distances
-        float distToPrev = 1.0f, distToNext = 1.0f;
-        const auto& p = tiles[i].position;
-        if (i > 0) {
-            const auto& pp = tiles[i - 1].position;
-            float dx = p[0] - pp[0], dy = p[1] - pp[1];
-            distToPrev = std::sqrt(dx * dx + dy * dy);
-            if (distToPrev < 0.01f) distToPrev = 1.0f;
-        }
-        if (i + 1 < n) {
-            const auto& np = tiles[i + 1].position;
-            float dx = np[0] - p[0], dy = np[1] - p[1];
-            distToNext = std::sqrt(dx * dx + dy * dy);
-            if (distToNext < 0.01f) distToNext = 1.0f;
-        }
-        m_tileStartDist[i] = distToPrev;
-        m_tileEndDist[i]   = distToNext;
-
-        // Cumulative timing (reference: set tileStartTimes[i+1])
-        m_tileStartTimes[i] = totalTime;
-        totalTime += duration;
     }
-    // Set the extra tile's start time to total duration (reference line 602)
+    // Save final state for the last (extra) tile
+    preIsCW[n - 1] = isCW ? 1 : 0;
+    preBPM[n - 1] = currentBPM;
+
+    // ---- Phase 2 (parallel): Per-tile geometry ----
+    // Each tile's computation is independent once Phase 1 state arrays are known.
+    constexpr int PARALLEL_THRESHOLD = 256;
+    int workItems = n - 1;  // tiles 0 through n-2
+
+    if (workItems >= PARALLEL_THRESHOLD) {
+        unsigned int hw = std::thread::hardware_concurrency();
+        if (hw == 0) hw = 2;
+        unsigned int numThreads = std::min(hw, (unsigned)(workItems / 64));
+        if (numThreads < 2) numThreads = 2;
+        size_t chunk = ((size_t)workItems + numThreads - 1) / numThreads;
+
+        std::vector<std::future<void>> futures;
+        for (unsigned int t = 0; t < numThreads; t++) {
+            size_t s = t * chunk;
+            size_t e = std::min(s + chunk, (size_t)workItems);
+            if (s >= e) break;
+            futures.push_back(std::async(std::launch::async,
+                precalcTileRange,
+                std::cref(*m_level),
+                std::cref(preIsCW), std::cref(preBPM),
+                std::cref(preAngleDir), std::cref(preExtraRot),
+                std::ref(m_tileStartAngles), std::ref(m_tileTotalAngles),
+                std::ref(m_tileDurations), std::ref(m_tileStartDist), std::ref(m_tileEndDist),
+                (int)s, (int)e, n));
+        }
+        for (auto& f : futures) f.wait();
+    } else {
+        precalcTileRange(*m_level, preIsCW, preBPM, preAngleDir, preExtraRot,
+                         m_tileStartAngles, m_tileTotalAngles,
+                         m_tileDurations, m_tileStartDist, m_tileEndDist,
+                         0, workItems, n);
+    }
+
+    // Copy state arrays to member vectors (sequential write, safe)
+    for (int i = 0; i < n; i++) {
+        m_tileIsCW[i] = (preIsCW[i] != 0);
+        m_tileBPM[i]  = preBPM[i];
+    }
+
+    // ---- Phase 3 (sequential): Prefix sum of durations → tileStartTimes ----
+    double totalTime = 0.0;
+    for (int i = 0; i < n - 1; i++) {
+        m_tileStartTimes[i] = totalTime;
+        totalTime += m_tileDurations[i];
+    }
     if (n > 0) m_tileStartTimes[n - 1] = totalTime;
 
-    // Shift so tileStartTimes[1] = 0 (reference lines 605-611)
+    double preShiftTotal = totalTime;  // capture for log before shift
+
+    // Shift so tileStartTimes[1] = 0
     if (n > 1) {
-        float shift = m_tileStartTimes[1];
+        double shift = m_tileStartTimes[1];
         for (int i = 0; i < n; i++) {
             m_tileStartTimes[i] -= shift;
         }
     }
 
-    // Process events on last tile (for infinite rotation BPM)
+    // ---- Phase 4 (sequential): Last tile (n-1) events + distances ----
     int lastIdx = n - 1;
-    m_tileIsCW[lastIdx] = isCW;
-    m_tileBPM[lastIdx] = currentBPM;
     m_tileDurations[lastIdx] = 0.0f;
     m_tileStartAngles[lastIdx] = (lastIdx > 0) ? m_tileStartAngles[lastIdx - 1] : 0.0f;
 
@@ -196,7 +282,7 @@ void PlaybackEngine::precalculateTiming() {
     }
 
     LOG_I("PlaybackEngine: %d tiles, total duration %.2fs, bpm range %.0f-%.0f",
-          n - 1, totalTime, *std::min_element(m_tileBPM.begin(), m_tileBPM.end()),
+          n - 1, preShiftTotal, *std::min_element(m_tileBPM.begin(), m_tileBPM.end()),
           *std::max_element(m_tileBPM.begin(), m_tileBPM.end()));
 }
 
@@ -213,11 +299,11 @@ void PlaybackEngine::start(double wallClockSec) {
 
     const auto& tiles = m_level->tiles;
     if (m_redPlanet && !tiles.empty()) {
-        m_redPlanet->position = glm::vec3(tiles[0].position[0], tiles[0].position[1], 3.0f);
+        m_redPlanet->position = glm::vec3(tiles[0].position[0], tiles[0].position[1], 9.5f);
         m_redPlanet->clearTrail();
     }
     if (m_bluePlanet && tiles.size() > 1) {
-        m_bluePlanet->position = glm::vec3(tiles[1].position[0], tiles[1].position[1], 3.0f);
+        m_bluePlanet->position = glm::vec3(tiles[1].position[0], tiles[1].position[1], 9.5f);
         m_bluePlanet->clearTrail();
     }
 
@@ -237,8 +323,8 @@ void PlaybackEngine::startAt(double wallClockSec, float audioPosSec, float offse
     // Place planets at correct mid-playback positions
     glm::vec2 r(0), b(0);
     computePositionsAtTime(timeInLevel(), r, b);
-    if (m_redPlanet)  { m_redPlanet->position  = glm::vec3(r.x, r.y, 3.0f); m_redPlanet->clearTrail(); }
-    if (m_bluePlanet) { m_bluePlanet->position = glm::vec3(b.x, b.y, 3.0f); m_bluePlanet->clearTrail(); }
+    if (m_redPlanet)  { m_redPlanet->position  = glm::vec3(r.x, r.y, 9.5f); m_redPlanet->clearTrail(); }
+    if (m_bluePlanet) { m_bluePlanet->position = glm::vec3(b.x, b.y, 9.5f); m_bluePlanet->clearTrail(); }
 
     LOG_I("Playback started mid-level at tile %d, time=%.3fs", m_currentTileIndex, timeInLevel());
 }
@@ -365,12 +451,12 @@ void PlaybackEngine::updatePlanetPositions() {
         Planet* movingPlanet = isRedPivot ? m_bluePlanet.get() : m_redPlanet.get();
 
         if (pivotPlanet)
-            pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 3.0f);
+            pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 9.5f);
         if (movingPlanet) {
             movingPlanet->position = glm::vec3(
                 pivotPos[0] + std::cos(currentAngle) * dist,
                 pivotPos[1] + std::sin(currentAngle) * dist,
-                3.0f);
+                9.5f);
         }
         return;
     }
@@ -396,13 +482,13 @@ void PlaybackEngine::updatePlanetPositions() {
     float currentDist = startDist + (endDist - startDist) * progress;
 
     if (pivotPlanet)
-        pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 3.0f);
+        pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 9.5f);
 
     if (movingPlanet) {
         movingPlanet->position = glm::vec3(
             pivotPos[0] + std::cos(currentAngle) * currentDist,
             pivotPos[1] + std::sin(currentAngle) * currentDist,
-            3.0f);
+            9.5f);
     }
 }
 

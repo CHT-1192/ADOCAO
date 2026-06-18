@@ -20,7 +20,7 @@
 - [x] Sort instances descending (Re_ADOJAS draw order)
 - [x] Camera-relative offsets on CPU (removed uCam from shader)
 - [x] Event icons: Twirl (purple), SetSpeed (red/blue)
-- [ ] depthWrite + renderOrder (reverted — Z-fighting with overlap)
+- [x] depthWrite + renderOrder (Z-depth: far=200, tile Z 0~9, 755K depth steps)
 - [x] `setPoints` trail: buffer under-allocation fixed (segsPerPoint=4 factor)
 - [ ] MoveTrack (tile position/rotation/scale animation)
 - [x] Compute shader infrastructure (OpenGL 4.3, SSBO, indirect draw)
@@ -48,7 +48,7 @@
 - [x] Sleep-based frame pacing (CPU-efficient)
 - [x] processActions() O(n+m) optimization (removed O(n*m) per-event fills)
 - [x] Multithreaded CPU culling (parallel frustum test + offset compute)
-- [ ] precalculateTiming 多线程化
+- [x] precalculateTiming 多线程化
 
 ## 音频
 - [x] Pause stops audio device (not just music)
