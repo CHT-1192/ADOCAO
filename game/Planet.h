@@ -31,6 +31,8 @@ public:
     bool buildGPU();
     void draw(Shader& shader, const Camera& camera, double camX, double camY) const;
     bool gpuBuilt() const { return m_vao != 0; }
+    GLuint vao() const { return m_vao; }
+    unsigned indexCount() const { return m_indexCount; }
 
 private:
     GLuint m_vao = 0, m_vbo = 0, m_ebo = 0;

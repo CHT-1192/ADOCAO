@@ -26,6 +26,8 @@ struct GameInput {
     double offsetX = 0.0;
     double offsetY = 0.0;
     Camera* camera = nullptr;
+    int    selectedTile = -1;
+    bool   justClicked = false;
 };
 
 struct Viewport { int x=0, y=0, w=0, h=0; };
@@ -167,8 +169,12 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
             if (action == GLFW_PRESS) {
                 in->dragActive=true; in->dragStartX=in->cursorX; in->dragStartY=in->cursorY;
             } else {
+                double dx = in->cursorX - in->dragStartX;
+                double dy = in->cursorY - in->dragStartY;
                 in->dragActive=false; in->baseTargetX+=in->offsetX; in->baseTargetY+=in->offsetY;
                 in->offsetX=0; in->offsetY=0;
+                // Short click without drag → tile selection (processed in main loop)
+                if (dx*dx + dy*dy < 25.0) in->justClicked = true;
             }
         }
     });
@@ -231,20 +237,32 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         if (spacePressed && !wasSpacePressed) {
             autoPlayTriggerTime = 999999.0;  // only fire once
             if (!playback.isPlaying()) {
-                playback.start(glfwGetTime());
-
-                const auto& bpmArr = playback.tileBPMPerTile();
-                float bpm = bpmArr.size() > 0 ? bpmArr[0] : level->settings.bpm;
                 float offsetSec = level->settings.offset / 1000.0f;
 
-                // Seek hitsounds cursor to offset position
-                hitsoundMgr.resetAt(offsetSec);
-
-                if (audioEngine.hasMusic()) {
-                    audioEngine.seek(offsetSec);
-                    audioEngine.play();
+                if (input.selectedTile >= 0) {
+                    // Start from selected tile
+                    double targetTime = playback.tileStartTimes()[input.selectedTile];
+                    float audioPos = (float)(targetTime + offsetSec);
+                    if (audioPos < 0) audioPos = 0;
+                    playback.startAt(glfwGetTime(), audioPos, offsetSec);
+                    hitsoundMgr.resetAt(audioPos);
+                    if (audioEngine.hasMusic()) {
+                        audioEngine.seek(audioPos);
+                        audioEngine.play();
+                    } else {
+                        audioEngine.play();
+                    }
+                    input.selectedTile = -1;  // clear after starting
                 } else {
-                    audioEngine.play();
+                    // Start from beginning
+                    playback.start(glfwGetTime());
+                    hitsoundMgr.resetAt(offsetSec);
+                    if (audioEngine.hasMusic()) {
+                        audioEngine.seek(offsetSec);
+                        audioEngine.play();
+                    } else {
+                        audioEngine.play();
+                    }
                 }
             } else {
                 playback.stop();
@@ -252,6 +270,36 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
             }
         }
         wasSpacePressed = spacePressed;
+
+        // Click-to-select tile (only when stopped)
+        if (!playback.isPlaying() && input.justClicked) {
+            input.justClicked = false;
+            // Convert screen coords to world using same math as drag
+            int fbW, fbH, winW, winH;
+            glfwGetFramebufferSize(window, &fbW, &fbH);
+            glfwGetWindowSize(window, &winW, &winH);
+            Viewport vp2 = computeLetterbox(fbW, fbH, targetAspect);
+            double halfH = 6.0/(camera.zoom()/100.0);
+            double halfW = halfH*(double)vp2.w/(double)vp2.h;
+            double pxToWorldX = (2.0*halfW)/(double)vp2.w;
+            double pxToWorldY = (2.0*halfH)/(double)vp2.h;
+            double worldX = camera.targetX() + (input.cursorX - vp2.x) * pxToWorldX - halfW;
+            double worldY = camera.targetY() - (input.cursorY - vp2.y) * pxToWorldY + halfH;
+
+            // Find nearest tile within threshold
+            int best = -1;
+            double bestDist = 1.0;  // 1 world unit threshold
+            for (int i = 0; i < (int)level->tiles.size() - 1; i++) {
+                double dx = level->tiles[i].position[0] - worldX;
+                double dy = level->tiles[i].position[1] - worldY;
+                double d = dx*dx + dy*dy;
+                if (d < bestDist * bestDist) {
+                    bestDist = std::sqrt(d);
+                    best = i;
+                }
+            }
+            input.selectedTile = best;
+        }
 
         // Bookmark navigation: Ctrl+Left/Right (only when stopped)
         bool ctrlHeld = (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
@@ -365,6 +413,29 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
         tileShader.use();
         tileMesh.drawIcons(vl, vr, vb, vt, camera.targetX(), camera.targetY());
         glEnable(GL_DEPTH_TEST);
+
+        // Highlight selected tile: invert colors via blend
+        if (!playback.isPlaying() && input.selectedTile >= 0
+            && input.selectedTile < (int)level->tiles.size()) {
+            auto& tp = level->tiles[input.selectedTile].position;
+            auto model = glm::translate(glm::mat4(1.0f),
+                glm::vec3((float)(tp[0] - camera.targetX()),
+                          (float)(tp[1] - camera.targetY()), 0.0f));
+            auto mvp = camera.viewProj() * model;
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ZERO);
+            planetShader.use();
+            planetShader.setMat4("uMVP", glm::value_ptr(mvp));
+            planetShader.setVec4("uColor", 0.5f, 0.5f, 0.5f, 1.0f);
+            // Draw circle at tile position using planet's geometry
+            if (playback.redPlanet() && playback.redPlanet()->gpuBuilt()) {
+                glBindVertexArray(playback.redPlanet()->vao());
+                glDrawElements(GL_TRIANGLE_STRIP, playback.redPlanet()->indexCount(),
+                              GL_UNSIGNED_INT, nullptr);
+                glBindVertexArray(0);
+            }
+            glDisable(GL_BLEND);
+        }
 
         glfwSwapBuffers(window);
     }
