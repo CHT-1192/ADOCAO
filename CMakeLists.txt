@@ -238,7 +238,7 @@ endif()
 # Static linking for portable builds
 if(ADOCAO_PORTABLE)
     if(MINGW)
-        target_link_options(adocao PRIVATE -static -static-libgcc -static-libstdc++)
+        target_link_options(adocao PRIVATE -static -static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic)
     elseif(MSVC)
         set_property(TARGET adocao PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     endif()
