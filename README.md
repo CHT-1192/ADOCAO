@@ -29,8 +29,8 @@ A [Vulkan 1.2 port](https://github.com/CHT-1192/ADOCAV) is also available.
 ```bash
 build.bat                     # default: 320 FPS, zoom max 1000
 build.bat highfps             # 1000 FPS cap
-build.bat exzoom             # max zoom 4000
-build.bat highfps exzoom     # both
+build.bat exzoom              # max zoom 4000
+build.bat highfps exzoom      # both
 build.bat portable            # static-linked portable build
 build.bat portable highfps    # portable + 1000 FPS
 ```
