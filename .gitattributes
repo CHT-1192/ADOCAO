@@ -6,5 +6,5 @@
 # Classify C++ headers correctly
 *.hpp linguist-language=C++
 
-# Exclude build dependencies from stats
-build/** linguist-vendored
+# Exclude third-party vendored code from language stats
+audio/stb_vorbis.c linguist-vendored
