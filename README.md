@@ -79,11 +79,12 @@ Without `--level`, falls through to the ImGui launcher.
 ```
 app/         Application layer (windows, launcher, game loop)
 audio/       Music playback + hitsound synthesis (miniaudio)
-camera/      Orthographic camera
+camera/      Orthographic camera with frustum culling
 game/        Planet rendering + playback engine
 glad/        OpenGL 4.3 Core loader (custom minimal loader)
 level/       .adofai parser + JSON cleaner
-render/      Shader programs + planet trail
+render/      Shader programs + planet trail rendering
+shaders/     GLSL shader source files (.vert / .frag / .comp)
 track/       Tile mesh generation + instanced rendering
 util/        Logger + easing functions
 assets/
