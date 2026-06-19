@@ -248,15 +248,15 @@ endif()
 # ---- Install ----
 install(TARGETS adocao RUNTIME DESTINATION bin)
 
-# ---- Copy assets and shaders to build directory ----
+# ---- Copy hitsounds and shaders to build directory ----
 add_custom_command(TARGET adocao POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_SOURCE_DIR}/assets"
-    "${CMAKE_BINARY_DIR}/assets"
+    "${CMAKE_SOURCE_DIR}/hitsounds"
+    "${CMAKE_BINARY_DIR}/hitsounds"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_SOURCE_DIR}/shaders"
     "${CMAKE_BINARY_DIR}/shaders"
-    COMMENT "Copying assets and shaders to build directory"
+    COMMENT "Copying hitsounds and shaders to build directory"
 )
 
 # ---- Copy example level (if available) ----

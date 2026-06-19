@@ -1,6 +1,7 @@
 #include "GameWindow.hpp"
 #include "glad/gl_core.hpp"
 #include "render/Shader.hpp"
+#include "render/Shaders.hpp"
 #include "camera/Camera.hpp"
 #include "track/TileMesh.hpp"
 #include "game/Planet.hpp"
@@ -111,22 +112,33 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
     LOG_I("OpenGL %s | GLSL %s", glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-    // ---- Shaders (loaded from files) ----
+    // ---- Shaders (load from files, fall back to inline strings) ----
+    auto compileShader = [](Shader& s, const char* vertPath, const char* fragPath,
+                            const char* vertSrc, const char* fragSrc) -> bool {
+        if (s.compileFile(vertPath, fragPath)) return true;
+        LOG_I("Shader file loading failed, using inline fallback");
+        return s.compile(vertSrc, fragSrc);
+    };
+
     Shader tileShader;
-    if (!tileShader.compileFile("shaders/tile.vert", "shaders/tile.frag")) {
+    if (!compileShader(tileShader, "shaders/tile.vert", "shaders/tile.frag",
+                       Shaders::kTileVertSrc, Shaders::kTileFragSrc)) {
         LOG_E("Tile shader failed"); glfwDestroyWindow(window); return;
     }
     Shader planetShader;
-    if (!planetShader.compileFile("shaders/planet.vert", "shaders/planet.frag")) {
+    if (!compileShader(planetShader, "shaders/planet.vert", "shaders/planet.frag",
+                       Shaders::kPlanetVertSrc, Shaders::kPlanetFragSrc)) {
         LOG_E("Planet shader failed"); glfwDestroyWindow(window); return;
     }
     Shader trailShader;
-    if (!trailShader.compileFile("shaders/trail.vert", "shaders/trail.frag")) {
+    if (!compileShader(trailShader, "shaders/trail.vert", "shaders/trail.frag",
+                       Shaders::kTrailVertSrc, Shaders::kTrailFragSrc)) {
         LOG_E("Trail shader failed"); glfwDestroyWindow(window); return;
     }
 
     Shader highlightShader;
-    if (!highlightShader.compileFile("shaders/highlight.vert", "shaders/highlight.frag")) {
+    if (!compileShader(highlightShader, "shaders/highlight.vert", "shaders/highlight.frag",
+                       Shaders::kHighlightVertSrc, Shaders::kHighlightFragSrc)) {
         LOG_E("Highlight shader failed"); glfwDestroyWindow(window); return;
     }
 

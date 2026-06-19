@@ -1,4 +1,5 @@
 #include "Shader.hpp"
+#include "util/Logger.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -44,7 +45,7 @@ GLuint Shader::compileShader(GLenum type, const char* src) {
         const char* name = type == GL_VERTEX_SHADER ? "Vertex"
                          : type == GL_FRAGMENT_SHADER ? "Fragment"
                          : "Compute";
-        fprintf(stderr, "[Shader] %s compile error:\n%s\n", name, log);
+        LOG_E("[Shader] %s compile error:\n%s", name, log);
         glDeleteShader(shader);
         return 0;
     }
@@ -65,7 +66,7 @@ bool Shader::compileCompute(const char* compSrc) {
     if (!success) {
         char log[1024];
         glGetProgramInfoLog(m_program, sizeof(log), nullptr, log);
-        fprintf(stderr, "[Shader] Compute link error:\n%s\n", log);
+        LOG_E("[Shader] Compute link error:\n%s", log);
         destroy();
     }
 
@@ -93,7 +94,7 @@ bool Shader::compile(const char* vertSrc, const char* fragSrc) {
     if (!success) {
         char log[1024];
         glGetProgramInfoLog(m_program, sizeof(log), nullptr, log);
-        fprintf(stderr, "[Shader] Link error:\n%s\n", log);
+        LOG_E("[Shader] Link error:\n%s", log);
         destroy();
     }
 
@@ -127,7 +128,7 @@ bool Shader::compileFile(const char* vertPath, const char* fragPath) {
     std::string vs = readFile(vertPath);
     std::string fs = readFile(fragPath);
     if (vs.empty() || fs.empty()) {
-        fprintf(stderr, "[Shader] Failed to read: %s / %s\n", vertPath, fragPath);
+        LOG_E("[Shader] Failed to read shader file: %s / %s", vertPath, fragPath);
         return false;
     }
     return compile(vs.c_str(), fs.c_str());
@@ -136,7 +137,7 @@ bool Shader::compileFile(const char* vertPath, const char* fragPath) {
 bool Shader::compileComputeFile(const char* compPath) {
     std::string cs = readFile(compPath);
     if (cs.empty()) {
-        fprintf(stderr, "[Shader] Failed to read: %s\n", compPath);
+        LOG_E("[Shader] Failed to read shader file: %s", compPath);
         return false;
     }
     return compileCompute(cs.c_str());

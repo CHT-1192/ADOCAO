@@ -67,10 +67,10 @@ static std::string findAssetsDir() {
         std::string dir(exePath, len);
         auto pos = dir.find_last_of("\\/");
         if (pos != std::string::npos) dir = dir.substr(0, pos);
-        return dir + "/assets/sounds/";
+        return dir + "/hitsounds/";
     }
 #endif
-    return "assets/sounds/";
+    return "hitsounds/";
 }
 
 HitsoundManager::HitsoundManager() = default;

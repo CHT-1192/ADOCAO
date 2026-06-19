@@ -38,10 +38,17 @@ jobs:
         shell: msys2 {0}
         run: cmake --build build --parallel
 
+      - name: Package data
+        shell: msys2 {0}
+        run: |
+          cd build && 7z a ADOCAO-data.zip ../hitsounds ../shaders
+
       - name: Upload assets
         uses: softprops/action-gh-release@v2
         with:
-          files: build/ADOCAO*.exe
+          files: |
+            build/ADOCAO*.exe
+            build/ADOCAO-data.zip
 
   linux:
     strategy:
@@ -66,7 +73,13 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
+      - name: Package data
+        run: |
+          cd build && zip -r ADOCAO-data.zip ../hitsounds ../shaders
+
       - name: Upload assets
         uses: softprops/action-gh-release@v2
         with:
-          files: build/ADOCAO*
+          files: |
+            build/ADOCAO*
+            build/ADOCAO-data.zip

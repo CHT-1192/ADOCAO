@@ -93,8 +93,7 @@ render/      Shader programs + planet trail rendering
 shaders/     GLSL shader source files (.vert / .frag / .comp)
 track/       Tile mesh generation + instanced rendering
 util/        Logger + easing functions
-assets/
-  sounds/      27 hit sound .wav files
+hitsounds/   27 hit sound .wav files
 ```
 
 ## Controls
