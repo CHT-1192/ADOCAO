@@ -37,9 +37,5 @@ if %ERRORLEVEL% NEQ 0 (
     cmake --build . --parallel
 )
 echo.
-if "%PORTABLE%"=="1" (
-    echo Build done: %cd%\ADOCAO-Portable.exe
-) else (
-    echo Build done: %cd%\adocao.exe
-)
+    echo Build done: %cd%\ADOCAO.exe
 endlocal

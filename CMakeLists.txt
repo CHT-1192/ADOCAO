@@ -242,7 +242,6 @@ if(ADOCAO_PORTABLE)
     elseif(MSVC)
         set_property(TARGET adocao PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     endif()
-    set_target_properties(adocao PROPERTIES OUTPUT_NAME "ADOCAO-Portable")
 endif()
 
 # ---- Install ----

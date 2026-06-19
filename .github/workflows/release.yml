@@ -9,10 +9,6 @@ permissions:
 
 jobs:
   windows:
-    strategy:
-      fail-fast: false
-      matrix:
-        portable: [false, true]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +28,7 @@ jobs:
         shell: msys2 {0}
         run: |
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DADOCAO_PORTABLE=${{ matrix.portable == true && 'ON' || 'OFF' }}
+            -DADOCAO_PORTABLE=ON
 
       - name: Build
         shell: msys2 {0}
@@ -47,13 +43,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/ADOCAO*.exe
+            build/ADOCAO.exe
             build/ADOCAO-data.zip
 
   linux:
-    strategy:
-      matrix:
-        portable: [false, true]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +61,7 @@ jobs:
       - name: Configure
         run: |
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DADOCAO_PORTABLE=${{ matrix.portable == true && 'ON' || 'OFF' }}
+            -DADOCAO_PORTABLE=ON
 
       - name: Build
         run: cmake --build build --parallel
@@ -81,5 +74,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/ADOCAO*
+            build/ADOCAO
             build/ADOCAO-data.zip
