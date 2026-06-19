@@ -174,7 +174,6 @@ set(SOURCES
     audio/AudioEngine.cpp
     audio/HitsoundManager.hpp
     audio/HitsoundManager.cpp
-    audio/stb_vorbis_impl.cpp
 )
 
 # ImGui sources
@@ -191,6 +190,10 @@ set(IMGUI_SOURCES
 # stb_image (header-only, implementation in util/stb_impl.cpp)
 add_library(stb_image STATIC util/stb_impl.cpp)
 target_include_directories(stb_image PUBLIC ${stb_SOURCE_DIR})
+
+# stb_vorbis (implementation in audio/stb_vorbis_impl.cpp)
+add_library(stb_vorbis STATIC audio/stb_vorbis_impl.cpp)
+target_include_directories(stb_vorbis PUBLIC ${stb_SOURCE_DIR})
 
 # tinyfiledialogs
 add_library(tinyfiledialogs STATIC ${tinyfiledialogs_SOURCE_DIR}/tinyfiledialogs.c)
@@ -212,6 +215,7 @@ target_link_libraries(adocao PRIVATE
     glm::glm
     nlohmann_json::nlohmann_json
     stb_image
+    stb_vorbis
     tinyfiledialogs
 )
 
