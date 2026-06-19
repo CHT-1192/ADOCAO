@@ -25,6 +25,9 @@ struct ShapeGroup {
     GLuint instVbo = 0;   // per-instance offsets (3 floats, updated per-frame)
     GLuint colorVbo = 0;  // per-instance colors (7 floats, static)
     unsigned indexCount = 0;
+    unsigned strokeIndexCount = 0;   // number of stroke triangle indices (comes first)
+    unsigned fillIndexCount = 0;     // number of fill triangle indices (comes after stroke)
+    unsigned fillIndexByteOffset = 0; // byte offset into EBO where fill indices start
     std::vector<TileInstance> instances;
 };
 
