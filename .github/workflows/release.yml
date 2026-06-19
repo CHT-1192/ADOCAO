@@ -39,9 +39,9 @@ jobs:
         run: cmake --build build --parallel
 
       - name: Package data
-        shell: msys2 {0}
+        shell: pwsh
         run: |
-          cd build && zip -r ADOCAO-data.zip ../hitsounds ../shaders
+          Compress-Archive -Path hitsounds,shaders -DestinationPath build/ADOCAO-data.zip
 
       - name: Upload assets
         uses: softprops/action-gh-release@v2
