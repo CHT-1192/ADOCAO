@@ -13,7 +13,7 @@ done
 
 mkdir -p build
 cd build
-cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release \
+cmake .. -DCMAKE_BUILD_TYPE=Release \
     -DADOCAO_EXTREME_ZOOM="$EXTREME_ZOOM" \
     -DADOCAO_HIGH_FPS="$HIGH_FPS" \
     -DGLFW_BUILD_WAYLAND=ON \
