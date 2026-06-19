@@ -14,14 +14,17 @@ A [Vulkan 1.2 port](https://github.com/CHT-1192/ADOCAV) is also available.
 - Music playback via miniaudio (WASAPI/PulseAudio): AIFF, OGG, WAV, FLAC
 - Pre-synthesized hitsound tracks (27 hit types) with 16-bit hard-clip mixing
 - Instanced GPU rendering with frustum culling and visibility cache
-- Per-tile ColorTrack support (fill + stroke colors)
+- Per-instance fill and stroke colors via vertex attributes
 - Planet movement with trail rendering (Catmull-Rom spline)
 - Event icons: Twirl (purple), SetSpeed (red/blue)
+- Z-depth rendering (far-to-near tile ordering, supports 7M-tile levels)
+- Bookmark navigation (Ctrl+Left/Right) + track selection (click to play from tile)
 - DPI-aware launcher with auto-stroke color, background color, and resolution selection
 - OpenGL 4.3 compute shaders ready (GPU frustum culling)
-- `SetSpeed`, `Twirl`, `Pause`, `Midspin`, `PositionTrack` support
+- `SetSpeed`, `Twirl`, `Pause`, `Midspin` event support
 - `--auto-play` for automatic playback
 - `--force-hitsound` to override level hitsound type
+- `--cpu-culling` to disable GPU culling experiments
 
 ## Quick Start
 
