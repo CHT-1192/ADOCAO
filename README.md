@@ -41,7 +41,10 @@ build.bat portable highfps    # portable + 1000 FPS
 ### Linux
 ```bash
 chmod +x build.sh
-./build.sh
+./build.sh                    # default: 320 FPS, zoom max 1000
+./build.sh highfps            # 1000 FPS cap
+./build.sh exzoom             # min zoom 1.0
+./build.sh portable           # static-linked portable build
 ```
 
 ### CMake Options
