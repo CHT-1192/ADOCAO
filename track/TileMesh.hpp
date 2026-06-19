@@ -66,7 +66,6 @@ public:
 
     // Z-depth tile ordering constants
     static constexpr float kMaxTileZ = 9.0f;
-    static constexpr float kStrokeZOffset = 0.001f;
     static constexpr float kIconZBase = 0.002f;
     static constexpr float kIconZExtra = 0.003f;
 

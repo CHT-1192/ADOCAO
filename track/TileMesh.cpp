@@ -101,10 +101,9 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
             else
                 createTileMesh(startAngle, endAngle, sc);
 
-            // Offset fill Z slightly in front of stroke (depth test ON: fill must pass over stroke)
-            for (size_t vi = 0; vi < sc.types.size(); vi++) {
-                if (sc.types[vi] == 1.0f) sc.verts[vi * 3 + 2] += 0.001f;
-            }
+            // Fill and stroke at same Z — index buffer order (stroke first, fill later)
+            // + GL_LEQUAL ensures fill appears on top of stroke within each tile.
+            // Cross-tile layering handled by per-instance tileZ.
             size_t vc = sc.verts.size() / 3;
             interleaved.reserve(vc * 4);
             for (size_t vi = 0; vi < vc; vi++) {
