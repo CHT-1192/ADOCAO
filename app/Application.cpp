@@ -1,9 +1,9 @@
-#include "Application.h"
-#include "LauncherWindow.h"
-#include "LoadingWindow.h"
-#include "LevelLoader.h"
-#include "GameWindow.h"
-#include "util/Logger.h"
+#include "Application.hpp"
+#include "LauncherWindow.hpp"
+#include "LoadingWindow.hpp"
+#include "LevelLoader.hpp"
+#include "GameWindow.hpp"
+#include "util/Logger.hpp"
 #include <GLFW/glfw3.h>
 
 #ifdef _WIN32

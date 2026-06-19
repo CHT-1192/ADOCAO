@@ -1,5 +1,5 @@
-#include "AudioEngine.h"
-#include "util/Logger.h"
+#include "AudioEngine.hpp"
+#include "util/Logger.hpp"
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"

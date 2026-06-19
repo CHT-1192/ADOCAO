@@ -1,6 +1,6 @@
 #pragma once
 
-#include "LauncherWindow.h"
-#include "LevelLoader.h"
+#include "LauncherWindow.hpp"
+#include "LevelLoader.hpp"
 
 void showGameWindow(const LauncherConfig& cfg, LoadResult& loadResult);

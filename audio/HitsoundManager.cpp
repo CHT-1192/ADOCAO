@@ -1,6 +1,6 @@
-#include "HitsoundManager.h"
-#include "AudioEngine.h"
-#include "util/Logger.h"
+#include "HitsoundManager.hpp"
+#include "AudioEngine.hpp"
+#include "util/Logger.hpp"
 
 #include <cmath>
 #include <algorithm>

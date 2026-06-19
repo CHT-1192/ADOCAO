@@ -118,61 +118,61 @@ FetchContent_MakeAvailable(tinyfiledialogs)
 set(SOURCES
     # Application layer
     app/main.cpp
-    app/Application.h
+    app/Application.hpp
     app/Application.cpp
-    app/LauncherWindow.h
+    app/LauncherWindow.hpp
     app/LauncherWindow.cpp
-    app/LoadingWindow.h
+    app/LoadingWindow.hpp
     app/LoadingWindow.cpp
-    app/LevelLoader.h
+    app/LevelLoader.hpp
     app/LevelLoader.cpp
-    app/GameWindow.h
+    app/GameWindow.hpp
     app/GameWindow.cpp
 
     # OpenGL loader
-    glad/gl_core.h
+    glad/gl_core.hpp
     glad/gl_core.cpp
 
     # Level parser
-    level/LevelData.h
+    level/LevelData.hpp
     level/LevelData.cpp
-    level/JsonCleaner.h
+    level/JsonCleaner.hpp
     level/JsonCleaner.cpp
 
     # Easing
-    util/Easing.h
+    util/Easing.hpp
 
     # Logger
-    util/Logger.h
+    util/Logger.hpp
     util/Logger.cpp
 
     # Render
-    render/Shader.h
+    render/Shader.hpp
     render/Shader.cpp
-    render/Shaders.h
-    render/PlanetTrail.h
+    render/Shaders.hpp
+    render/PlanetTrail.hpp
     render/PlanetTrail.cpp
 
     # Camera
-    camera/Camera.h
+    camera/Camera.hpp
     camera/Camera.cpp
 
     # Track
-    track/TileMesh.h
+    track/TileMesh.hpp
     track/TileMesh.cpp
-    track/TileGeometry.h
+    track/TileGeometry.hpp
     track/TileGeometry.cpp
 
     # Game
-    game/Planet.h
+    game/Planet.hpp
     game/Planet.cpp
-    game/PlaybackEngine.h
+    game/PlaybackEngine.hpp
     game/PlaybackEngine.cpp
 
     # Audio
-    audio/AudioEngine.h
+    audio/AudioEngine.hpp
     audio/AudioEngine.cpp
-    audio/HitsoundManager.h
+    audio/HitsoundManager.hpp
     audio/HitsoundManager.cpp
     audio/stb_vorbis_impl.cpp
 )
@@ -244,12 +244,15 @@ endif()
 # ---- Install ----
 install(TARGETS adocao RUNTIME DESTINATION bin)
 
-# ---- Copy assets to build directory ----
+# ---- Copy assets and shaders to build directory ----
 add_custom_command(TARGET adocao POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_SOURCE_DIR}/assets"
     "${CMAKE_BINARY_DIR}/assets"
-    COMMENT "Copying assets to build directory"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/shaders"
+    "${CMAKE_BINARY_DIR}/shaders"
+    COMMENT "Copying assets and shaders to build directory"
 )
 
 # ---- Copy example level (if available) ----

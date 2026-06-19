@@ -1,4 +1,4 @@
-#include "gl_core.h"
+#include "gl_core.hpp"
 #include <GLFW/glfw3.h>
 #include <cstdio>
 

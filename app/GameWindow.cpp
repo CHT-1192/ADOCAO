@@ -1,12 +1,11 @@
-#include "GameWindow.h"
-#include "glad/gl_core.h"
-#include "render/Shader.h"
-#include "render/Shaders.h"
-#include "camera/Camera.h"
-#include "track/TileMesh.h"
-#include "game/Planet.h"
-#include "render/PlanetTrail.h"
-#include "util/Logger.h"
+#include "GameWindow.hpp"
+#include "glad/gl_core.hpp"
+#include "render/Shader.hpp"
+#include "camera/Camera.hpp"
+#include "track/TileMesh.hpp"
+#include "game/Planet.hpp"
+#include "render/PlanetTrail.hpp"
+#include "util/Logger.hpp"
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -112,22 +111,22 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
 
     LOG_I("OpenGL %s | GLSL %s", glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-    // ---- Shaders ----
+    // ---- Shaders (loaded from files) ----
     Shader tileShader;
-    if (!tileShader.compile(Shaders::kTileVertSrc, Shaders::kTileFragSrc)) {
+    if (!tileShader.compileFile("shaders/tile.vert", "shaders/tile.frag")) {
         LOG_E("Tile shader failed"); glfwDestroyWindow(window); return;
     }
     Shader planetShader;
-    if (!planetShader.compile(Shaders::kPlanetVertSrc, Shaders::kPlanetFragSrc)) {
+    if (!planetShader.compileFile("shaders/planet.vert", "shaders/planet.frag")) {
         LOG_E("Planet shader failed"); glfwDestroyWindow(window); return;
     }
     Shader trailShader;
-    if (!trailShader.compile(Shaders::kTrailVertSrc, Shaders::kTrailFragSrc)) {
+    if (!trailShader.compileFile("shaders/trail.vert", "shaders/trail.frag")) {
         LOG_E("Trail shader failed"); glfwDestroyWindow(window); return;
     }
 
     Shader highlightShader;
-    if (!highlightShader.compile(Shaders::kHighlightVertSrc, Shaders::kHighlightFragSrc)) {
+    if (!highlightShader.compileFile("shaders/highlight.vert", "shaders/highlight.frag")) {
         LOG_E("Highlight shader failed"); glfwDestroyWindow(window); return;
     }
 

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "level/LevelData.h"
-#include "Planet.h"
-#include "audio/HitsoundManager.h"
+#include "level/LevelData.hpp"
+#include "Planet.hpp"
+#include "audio/HitsoundManager.hpp"
 #include <memory>
 #include <vector>
 

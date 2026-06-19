@@ -1,6 +1,20 @@
-#include "Shader.h"
+#include "Shader.hpp"
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
+#include <string>
+
+static std::string readFile(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return {};
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    std::string s(sz, '\0');
+    fread(&s[0], 1, sz, f);
+    fclose(f);
+    return s;
+}
 
 Shader::~Shader() { destroy(); }
 
@@ -107,4 +121,23 @@ void Shader::setVec4(const char* name, float x, float y, float z, float w) const
 
 void Shader::setFloat(const char* name, float v) const {
     glUniform1f(glGetUniformLocation(m_program, name), v);
+}
+
+bool Shader::compileFile(const char* vertPath, const char* fragPath) {
+    std::string vs = readFile(vertPath);
+    std::string fs = readFile(fragPath);
+    if (vs.empty() || fs.empty()) {
+        fprintf(stderr, "[Shader] Failed to read: %s / %s\n", vertPath, fragPath);
+        return false;
+    }
+    return compile(vs.c_str(), fs.c_str());
+}
+
+bool Shader::compileComputeFile(const char* compPath) {
+    std::string cs = readFile(compPath);
+    if (cs.empty()) {
+        fprintf(stderr, "[Shader] Failed to read: %s\n", compPath);
+        return false;
+    }
+    return compileCompute(cs.c_str());
 }

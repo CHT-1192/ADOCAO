@@ -1,6 +1,6 @@
 #pragma once
 
-#include "glad/gl_core.h"
+#include "glad/gl_core.hpp"
 #include <string>
 
 class Shader {
@@ -15,6 +15,8 @@ public:
 
     bool compile(const char* vertSrc, const char* fragSrc);
     bool compileCompute(const char* compSrc);
+    bool compileFile(const char* vertPath, const char* fragPath);
+    bool compileComputeFile(const char* compPath);
     void use() const;
     void dispatch(GLuint x, GLuint y = 1, GLuint z = 1) const;
     void destroy();

@@ -1,5 +1,5 @@
-#include "PlaybackEngine.h"
-#include "util/Logger.h"
+#include "PlaybackEngine.hpp"
+#include "util/Logger.hpp"
 #include <GLFW/glfw3.h>
 #include <cmath>
 #include <algorithm>

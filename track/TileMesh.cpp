@@ -1,7 +1,7 @@
-#include "TileMesh.h"
-#include "TileGeometry.h"
-#include "glad/gl_core.h"
-#include "util/Logger.h"
+#include "TileMesh.hpp"
+#include "TileGeometry.hpp"
+#include "glad/gl_core.hpp"
+#include "util/Logger.hpp"
 #include <cmath>
 #include <map>
 #include <tuple>

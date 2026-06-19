@@ -1,11 +1,11 @@
 #pragma once
 
-#include "LoadingWindow.h"
-#include "LauncherWindow.h"
-#include "level/LevelData.h"
-#include "game/PlaybackEngine.h"
-#include "audio/HitsoundManager.h"
-#include "audio/AudioEngine.h"
+#include "LoadingWindow.hpp"
+#include "LauncherWindow.hpp"
+#include "level/LevelData.hpp"
+#include "game/PlaybackEngine.hpp"
+#include "audio/HitsoundManager.hpp"
+#include "audio/AudioEngine.hpp"
 #include <memory>
 
 struct LoadResult {

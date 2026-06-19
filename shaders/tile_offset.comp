@@ -1,0 +1,26 @@
+#version 430 core
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(std140) uniform CameraBlock {
+    vec2 camWorld;
+} uCamera;
+
+layout(std430, binding = 0) readonly buffer TileBuffer {
+    vec4 worldPositions[];
+} uTiles;
+
+layout(std430, binding = 1) buffer OffsetBuffer {
+    float offsets[];
+} uOffsets;
+
+void main() {
+    uint tid = gl_GlobalInvocationID.x;
+    uint count = uint(uTiles.worldPositions.length());
+    if (tid >= count) return;
+
+    vec4 wp = uTiles.worldPositions[tid];
+    uint base = tid * 3u;
+    uOffsets.offsets[base]     = wp.x - uCamera.camWorld.x;
+    uOffsets.offsets[base + 1u] = wp.y - uCamera.camWorld.y;
+    uOffsets.offsets[base + 2u] = wp.z;
+}

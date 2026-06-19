@@ -1,4 +1,4 @@
-#include "Camera.h"
+#include "Camera.hpp"
 
 void Camera::setZoom(float zoom) {
     m_zoom = zoom;

@@ -1,5 +1,5 @@
-#include "Application.h"
-#include "LauncherWindow.h"
+#include "Application.hpp"
+#include "LauncherWindow.hpp"
 #include <cstring>
 
 int main(int argc, char* argv[]) {

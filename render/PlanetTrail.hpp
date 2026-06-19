@@ -1,6 +1,6 @@
 #pragma once
 
-#include "glad/gl_core.h"
+#include "glad/gl_core.hpp"
 #include <glm/glm.hpp>
 #include <vector>
 

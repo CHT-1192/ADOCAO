@@ -1,4 +1,4 @@
-#include "JsonCleaner.h"
+#include "JsonCleaner.hpp"
 
 std::string cleanJson(const std::string& raw) {
     std::string out;

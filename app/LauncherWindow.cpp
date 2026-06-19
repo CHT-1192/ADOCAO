@@ -1,5 +1,5 @@
-#include "LauncherWindow.h"
-#include "util/Logger.h"
+#include "LauncherWindow.hpp"
+#include "util/Logger.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"

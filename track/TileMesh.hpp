@@ -1,7 +1,7 @@
 #pragma once
 
-#include "glad/gl_core.h"
-#include "level/LevelData.h"
+#include "glad/gl_core.hpp"
+#include "level/LevelData.hpp"
 #include <glm/glm.hpp>
 #include <vector>
 #include <string>
