@@ -1,7 +1,25 @@
 #!/bin/bash
 set -e
+
+PORTABLE=OFF
+EXTREME_ZOOM=OFF
+HIGH_FPS=OFF
+
+for arg in "$@"; do
+    case "$arg" in
+        portable)  PORTABLE=ON ;;
+        exzoom)    EXTREME_ZOOM=ON ;;
+        highfps)   HIGH_FPS=ON ;;
+    esac
+done
+
 mkdir -p build
 cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DGLFW_BUILD_WAYLAND=ON -DGLFW_BUILD_X11=OFF
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+    -DADOCAO_PORTABLE="$PORTABLE" \
+    -DADOCAO_EXTREME_ZOOM="$EXTREME_ZOOM" \
+    -DADOCAO_HIGH_FPS="$HIGH_FPS" \
+    -DGLFW_BUILD_WAYLAND=ON \
+    -DGLFW_BUILD_X11=OFF
 cmake --build . --parallel $(nproc)
 echo "Build successful: ./build/adocao"
