@@ -20,14 +20,14 @@ jobs:
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-make
             mingw-w64-x86_64-pkgconf
             git
 
       - name: Configure
         shell: msys2 {0}
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
             -DADOCAO_PORTABLE=ON
 
       - name: Build
@@ -54,17 +54,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build pkg-config \
+          sudo apt-get install -y cmake make pkg-config \
             libwayland-dev libxkbcommon-dev libgl-dev \
             libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 
       - name: Configure
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
             -DADOCAO_PORTABLE=ON
 
       - name: Build
-        run: cmake --build build --parallel
+        run: cmake --build build --parallel $(nproc)
 
       - name: Package data
         run: |
