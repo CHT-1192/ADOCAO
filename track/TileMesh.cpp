@@ -96,23 +96,9 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         } else {
             // Generate local-space geometry for this shape (once)
             sc.clear();
-            if (mid) {
-                // Compact body at pivot — no arc, just a narrow rectangle
-                float m1 = std::cos(endAngle*3.14159265f/180.f), m2 = std::sin(endAngle*3.14159265f/180.f);
-                float hw = TILE_WIDTH, hl = TILE_WIDTH * 0.25f;
-                for (int layer = 0; layer < 2; layer++) {
-                    float ohw = hw + (layer==0 ? OUTLINE : 0), ohl = hl + (layer==0 ? OUTLINE : 0);
-                    unsigned b = (unsigned)sc.verts.size()/3;
-                    sc.verts.insert(sc.verts.end(),{
-                         ohl*m1+ohw*m2, ohl*m2-ohw*m1,0,
-                         ohl*m1-ohw*m2, ohl*m2+ohw*m1,0,
-                        -ohl*m1-ohw*m2,-ohl*m2+ohw*m1,0,
-                        -ohl*m1+ohw*m2,-ohl*m2-ohw*m1,0,
-                    });
-                    pushType(sc.types, (float)layer, 4);
-                    sc.indices.insert(sc.indices.end(),{b,b+1,b+3,b+1,b+2,b+3});
-                }
-            } else
+            if (mid)
+                createMidSpinMesh(endAngle, sc);
+            else
                 createTileMesh(startAngle, endAngle, sc);
 
             // Fill and stroke at same Z — index buffer order (stroke first, fill later)
