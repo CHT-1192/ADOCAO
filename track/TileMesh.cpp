@@ -97,7 +97,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
             // Generate local-space geometry for this shape (once)
             sc.clear();
             if (mid)
-                createTileMesh(endAngle, endAngle, sc);  // midspin: zero-angle branch
+                createMidSpinMesh(endAngle, sc);
             else
                 createTileMesh(startAngle, endAngle, sc);
 
