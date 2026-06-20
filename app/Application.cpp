@@ -61,7 +61,19 @@ static void enableDPIAwareness() {
 }
 #endif
 
+static void earlyLog(const char* msg) {
+    // Write directly to log file before Logger is ready
+    FILE* f = fopen("ADOCAO.log", "a");
+    if (f) { fprintf(f, "[EARLY] %s\n", msg); fclose(f); }
+#ifdef _WIN32
+    OutputDebugStringA(msg);
+    OutputDebugStringA("\n");
+#endif
+}
+
 int runApplication(bool debugConsole) {
+    earlyLog("[ADOCAO] main() entered");
+
     // Determine log path next to executable
     std::string logPath = "ADOCAO.log";
     Logger::instance().init(logPath, debugConsole);
@@ -69,10 +81,13 @@ int runApplication(bool debugConsole) {
     LOG_I("ADOCAO starting...");
 
 #ifdef _WIN32
+    earlyLog("[ADOCAO] DPI awareness...");
     enableDPIAwareness();
+    earlyLog("[ADOCAO] CPU pin...");
     pinToBigCore();
 #endif
 
+    earlyLog("[ADOCAO] GLFW init...");
     if (!glfwInit()) {
         LOG_E("Failed to initialize GLFW");
         return 1;
@@ -140,13 +155,17 @@ int runApplication(bool debugConsole) {
 }
 
 int runApplicationFromCLI(const LauncherConfig& cfg, bool debugConsole) {
+    earlyLog("[ADOCAO] CLI mode entered");
+
     std::string logPath = "ADOCAO.log";
     Logger::instance().init(logPath, debugConsole);
 
     LOG_I("ADOCAO starting (CLI mode)...");
 
 #ifdef _WIN32
+    earlyLog("[ADOCAO] DPI awareness...");
     enableDPIAwareness();
+    earlyLog("[ADOCAO] CPU pin...");
     pinToBigCore();
 #endif
 
