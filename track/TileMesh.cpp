@@ -96,9 +96,23 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         } else {
             // Generate local-space geometry for this shape (once)
             sc.clear();
-            if (mid)
-                createTileMesh(endAngle, endAngle, sc);  // 0° arc → compact body
-            else
+            if (mid) {
+                // Compact body at pivot — no arc, just a narrow rectangle
+                float m1 = std::cos(endAngle*3.14159265f/180.f), m2 = std::sin(endAngle*3.14159265f/180.f);
+                float hw = TILE_WIDTH, hl = TILE_WIDTH * 0.25f;
+                for (int layer = 0; layer < 2; layer++) {
+                    float ohw = hw + (layer==0 ? OUTLINE : 0), ohl = hl + (layer==0 ? OUTLINE : 0);
+                    unsigned b = (unsigned)sc.verts.size()/3;
+                    sc.verts.insert(sc.verts.end(),{
+                         ohl*m1+ohw*m2, ohl*m2-ohw*m1,0,
+                         ohl*m1-ohw*m2, ohl*m2+ohw*m1,0,
+                        -ohl*m1-ohw*m2,-ohl*m2+ohw*m1,0,
+                        -ohl*m1+ohw*m2,-ohl*m2-ohw*m1,0,
+                    });
+                    pushType(sc.types, (float)layer, 4);
+                    sc.indices.insert(sc.indices.end(),{b,b+1,b+3,b+1,b+2,b+3});
+                }
+            } else
                 createTileMesh(startAngle, endAngle, sc);
 
             // Fill and stroke at same Z — index buffer order (stroke first, fill later)
@@ -319,26 +333,18 @@ void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double c
         cullAndOffsetGroups(m_shapes, m_visCaches, 0, n, vl, vr, vb, vt, camX, camY);
     }
 
-    // Phase 2: Two-pass upload + draw — fills first, strokes second.
-    // Fills write depth at tileZ; strokes (same Z, drawn after) pass GL_LEQUAL
-    // and become visible at tile edges and overlap borders.
-    for (int pass = 0; pass < 2; pass++) {
-        for (size_t si = 0; si < n; si++) {
-            const auto& sg = m_shapes[si];
-            auto& cache = m_visCaches[si];
-            if (cache.indices.empty()) continue;
+    // Phase 2: Upload + draw (serial, OpenGL must be on main thread)
+    for (size_t si = 0; si < n; si++) {
+        const auto& sg = m_shapes[si];
+        auto& cache = m_visCaches[si];
+        if (cache.indices.empty()) continue;
 
-            unsigned idxCount   = (pass == 0) ? sg.fillIndexCount   : sg.strokeIndexCount;
-            unsigned idxByteOff = (pass == 0) ? sg.fillIndexByteOffset : 0u;
-            if (idxCount == 0) continue;
-
-            glBindVertexArray(sg.vao);
-            glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-            glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
-            glDrawElementsInstanced(GL_TRIANGLES, idxCount, GL_UNSIGNED_INT,
-                                    (const void*)(uintptr_t)idxByteOff, (GLsizei)(cache.indices.size()));
-            glBindVertexArray(0);
-        }
+        glBindVertexArray(sg.vao);
+        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
+        glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
+                                nullptr, (GLsizei)(cache.indices.size()));
+        glBindVertexArray(0);
     }
 }
 
