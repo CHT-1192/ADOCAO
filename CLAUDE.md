@@ -12,7 +12,8 @@ Reference implementations:
 - `../ADOFAI-JS/` — Core angle parsing
 - `../Re_ADOJAS/` — Three.js web player (hitsound, camera, decorations)
 - `../ADOFAN_PIXI/` — PixiJS web player
-- `../ADOFAI/A Dance of Fire and Ice/` — Original Unity game. Use dnSpy to decompile `Assembly-CSharp.dll`
+- `../ADOFAI/A Dance of Fire and Ice/` — Original Unity game. Decompile `Assembly-CSharp.dll` with:
+  `../ADOFAI/dnSpy/dnSpy.Console.exe -o ../ADOFAI/decomp_game "../ADOFAI/A Dance of Fire and Ice/A Dance of Fire and Ice_Data/Managed/Assembly-CSharp.dll"`
 
 A WinUI 3 C# launcher is in a separate repo at `../ADOCAO_WinUI3_Launcher/`.
 
