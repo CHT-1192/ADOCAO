@@ -22,34 +22,6 @@ void createCircle(float cx, float cy, float radius, float type,
     sc.indices.insert(sc.indices.end(), {ci, ci+(unsigned)res, ci+1});
 }
 
-void createMidSpinMesh(float angle, Scratch& sc) {
-    float m1 = std::cos(angle*3.14159265f/180.0f), m2 = std::sin(angle*3.14159265f/180.0f);
-    float hl = TILE_WIDTH * 0.3f, hw = TILE_WIDTH;  // compact body
-
-    // Stroke (type=0.0)
-    float ohl = hl + OUTLINE, ohw = hw + OUTLINE;
-    unsigned b = (unsigned)sc.verts.size()/3;
-    sc.verts.insert(sc.verts.end(),{
-         ohl*m1+ohw*m2, ohl*m2-ohw*m1,0,   // front-right
-         ohl*m1-ohw*m2, ohl*m2+ohw*m1,0,   // front-left
-        -ohl*m1-ohw*m2,-ohl*m2+ohw*m1,0,   // back-left
-        -ohl*m1+ohw*m2,-ohl*m2-ohw*m1,0,   // back-right
-    });
-    pushType(sc.types, 0.0f,4);
-    sc.indices.insert(sc.indices.end(),{b,b+1,b+3,b+1,b+2,b+3});
-
-    // Fill (type=1.0)
-    unsigned b2 = (unsigned)sc.verts.size()/3;
-    sc.verts.insert(sc.verts.end(),{
-         hl*m1+hw*m2, hl*m2-hw*m1,0,
-         hl*m1-hw*m2, hl*m2+hw*m1,0,
-        -hl*m1-hw*m2,-hl*m2+hw*m1,0,
-        -hl*m1+hw*m2,-hl*m2-hw*m1,0,
-    });
-    pushType(sc.types, 1.0f,4);
-    sc.indices.insert(sc.indices.end(),{b2,b2+1,b2+3,b2+1,b2+2,b2+3});
-}
-
 void createTileMesh(float startAngle, float endAngle, Scratch& sc) {
     float width = TILE_WIDTH, length = TILE_LENGTH;
     float m11=std::cos(startAngle*3.14159265f/180), m12=std::sin(startAngle*3.14159265f/180);

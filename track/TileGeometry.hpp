@@ -27,5 +27,4 @@ void pushType(std::vector<float>& c, float type, int n);
 
 // Geometry generators (local-space, origin-centered)
 void createCircle(float cx, float cy, float radius, float type, Scratch& sc, int res = 32);
-void createMidSpinMesh(float angle, Scratch& sc);
 void createTileMesh(float startAngle, float endAngle, Scratch& sc);
