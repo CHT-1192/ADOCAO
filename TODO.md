@@ -22,6 +22,7 @@
 - [x] Event icons: Twirl (purple), SetSpeed (red/blue)
 - [x] depthWrite + renderOrder (Z-depth: far=200, tile Z 0~9, 755K depth steps)
 - [x] `setPoints` trail: buffer under-allocation fixed (segsPerPoint=4 factor)
+- [ ] 中旋（angleData=999）渲染：应为圆角五边形（原版 curvaturePoints=3），当前大圆+菱形像发卡弯
 - [ ] MoveTrack (tile position/rotation/scale animation)
 - [x] Compute shader infrastructure (OpenGL 4.3, SSBO, indirect draw)
 - [ ] Wire up GPU compute culling in draw loop (Phase 4, reverted — retry based on ADOCAV)
