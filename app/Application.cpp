@@ -93,6 +93,10 @@ int runApplication(bool debugConsole) {
     earlyLog("[ADOCAO] GLFW init...");
     if (!glfwInit()) {
         LOG_E("Failed to initialize GLFW");
+#ifdef _WIN32
+        MessageBoxA(nullptr, "Failed to initialize OpenGL.\nPlease update your graphics driver.",
+                    "ADOCAO - Error", MB_OK | MB_ICONERROR);
+#endif
         return 1;
     }
 
@@ -174,6 +178,10 @@ int runApplicationFromCLI(const LauncherConfig& cfg, bool debugConsole) {
 
     if (!glfwInit()) {
         LOG_E("Failed to initialize GLFW");
+#ifdef _WIN32
+        MessageBoxA(nullptr, "Failed to initialize OpenGL.\nPlease update your graphics driver.",
+                    "ADOCAO - Error", MB_OK | MB_ICONERROR);
+#endif
         return 1;
     }
 
