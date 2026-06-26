@@ -61,9 +61,12 @@ static void enableDPIAwareness() {
 }
 #endif
 
+static bool s_firstEarlyLog = true;
+
 static void earlyLog(const char* msg) {
-    // Write directly to log file before Logger is ready
-    FILE* f = fopen("ADOCAO.log", "a");
+    // First call truncates old log, subsequent calls append
+    FILE* f = fopen("ADOCAO.log", s_firstEarlyLog ? "w" : "a");
+    s_firstEarlyLog = false;
     if (f) { fprintf(f, "[EARLY] %s\n", msg); fclose(f); }
 #ifdef _WIN32
     OutputDebugStringA(msg);
