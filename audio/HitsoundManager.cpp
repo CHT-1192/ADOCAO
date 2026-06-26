@@ -211,10 +211,8 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
         float volScale = g.volume / 100.0f;
         auto& raw  = *gd.rawSamples;
 
-        auto sorted = g.timestamps;
-        std::sort(sorted.begin(), sorted.end());
-
-        for (double ts : sorted) {
+        // Timestamps are already in tile order from getHitsoundTimestampGroups()
+        for (double ts : g.timestamps) {
             if (ts < 0.0) continue;
             int sf = (int)(ts * (double)sr);
             int cl = gd.lenFrames;

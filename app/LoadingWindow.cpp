@@ -4,6 +4,7 @@
 #include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
 #include <thread>
+#include <mutex>
 #include <cstdio>
 
 static constexpr int LOADING_W = 480;
@@ -144,7 +145,10 @@ void showLoadingWindow(std::function<void(LoadingProgress&)> loader) {
         ImGui::ProgressBar(pct / 100.0f, ImVec2(0, 24 * S));
 
         ImGui::Spacing();
-        ImGui::Text("%s", progress.stageText);
+        {
+            std::lock_guard<std::mutex> lock(progress.textMutex);
+            ImGui::Text("%s", progress.stageText);
+        }
 
         ImGui::End();
 

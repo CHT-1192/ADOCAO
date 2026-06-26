@@ -2,548 +2,303 @@
 #include "TileGeometry.hpp"
 #include "glad/gl_core.hpp"
 #include "util/Logger.hpp"
+#include "util/ThreadPool.hpp"
 #include <cmath>
-#include <map>
 #include <tuple>
 #include <unordered_map>
-#include <future>
-#include <thread>
+#include <cstring>
 
-// Geometry cache (persists across builds)
-struct CachedGeo { std::vector<float> interleaved; std::vector<unsigned> indices; unsigned idxCount=0; };
-static std::unordered_map<std::string, CachedGeo> s_geoCache;
+struct CachedGeo {
+    std::vector<float> interleaved; std::vector<unsigned> indices;
+    unsigned idxCount=0, strokeVertCount=0, strokeIdxCount=0;
+    double localMinX=0,localMinY=0,localMaxX=0,localMaxY=0;
+};
+using GeoKey = std::tuple<int,int,bool>;
+namespace std { template<> struct hash<GeoKey> {
+    size_t operator()(const GeoKey& k) const { return (size_t)get<0>(k)*31+(size_t)get<1>(k)*17+(size_t)get<2>(k); }
+};}
+static std::unordered_map<GeoKey,CachedGeo,std::hash<GeoKey>> s_geoCache;
 
-// ---- TileMesh ----
-
-TileMesh::~TileMesh() { destroy(); }
-
-TileMesh::TileMesh(TileMesh&& o) noexcept : m_shapes(std::move(o.m_shapes)) {}
-TileMesh& TileMesh::operator=(TileMesh&& o) noexcept { if(this!=&o){destroy();m_shapes=std::move(o.m_shapes);} return *this; }
-
-void TileMesh::destroy() {
-    for (auto& s : m_shapes) {
-        if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
-        if (s.colorVbo) glDeleteBuffers(1, &s.colorVbo);
-        if (s.ebo) glDeleteBuffers(1, &s.ebo);
-        if (s.vbo) glDeleteBuffers(1, &s.vbo);
-        if (s.vao) glDeleteVertexArrays(1, &s.vao);
-    }
-    m_shapes.clear();
-    for (auto& s : m_iconGroups) {
-        if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
-        if (s.colorVbo) glDeleteBuffers(1, &s.colorVbo);
-        if (s.ebo) glDeleteBuffers(1, &s.ebo);
-        if (s.vbo) glDeleteBuffers(1, &s.vbo);
-        if (s.vao) glDeleteVertexArrays(1, &s.vao);
-    }
-    m_iconGroups.clear();
+void TileMesh::freeSoA(ShapeGroup& sg) {
+    std::free(sg.cullMinX); sg.cullMinX = nullptr;
+    sg.cullMaxX = sg.cullMinY = sg.cullMaxY = nullptr;
+    std::free(sg.posX); sg.posX = nullptr;
+    sg.posY = sg.posZ = nullptr;
+    sg.instanceCount = 0;
+}
+void TileMesh::allocSoA(ShapeGroup& sg, size_t n) {
+    sg.instanceCount = n;
+    sg.cullMinX = (double*)std::malloc(n*sizeof(double)*4);
+    sg.cullMaxX = sg.cullMinX + n;
+    sg.cullMinY = sg.cullMaxX + n;
+    sg.cullMaxY = sg.cullMinY + n;
+    sg.posX = (float*)std::malloc(n*sizeof(float)*3);
+    sg.posY = sg.posX + n;
+    sg.posZ = sg.posY + n;
 }
 
+TileMesh::~TileMesh() { destroy(); }
+TileMesh::TileMesh(TileMesh&& o) noexcept
+    : m_shapes(std::move(o.m_shapes)), m_iconGroups(std::move(o.m_iconGroups))
+    , m_visCaches(std::move(o.m_visCaches)), m_iconVisCaches(std::move(o.m_iconVisCaches))
+    , m_tileToShape(std::move(o.m_tileToShape)), m_tileToInstance(std::move(o.m_tileToInstance)) {}
+TileMesh& TileMesh::operator=(TileMesh&& o) noexcept {
+    if(this!=&o){destroy();m_shapes=std::move(o.m_shapes);m_iconGroups=std::move(o.m_iconGroups);
+    m_visCaches=std::move(o.m_visCaches);m_iconVisCaches=std::move(o.m_iconVisCaches);
+    m_tileToShape=std::move(o.m_tileToShape);m_tileToInstance=std::move(o.m_tileToInstance);} return *this;
+}
+
+void TileMesh::destroy() {
+    for(auto& s:m_shapes){if(s.instVbo)glDeleteBuffers(1,&s.instVbo);if(s.colorVbo)glDeleteBuffers(1,&s.colorVbo);
+    if(s.ebo)glDeleteBuffers(1,&s.ebo);if(s.vbo)glDeleteBuffers(1,&s.vbo);if(s.vao)glDeleteVertexArrays(1,&s.vao);freeSoA(s);}
+    m_shapes.clear();
+    for(auto& s:m_iconGroups){if(s.instVbo)glDeleteBuffers(1,&s.instVbo);if(s.colorVbo)glDeleteBuffers(1,&s.colorVbo);
+    if(s.ebo)glDeleteBuffers(1,&s.ebo);if(s.vbo)glDeleteBuffers(1,&s.vbo);if(s.vao)glDeleteVertexArrays(1,&s.vao);freeSoA(s);}
+    m_iconGroups.clear();
+}
 bool TileMesh::empty() const { return m_shapes.empty(); }
 
 void TileMesh::build(const LevelData& level, const std::string& fillColorHex, const std::string& strokeColorHex) {
     destroy();
     const auto& tiles = level.tiles;
-    if (tiles.size() < 2) return;
+    if(tiles.size()<2) return;
+    int n = (int)tiles.size()-1;
 
-    int n = (int)tiles.size() - 1;  // number of real tiles (excludes extra)
-
-    auto hexToColor = [](const std::string& hex) -> std::tuple<float,float,float> {
-        unsigned v = hexToUInt(hex);
-        return {((v>>16)&0xFF)/255.0f, ((v>>8)&0xFF)/255.0f, (v&0xFF)/255.0f};
+    auto hexToColor=[](const std::string& hex)->std::tuple<float,float,float>{
+        unsigned v=hexToUInt(hex); return {((v>>16)&0xFF)/255.0f,((v>>8)&0xFF)/255.0f,(v&0xFF)/255.0f};
     };
-    auto [fillR, fillG, fillB] = hexToColor(fillColorHex);
-    auto [outR, outG, outB]   = hexToColor(strokeColorHex);
+    auto[fillR,fillG,fillB]=hexToColor(fillColorHex);
+    auto[outR,outG,outB]=hexToColor(strokeColorHex);
 
-    // Group tiles by shape key
-    std::map<std::tuple<int,int,bool>, std::vector<int>> shapeGroups;
-
-    for (int i = 0; i < n; i++) {
-        float startAngle = (i == 0) ? -180.0f : tiles[i-1].direction - 180.0f;
-        float endAngle   = tiles[i].direction;
-        bool midspin = (i < (int)level.angleData.size() && level.angleData[i] == 999.0);
-
-        auto key = std::make_tuple((int)std::round(startAngle*100), (int)std::round(endAngle*100), midspin);
-        shapeGroups[key].push_back(i);
+    std::unordered_map<GeoKey,std::vector<int>,std::hash<GeoKey>> shapeGroups;
+    for(int i=0;i<n;i++){
+        float sa=(i==0)?-180.0f:tiles[i-1].direction-180.0f, ea=tiles[i].direction;
+        bool mid=(i<(int)level.angleData.size()&&level.angleData[i]==999.0);
+        shapeGroups[GeoKey((int)std::round(sa*100),(int)std::round(ea*100),mid)].push_back(i);
     }
 
-    Scratch& sc = g_sc;
+    Scratch& sc=g_sc;
     m_shapes.resize(shapeGroups.size());
-    m_tileToShape.assign(n, -1);
-    m_tileToInstance.assign(n, -1);
-    size_t shapeIdx = 0;
+    m_tileToShape.assign(n,-1); m_tileToInstance.assign(n,-1);
+    size_t si=0;
 
-    for (auto& [key, tileIndices] : shapeGroups) {
-        // Sort descending: high index first = drawn first (Re_ADOJAS renderOrder = -tileIndex)
-        std::sort(tileIndices.begin(), tileIndices.end(), std::greater<int>());
-        auto [sa, ea, mid] = key;
-        float startAngle = sa / 100.0f, endAngle = ea / 100.0f;
+    for(auto&[key,tileIndices]:shapeGroups){
+        std::sort(tileIndices.begin(),tileIndices.end(),std::greater<int>());
+        auto[sa,ea,mid]=key; float sA=sa/100.0f, eA=ea/100.0f;
 
-        // Cache key = shape params only (colors are per-instance)
-        char kbuf[64];
-        snprintf(kbuf, sizeof(kbuf), "tile_%d_%d_%d", sa, ea, (int)mid);
-        std::string cacheKey(kbuf);
+        bool cached=false; unsigned csv=0,csi=0;
+        double lmx=0,lmy=0,lMx=0,lMy=0;
+        auto cit=s_geoCache.find(key);
+        if(cit!=s_geoCache.end()){const auto& cg=cit->second;csv=cg.strokeVertCount;csi=cg.strokeIdxCount;
+        lmx=cg.localMinX;lmy=cg.localMinY;lMx=cg.localMaxX;lMy=cg.localMaxY;cached=true;}
 
-        std::vector<float> interleaved;
-        std::vector<unsigned> idxCopy;
-        unsigned idxCount;
-
-        auto cit = s_geoCache.find(cacheKey);
-        if (cit != s_geoCache.end()) {
-            interleaved = cit->second.interleaved;
-            idxCopy     = cit->second.indices;
-            idxCount    = cit->second.idxCount;
-        } else {
-            // Generate local-space geometry for this shape (once)
-            sc.clear();
-            if (mid)
-                createMidSpinMesh(endAngle, sc);
-            else
-                createTileMesh(startAngle, endAngle, sc);
-
-            // Fill and stroke at same Z — index buffer order (stroke first, fill later)
-            // + GL_LEQUAL ensures fill appears on top of stroke within each tile.
-            // Cross-tile layering handled by per-instance tileZ.
-            size_t vc = sc.verts.size() / 3;
-            interleaved.reserve(vc * 4);
-            for (size_t vi = 0; vi < vc; vi++) {
-                interleaved.push_back(sc.verts[vi*3]);
-                interleaved.push_back(sc.verts[vi*3+1]);
-                interleaved.push_back(sc.verts[vi*3+2]);
-                interleaved.push_back(sc.types[vi]);
-            }
-
-            idxCopy.assign(sc.indices.begin(), sc.indices.end());
-            idxCount = (unsigned)sc.indices.size();
-            s_geoCache[cacheKey] = {interleaved, idxCopy, idxCount};
+        CachedGeo ng;
+        if(!cached){
+            sc.clear(); mid?createMidSpinMesh(eA,sc):createTileMesh(sA,eA,sc);
+            size_t vc=sc.verts.size()/3; ng.interleaved.reserve(vc*4);
+            for(size_t vi=0;vi<vc;vi++){ng.interleaved.push_back(sc.verts[vi*3]);ng.interleaved.push_back(sc.verts[vi*3+1]);
+            ng.interleaved.push_back(sc.verts[vi*3+2]);ng.interleaved.push_back(sc.types[vi]);}
+            ng.indices.assign(sc.indices.begin(),sc.indices.end()); ng.idxCount=(unsigned)sc.indices.size();
+            {unsigned tv=(unsigned)ng.interleaved.size()/4;
+            for(unsigned vi=0;vi<tv;vi++){if(ng.interleaved[vi*4+3]<0.5f)ng.strokeVertCount++;else break;}
+            for(unsigned ii=0;ii<ng.idxCount;ii++){if(ng.indices[ii]>=ng.strokeVertCount){ng.strokeIdxCount=ii;break;}}
+            if(ng.strokeIdxCount==0&&ng.idxCount>0)ng.strokeIdxCount=ng.idxCount;}
+            {double mnX=1e99,mnY=1e99,mxX=-1e99,mxY=-1e99;
+            for(size_t vi=0;vi<vc;vi++){double lx=ng.interleaved[vi*4],ly=ng.interleaved[vi*4+1];
+            if(lx<mnX)mnX=lx;if(lx>mxX)mxX=lx;if(ly<mnY)mnY=ly;if(ly>mxY)mxY=ly;}
+            ng.localMinX=mnX;ng.localMinY=mnY;ng.localMaxX=mxX;ng.localMaxY=mxY;}
+            csv=ng.strokeVertCount;csi=ng.strokeIdxCount;
+            lmx=ng.localMinX;lmy=ng.localMinY;lMx=ng.localMaxX;lMy=ng.localMaxY;
+            s_geoCache[key]=std::move(ng);
         }
 
-        // Compute stroke/fill index split (stroke vertices first, fill vertices after)
-        // Interleaved format: [x, y, z, type], 4 floats per vertex
-        {
-            unsigned strokeVertCount = 0;
-            unsigned totalVerts = (unsigned)interleaved.size() / 4;
-            for (unsigned vi = 0; vi < totalVerts; vi++) {
-                if (interleaved[vi * 4 + 3] < 0.5f) strokeVertCount++; else break;
-            }
-            // Find where fill indices begin in the element buffer
-            unsigned strokeIdxCount = 0;
-            for (unsigned ii = 0; ii < idxCount; ii++) {
-                if (idxCopy[ii] >= strokeVertCount) { strokeIdxCount = ii; break; }
-            }
-            if (strokeIdxCount == 0 && idxCount > 0) strokeIdxCount = idxCount;  // all stroke
-            m_shapes[shapeIdx].strokeIndexCount = strokeIdxCount;
-            m_shapes[shapeIdx].fillIndexCount = idxCount - strokeIdxCount;
-            m_shapes[shapeIdx].fillIndexByteOffset = strokeIdxCount * (unsigned)sizeof(unsigned);
+        unsigned idc=cached?cit->second.idxCount:s_geoCache[key].idxCount;
+        ShapeGroup& sg=m_shapes[si];
+        sg.indexCount=idc; sg.strokeIndexCount=csi; sg.fillIndexCount=idc-csi;
+        sg.fillIndexByteOffset=csi*(unsigned)sizeof(unsigned);
+
+        size_t cnt=tileIndices.size(); allocSoA(sg,cnt);
+        std::vector<float> po; po.reserve(cnt*3);
+        std::vector<float> co; co.reserve(cnt*7);
+        double gmx=1e99,gmy=1e99,gMx=-1e99,gMy=-1e99;
+
+        for(size_t k=0;k<cnt;k++){int i=tileIndices[k];
+            double wx=tiles[i].position[0],wy=tiles[i].position[1]; float wz=tileZForIndex(i,n);
+            po.push_back((float)wx);po.push_back((float)wy);po.push_back(wz);
+            co.push_back(fillR);co.push_back(fillG);co.push_back(fillB);
+            co.push_back(outR);co.push_back(outG);co.push_back(outB);co.push_back(1.0f);
+            double mx=lmx+wx,my=lmy+wy,Mx=lMx+wx,My=lMy+wy;
+            sg.cullMinX[k]=mx;sg.cullMaxX[k]=Mx;sg.cullMinY[k]=my;sg.cullMaxY[k]=My;
+            sg.posX[k]=(float)wx;sg.posY[k]=(float)wy;sg.posZ[k]=wz;
+            if(mx<gmx)gmx=mx;if(Mx>gMx)gMx=Mx;if(my<gmy)gmy=my;if(My>gMy)gMy=My;
+            m_tileToShape[i]=(int)si;m_tileToInstance[i]=(int)k;
         }
+        sg.groupMinX=gmx;sg.groupMinY=gmy;sg.groupMaxX=gMx;sg.groupMaxY=gMy;
 
-        // Collect instance data: [offX,offY,offZ, fillR,fillG,fillB, strokeR,strokeG,strokeB, opacity]
-        std::vector<float> instData;
-        std::vector<TileInstance> instances;
-        instData.reserve(tileIndices.size() * 10);
-        instances.reserve(tileIndices.size());
-
-        for (int i : tileIndices) {
-            double wx = tiles[i].position[0];
-            double wy = tiles[i].position[1];
-            float wz = tileZForIndex(i, n);  // Z encodes far-to-near order; depth buffer handles layering
-            float fr = fillR, fg = fillG, fb = fillB;
-            float sr = outR, sg = outG, sb = outB;
-            instData.push_back((float)wx);
-            instData.push_back((float)wy);
-            instData.push_back(wz);
-            instData.push_back(fr); instData.push_back(fg); instData.push_back(fb);
-            instData.push_back(sr); instData.push_back(sg); instData.push_back(sb);
-            instData.push_back(1.0f);
-            double minX=1e99,minY=1e99,maxX=-1e99,maxY=-1e99;
-            size_t vertCount = interleaved.size() / 4;  // [x,y,z,type]
-            for (size_t vi = 0; vi < vertCount; vi++) {
-                double lx = (double)interleaved[vi*4] + wx;
-                double ly = (double)interleaved[vi*4+1] + wy;
-                if (lx<minX)minX=lx; if (lx>maxX)maxX=lx;
-                if (ly<minY)minY=ly; if (ly>maxY)maxY=ly;
-            }
-            instances.push_back({wx, wy, wz, fillR, fillG, fillB, outR, outG, outB, 1.0f, minX, minY, maxX, maxY});
-        }
-
-        // Upload GPU buffers
-        ShapeGroup& sg = m_shapes[shapeIdx];
-        sg.indexCount = idxCount;
-        sg.instances  = std::move(instances);
-
-        // Tile→instance mapping for selection highlighting
-        for (size_t k = 0; k < tileIndices.size(); k++) {
-            int ti = tileIndices[k];
-            if (ti >= 0 && ti < n) {
-                m_tileToShape[ti]    = (int)shapeIdx;
-                m_tileToInstance[ti] = (int)k;
-            }
-        }
-
-        glGenVertexArrays(1, &sg.vao);
-        glBindVertexArray(sg.vao);
-
-        // Vertex VBO: [x,y,z, type] — 4 floats per vertex
-        glGenBuffers(1, &sg.vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.vbo);
-        glBufferData(GL_ARRAY_BUFFER, interleaved.size()*sizeof(float), interleaved.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)0);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)(3*sizeof(float)));
-
-        // Element buffer
-        glGenBuffers(1, &sg.ebo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sg.ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, idxCopy.size()*sizeof(unsigned), idxCopy.data(), GL_STATIC_DRAW);
-
-        // Split instance data: positions (3 floats, updated per-frame) vs colors (7 floats, static)
-        // Build position-only array for instVbo
-        std::vector<float> posOnly;
-        posOnly.reserve(tileIndices.size() * 3);
-        std::vector<float> colorOnly;
-        colorOnly.reserve(tileIndices.size() * 7);
-        for (int i = 0; i < (int)tileIndices.size(); i++) {
-            posOnly.push_back(instData[i*10]);
-            posOnly.push_back(instData[i*10+1]);
-            posOnly.push_back(instData[i*10+2]);
-            colorOnly.push_back(instData[i*10+3]); // fillR
-            colorOnly.push_back(instData[i*10+4]); // fillG
-            colorOnly.push_back(instData[i*10+5]); // fillB
-            colorOnly.push_back(instData[i*10+6]); // strokeR
-            colorOnly.push_back(instData[i*10+7]); // strokeG
-            colorOnly.push_back(instData[i*10+8]); // strokeB
-            colorOnly.push_back(instData[i*10+9]); // opacity
-        }
-
-        // Instance pos VBO (location 2): vec3 offsets, updated per-frame
-        glGenBuffers(1, &sg.instVbo);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferData(GL_ARRAY_BUFFER, posOnly.size()*sizeof(float), posOnly.data(), GL_DYNAMIC_DRAW);
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
-        glVertexAttribDivisor(2, 1);
-
-        // Instance color VBO (locations 3-5): colors, static
-        GLsizei cStride = 7 * sizeof(float);
-        glGenBuffers(1, &sg.colorVbo);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.colorVbo);
-        glBufferData(GL_ARRAY_BUFFER, colorOnly.size()*sizeof(float), colorOnly.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(3);
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, cStride, (void*)0);
-        glVertexAttribDivisor(3, 1);
-        glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, cStride, (void*)(3*sizeof(float)));
-        glVertexAttribDivisor(4, 1);
-        glEnableVertexAttribArray(5);
-        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, cStride, (void*)(6*sizeof(float)));
-        glVertexAttribDivisor(5, 1);
-
-        glBindVertexArray(0);
-        shapeIdx++;
+        glGenVertexArrays(1,&sg.vao);glBindVertexArray(sg.vao);
+        glGenBuffers(1,&sg.vbo);glBindBuffer(GL_ARRAY_BUFFER,sg.vbo);
+        if(cached)glBufferData(GL_ARRAY_BUFFER,cit->second.interleaved.size()*sizeof(float),cit->second.interleaved.data(),GL_STATIC_DRAW);
+        else glBufferData(GL_ARRAY_BUFFER,s_geoCache[key].interleaved.size()*sizeof(float),s_geoCache[key].interleaved.data(),GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,4*sizeof(float),(void*)0);
+        glEnableVertexAttribArray(1);glVertexAttribPointer(1,1,GL_FLOAT,GL_FALSE,4*sizeof(float),(void*)(3*sizeof(float)));
+        glGenBuffers(1,&sg.ebo);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,sg.ebo);
+        if(cached)glBufferData(GL_ELEMENT_ARRAY_BUFFER,cit->second.indices.size()*sizeof(unsigned),cit->second.indices.data(),GL_STATIC_DRAW);
+        else glBufferData(GL_ELEMENT_ARRAY_BUFFER,s_geoCache[key].indices.size()*sizeof(unsigned),s_geoCache[key].indices.data(),GL_STATIC_DRAW);
+        glGenBuffers(1,&sg.instVbo);glBindBuffer(GL_ARRAY_BUFFER,sg.instVbo);
+        glBufferData(GL_ARRAY_BUFFER,po.size()*sizeof(float),po.data(),GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(2);glVertexAttribPointer(2,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0);glVertexAttribDivisor(2,1);
+        GLsizei cs=7*sizeof(float);glGenBuffers(1,&sg.colorVbo);glBindBuffer(GL_ARRAY_BUFFER,sg.colorVbo);
+        glBufferData(GL_ARRAY_BUFFER,co.size()*sizeof(float),co.data(),GL_STATIC_DRAW);
+        glEnableVertexAttribArray(3);glVertexAttribPointer(3,3,GL_FLOAT,GL_FALSE,cs,(void*)0);glVertexAttribDivisor(3,1);
+        glEnableVertexAttribArray(4);glVertexAttribPointer(4,3,GL_FLOAT,GL_FALSE,cs,(void*)(3*sizeof(float)));glVertexAttribDivisor(4,1);
+        glEnableVertexAttribArray(5);glVertexAttribPointer(5,1,GL_FLOAT,GL_FALSE,cs,(void*)(6*sizeof(float)));glVertexAttribDivisor(5,1);
+        glBindVertexArray(0);si++;
     }
-
-    LOG_I("Built track: %d tiles → %zu shape groups", n, m_shapes.size());
-
-    // Init visibility cache per shape group
-    m_visCaches.resize(m_shapes.size());
-
-    buildIcons(level);
+    LOG_I("Built track: %d tiles -> %zu shape groups",n,m_shapes.size());
+    m_visCaches.resize(m_shapes.size()); buildIcons(level);
 }
 
-bool TileMesh::frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt) {
-    return frustumCheck(cache, vl, vr, vb, vt);
+#ifdef __AVX2__
+#include <immintrin.h>
+static void simdCullGroup(const ShapeGroup& sg, double vl, double vr, double vb, double vt, std::vector<int>& out) {
+    size_t n=sg.instanceCount; if(!n)return; out.reserve(n);
+    __m256d v_vl=_mm256_set1_pd(vl),v_vr=_mm256_set1_pd(vr),v_vb=_mm256_set1_pd(vb),v_vt=_mm256_set1_pd(vt);
+    size_t i=0;
+    for(;i+3<n;i+=4){
+        __m256d minX=_mm256_loadu_pd(sg.cullMinX+i),maxX=_mm256_loadu_pd(sg.cullMaxX+i);
+        __m256d minY=_mm256_loadu_pd(sg.cullMinY+i),maxY=_mm256_loadu_pd(sg.cullMaxY+i);
+        __m256d c0=_mm256_cmp_pd(maxX,v_vl,_CMP_NLT_UQ); // maxX >= vl
+        __m256d c1=_mm256_cmp_pd(minX,v_vr,_CMP_LE_OQ);  // minX <= vr
+        __m256d c2=_mm256_cmp_pd(maxY,v_vb,_CMP_NLT_UQ); // maxY >= vb
+        __m256d c3=_mm256_cmp_pd(minY,v_vt,_CMP_LE_OQ);  // minY <= vt
+        __m256d vis=_mm256_and_pd(_mm256_and_pd(c0,c1),_mm256_and_pd(c2,c3));
+        int mask=_mm256_movemask_pd(vis);
+        if(mask&8)out.push_back((int)(i+3));if(mask&4)out.push_back((int)(i+2));
+        if(mask&2)out.push_back((int)(i+1));if(mask&1)out.push_back((int)(i));
+    }
+    for(;i<n;i++){if(sg.cullMaxX[i]<vl||sg.cullMinX[i]>vr||sg.cullMaxY[i]<vb||sg.cullMinY[i]>vt)continue;out.push_back((int)i);}
 }
+#else
+static void simdCullGroup(const ShapeGroup& sg, double vl, double vr, double vb, double vt, std::vector<int>& out) {
+    size_t n=sg.instanceCount; if(!n)return; out.reserve(n);
+    for(size_t i=n;i>0;i--){size_t ii=i-1;
+        if(sg.cullMaxX[ii]<vl||sg.cullMinX[ii]>vr||sg.cullMaxY[ii]<vb||sg.cullMinY[ii]>vt)continue;out.push_back((int)ii);}
+}
+#endif
 
-// Phase 1: CPU culling + offset computation (thread-safe, no GL calls)
+bool TileMesh::frustumChanged(const VisibilityCache& c, float vl, float vr, float vb, float vt) { return frustumCheck(c,vl,vr,vb,vt); }
+
 static void cullAndOffsetGroups(const std::vector<ShapeGroup>& groups,
-                                 std::vector<TileMesh::VisibilityCache>& caches,
-                                 size_t start, size_t end,
-                                 double vl, double vr, double vb, double vt,
-                                 double camX, double camY) {
-    for (size_t si = start; si < end; si++) {
-        const auto& sg = groups[si];
-        auto& cache = caches[si];
-
-        if (!cache.valid || TileMesh::frustumCheck(cache,
-                (float)vl, (float)vr, (float)vb, (float)vt)) {
-            cache.indices.clear();
-            cache.indices.reserve(sg.instances.size());
-            for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
-                const auto& inst = sg.instances[ii];
-                if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
-                    continue;
-                cache.indices.push_back(ii);
-            }
-            cache.vl = vl; cache.vr = vr; cache.vb = vb; cache.vt = vt;
-            cache.valid = true;
-        }
-
-        if (cache.indices.empty()) continue;
-
-        cache.offsets.resize(cache.indices.size() * 3);
-        for (size_t i = 0; i < cache.indices.size(); i++) {
-            const auto& inst = sg.instances[cache.indices[i]];
-            cache.offsets[i * 3]     = (float)(inst.offX - camX);
-            cache.offsets[i * 3 + 1] = (float)(inst.offY - camY);
-            cache.offsets[i * 3 + 2] = inst.offZ;
-        }
+    std::vector<TileMesh::VisibilityCache>& caches, size_t start, size_t end,
+    double vl, double vr, double vb, double vt, double camX, double camY) {
+    for(size_t si=start;si<end;si++){
+        const auto& sg=groups[si]; auto& ca=caches[si];
+        if(sg.groupMaxX<vl||sg.groupMinX>vr||sg.groupMaxY<vb||sg.groupMinY>vt){ca.indices.clear();ca.offsets.clear();ca.valid=false;continue;}
+        bool re=!ca.valid||TileMesh::frustumCheck(ca,(float)vl,(float)vr,(float)vb,(float)vt);
+        if(re){ca.indices.clear();simdCullGroup(sg,vl,vr,vb,vt,ca.indices);ca.vl=vl;ca.vr=vr;ca.vb=vb;ca.vt=vt;ca.valid=true;ca.offsetsValid=false;}
+        if(ca.indices.empty())continue;
+        size_t vc=ca.indices.size();
+        if(ca.offsetsValid){float dx=(float)(ca.prevCamX-camX),dy=(float)(ca.prevCamY-camY);
+            for(size_t i=0;i<vc;i++){ca.offsets[i*3]+=dx;ca.offsets[i*3+1]+=dy;}}
+        else{ca.offsets.resize(vc*3);
+            for(size_t i=0;i<vc;i++){int idx=ca.indices[i];ca.offsets[i*3]=sg.posX[idx]-(float)camX;
+            ca.offsets[i*3+1]=sg.posY[idx]-(float)camY;ca.offsets[i*3+2]=sg.posZ[idx];}ca.offsetsValid=true;}
+        ca.prevCamX=camX;ca.prevCamY=camY;
     }
 }
 
-void TileMesh::draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const {
-    double margin = 20.0;
-    double vl = viewL - margin, vr = viewR + margin;
-    double vb = viewB - margin, vt = viewT + margin;
+static ThreadPool& getPool() { static ThreadPool pool; return pool; }
 
-    size_t n = m_shapes.size();
-    if (n == 0) return;
-
-    // Phase 1: CPU culling + offset computation (parallel for many groups)
-    constexpr size_t PARALLEL_THRESHOLD = 64;
-    if (n >= PARALLEL_THRESHOLD) {
-        unsigned int hw = std::thread::hardware_concurrency();
-        unsigned int numThreads = std::max(2u, std::min(hw, unsigned(n / 16)));
-        size_t chunk = (n + numThreads - 1) / numThreads;
-        std::vector<std::future<void>> futures;
-        for (unsigned int t = 0; t < numThreads; t++) {
-            size_t start = t * chunk;
-            size_t end = std::min(start + chunk, n);
-            if (start >= end) break;
-            futures.push_back(std::async(std::launch::async,
-                cullAndOffsetGroups, std::cref(m_shapes), std::ref(m_visCaches),
-                start, end, vl, vr, vb, vt, camX, camY));
-        }
-        for (auto& f : futures) f.wait();
-    } else {
-        cullAndOffsetGroups(m_shapes, m_visCaches, 0, n, vl, vr, vb, vt, camX, camY);
-    }
-
-    // Phase 2: Upload + draw (serial, OpenGL must be on main thread)
-    for (size_t si = 0; si < n; si++) {
-        const auto& sg = m_shapes[si];
-        auto& cache = m_visCaches[si];
-        if (cache.indices.empty()) continue;
-
-        glBindVertexArray(sg.vao);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, cache.offsets.size()*sizeof(float), cache.offsets.data());
-        glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
-                                nullptr, (GLsizei)(cache.indices.size()));
-        glBindVertexArray(0);
-    }
+void TileMesh::draw(float vL, float vR, float vB, float vT, double cX, double cY) const {
+    double m=20.0, vl=vL-m, vr=vR+m, vb=vB-m, vt=vT+m;
+    size_t n=m_shapes.size(); if(!n)return;
+    constexpr size_t PT=64;
+    if(n>=PT){auto& p=getPool();p.parallelFor(0,n,[&](size_t s,size_t e){cullAndOffsetGroups(m_shapes,m_visCaches,s,e,vl,vr,vb,vt,cX,cY);},1);}
+    else cullAndOffsetGroups(m_shapes,m_visCaches,0,n,vl,vr,vb,vt,cX,cY);
+    for(size_t si=0;si<n;si++){const auto& sg=m_shapes[si];auto& ca=m_visCaches[si];if(ca.indices.empty())continue;
+        glBindVertexArray(sg.vao);glBindBuffer(GL_ARRAY_BUFFER,sg.instVbo);
+        glBufferSubData(GL_ARRAY_BUFFER,0,ca.offsets.size()*sizeof(float),ca.offsets.data());
+        glDrawElementsInstanced(GL_TRIANGLES,sg.indexCount,GL_UNSIGNED_INT,nullptr,(GLsizei)(ca.indices.size()));glBindVertexArray(0);}
 }
 
-// ---- Event icons ----
-
-static constexpr float ICON_RADIUS = 0.11f;     // matches Re_ADOJAS 0.275*0.8/2
-static constexpr int   ICON_SEGMENTS = 16;
-// Z-depth offsets (TileMesh::kIconZBase, kIconZExtra used via tileZForIndex)
-
-static const float TWIRL_COLOR[3]      = {0.502f, 0.0f, 0.502f};
-static const float SPEED_UP_COLOR[3]   = {1.0f, 0.0f, 0.0f};
-static const float SPEED_DOWN_COLOR[3] = {0.0f, 0.0f, 1.0f};
+static constexpr float IR=0.11f; static constexpr int IS=16;
+static const float TC[3]={0.502f,0,0.502f},SUC[3]={1,0,0},SDC[3]={0,0,1};
 
 void TileMesh::buildIcons(const LevelData& level) {
-    // Destroy existing icon groups
-    for (auto& s : m_iconGroups) {
-        if (s.instVbo) glDeleteBuffers(1, &s.instVbo);
-        if (s.ebo) glDeleteBuffers(1, &s.ebo);
-        if (s.vbo) glDeleteBuffers(1, &s.vbo);
-        if (s.vao) glDeleteVertexArrays(1, &s.vao);
-    }
+    for(auto& s:m_iconGroups){if(s.instVbo)glDeleteBuffers(1,&s.instVbo);if(s.colorVbo)glDeleteBuffers(1,&s.colorVbo);
+    if(s.ebo)glDeleteBuffers(1,&s.ebo);if(s.vbo)glDeleteBuffers(1,&s.vbo);if(s.vao)glDeleteVertexArrays(1,&s.vao);freeSoA(s);}
     m_iconGroups.clear();
-
-    const auto& tiles = level.tiles;
-    int n = (int)tiles.size() - 1;  // exclude extra tile
-    if (n <= 0) return;
-
-    // Collect icon instances by color: 0=twirl, 1=speedUp, 2=speedDown
-    struct IconInst { int tileIdx; float zOff; };
-    std::vector<IconInst> colorGroups[3];
-
-    for (int i = 0; i < n; i++) {
-        bool hasTwirl = i < (int)level.tileHasTwirl.size() && level.tileHasTwirl[i];
-        bool hasSetSpeed = i < (int)level.tileHasSetSpeed.size() && level.tileHasSetSpeed[i];
-
-        float tileZ = tileZForIndex(i, n);  // same Z as the tile body
-
-        if (hasTwirl) {
-            colorGroups[0].push_back({i, tileZ + kIconZBase});
-        }
-        if (hasSetSpeed && i > 0 && i < (int)level.tileBPMs.size()) {
-            float ratio = level.tileBPMs[i] / level.tileBPMs[i - 1];
-            if (ratio > 1.05f || ratio < 0.95f) {
-                int cg = (ratio > 1.05f) ? 1 : 2;
-                float speedZOffset = kIconZBase + (hasTwirl ? kIconZExtra : (kIconZBase * 0.5f));
-                colorGroups[cg].push_back({i, tileZ + speedZOffset});
-            }
-        }
+    const auto& tiles=level.tiles; int n=(int)tiles.size()-1; if(n<=0)return;
+    struct II{int ti;float zo;}; std::vector<II> cg[3];
+    for(int i=0;i<n;i++){bool ht=i<(int)level.tileHasTwirl.size()&&level.tileHasTwirl[i];
+        bool hs=i<(int)level.tileHasSetSpeed.size()&&level.tileHasSetSpeed[i]; float tz=tileZForIndex(i,n);
+        if(ht)cg[0].push_back({i,tz+kIconZBase});
+        if(hs&&i>0&&i<(int)level.tileBPMs.size()){float r=level.tileBPMs[i]/level.tileBPMs[i-1];
+            if(r>1.05f||r<0.95f){int ci=(r>1.05f)?1:2;float zo=kIconZBase+(ht?kIconZExtra:(kIconZBase*0.5f));cg[ci].push_back({i,tz+zo});}}
     }
-
-    const float* colors[3] = {TWIRL_COLOR, SPEED_UP_COLOR, SPEED_DOWN_COLOR};
-    Scratch& sc = g_sc;
-
-    for (int cg = 0; cg < 3; cg++) {
-        if (colorGroups[cg].empty()) continue;
-
-        auto& grp = colorGroups[cg];
-        float cr = colors[cg][0], cgv = colors[cg][1], cb = colors[cg][2];
-
-        // Generate circle geometry with this color
-        sc.clear();
-        createCircle(0.0f, 0.0f, ICON_RADIUS, 1.0f, sc, ICON_SEGMENTS);
-
-        // Interleave: [x,y,z, type] — icons always type=1.0 (fill only)
-        size_t vc = sc.verts.size() / 3;
-        std::vector<float> interleaved;
-        interleaved.reserve(vc * 4);
-        for (size_t vi = 0; vi < vc; vi++) {
-            interleaved.push_back(sc.verts[vi*3]);
-            interleaved.push_back(sc.verts[vi*3+1]);
-            interleaved.push_back(sc.verts[vi*3+2]);
-            interleaved.push_back(sc.types[vi]);
+    const float* cs[3]={TC,SUC,SDC}; Scratch& sc=g_sc; sc.clear();
+    createCircle(0,0,IR,1.0f,sc,IS); size_t vc=sc.verts.size()/3;
+    std::vector<float> sv;sv.reserve(vc*4);
+    for(size_t vi=0;vi<vc;vi++){sv.push_back(sc.verts[vi*3]);sv.push_back(sc.verts[vi*3+1]);sv.push_back(sc.verts[vi*3+2]);sv.push_back(sc.types[vi]);}
+    unsigned sic=(unsigned)sc.indices.size(); double il=-(double)IR,iL=(double)IR;
+    for(int ci=0;ci<3;ci++){if(cg[ci].empty())continue; auto& gr=cg[ci];
+        float cr=cs[ci][0],cgv=cs[ci][1],cb=cs[ci][2]; size_t cnt=gr.size();
+        ShapeGroup sg; sg.indexCount=sic; sg.fillIndexCount=sic; allocSoA(sg,cnt);
+        std::vector<float> ip;ip.reserve(cnt*3);std::vector<float> ic;ic.reserve(cnt*7);
+        double gmx=1e99,gmy=1e99,gMx=-1e99,gMy=-1e99;
+        for(size_t k=0;k<cnt;k++){double wx=tiles[gr[k].ti].position[0],wy=tiles[gr[k].ti].position[1];float wz=gr[k].zo;
+            ip.push_back((float)wx);ip.push_back((float)wy);ip.push_back(wz);
+            ic.push_back(cr);ic.push_back(cgv);ic.push_back(cb);ic.push_back(cr);ic.push_back(cgv);ic.push_back(cb);ic.push_back(1);
+            double mx=wx+il,my=wy+il,Mx=wx+iL,My=wy+iL;
+            sg.cullMinX[k]=mx;sg.cullMaxX[k]=Mx;sg.cullMinY[k]=my;sg.cullMaxY[k]=My;
+            sg.posX[k]=(float)wx;sg.posY[k]=(float)wy;sg.posZ[k]=wz;
+            if(mx<gmx)gmx=mx;if(Mx>gMx)gMx=Mx;if(my<gmy)gmy=my;if(My>gMy)gMy=My;
         }
-
-        // Instance data: [offX,offY,offZ, fillR,fillG,fillB, strokeR,strokeG,strokeB, opacity]
-        std::vector<float> instData;
-        std::vector<TileInstance> instances;
-        instData.reserve(grp.size() * 10);
-        instances.reserve(grp.size());
-
-        for (auto& icon : grp) {
-            double wx = tiles[icon.tileIdx].position[0];
-            double wy = tiles[icon.tileIdx].position[1];
-            float wz = icon.zOff;
-            instData.push_back((float)wx);
-            instData.push_back((float)wy);
-            instData.push_back(wz);
-            instData.push_back(cr); instData.push_back(cgv); instData.push_back(cb);  // fill = icon color
-            instData.push_back(cr); instData.push_back(cgv); instData.push_back(cb);  // stroke = same
-            instData.push_back(1.0f);  // opacity
-            instances.push_back({wx, wy, wz, cr, cgv, cb, cr, cgv, cb, 1.0f,
-                wx - ICON_RADIUS, wy - ICON_RADIUS,
-                wx + ICON_RADIUS, wy + ICON_RADIUS});
-        }
-
-        // Upload GPU buffers
-        ShapeGroup sg;
-        sg.indexCount = (unsigned)sc.indices.size();
-        sg.instances = std::move(instances);
-
-        glGenVertexArrays(1, &sg.vao);
-        glBindVertexArray(sg.vao);
-
-        glGenBuffers(1, &sg.vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.vbo);
-        glBufferData(GL_ARRAY_BUFFER, interleaved.size()*sizeof(float), interleaved.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)0);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)(3*sizeof(float)));
-
-        glGenBuffers(1, &sg.ebo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sg.ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sc.indices.size()*sizeof(unsigned), sc.indices.data(), GL_STATIC_DRAW);
-
-        // Position VBO (3 floats)
-        std::vector<float> ipos; ipos.reserve(grp.size() * 3);
-        std::vector<float> icols; icols.reserve(grp.size() * 7);
-        for (int i = 0; i < (int)grp.size(); i++) {
-            ipos.push_back(instData[i*10]); ipos.push_back(instData[i*10+1]); ipos.push_back(instData[i*10+2]);
-            for (int j = 3; j < 10; j++) icols.push_back(instData[i*10+j]);
-        }
-        glGenBuffers(1, &sg.instVbo);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferData(GL_ARRAY_BUFFER, ipos.size()*sizeof(float), ipos.data(), GL_DYNAMIC_DRAW);
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
-        glVertexAttribDivisor(2, 1);
-
-        GLsizei cstr = 7 * sizeof(float);
-        glGenBuffers(1, &sg.colorVbo);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.colorVbo);
-        glBufferData(GL_ARRAY_BUFFER, icols.size()*sizeof(float), icols.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(3);
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, cstr, (void*)0);
-        glVertexAttribDivisor(3, 1);
-        glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, cstr, (void*)(3*sizeof(float)));
-        glVertexAttribDivisor(4, 1);
-        glEnableVertexAttribArray(5);
-        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, cstr, (void*)(6*sizeof(float)));
-        glVertexAttribDivisor(5, 1);
-
-        glBindVertexArray(0);
-
-        m_iconGroups.push_back(std::move(sg));
+        sg.groupMinX=gmx;sg.groupMinY=gmy;sg.groupMaxX=gMx;sg.groupMaxY=gMy;
+        glGenVertexArrays(1,&sg.vao);glBindVertexArray(sg.vao);
+        glGenBuffers(1,&sg.vbo);glBindBuffer(GL_ARRAY_BUFFER,sg.vbo);glBufferData(GL_ARRAY_BUFFER,sv.size()*sizeof(float),sv.data(),GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,4*sizeof(float),(void*)0);
+        glEnableVertexAttribArray(1);glVertexAttribPointer(1,1,GL_FLOAT,GL_FALSE,4*sizeof(float),(void*)(3*sizeof(float)));
+        glGenBuffers(1,&sg.ebo);glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,sg.ebo);glBufferData(GL_ELEMENT_ARRAY_BUFFER,sc.indices.size()*sizeof(unsigned),sc.indices.data(),GL_STATIC_DRAW);
+        glGenBuffers(1,&sg.instVbo);glBindBuffer(GL_ARRAY_BUFFER,sg.instVbo);glBufferData(GL_ARRAY_BUFFER,ip.size()*sizeof(float),ip.data(),GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(2);glVertexAttribPointer(2,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0);glVertexAttribDivisor(2,1);
+        GLsizei cst=7*sizeof(float);glGenBuffers(1,&sg.colorVbo);glBindBuffer(GL_ARRAY_BUFFER,sg.colorVbo);glBufferData(GL_ARRAY_BUFFER,ic.size()*sizeof(float),ic.data(),GL_STATIC_DRAW);
+        glEnableVertexAttribArray(3);glVertexAttribPointer(3,3,GL_FLOAT,GL_FALSE,cst,(void*)0);glVertexAttribDivisor(3,1);
+        glEnableVertexAttribArray(4);glVertexAttribPointer(4,3,GL_FLOAT,GL_FALSE,cst,(void*)(3*sizeof(float)));glVertexAttribDivisor(4,1);
+        glEnableVertexAttribArray(5);glVertexAttribPointer(5,1,GL_FLOAT,GL_FALSE,cst,(void*)(6*sizeof(float)));glVertexAttribDivisor(5,1);
+        glBindVertexArray(0);m_iconGroups.push_back(std::move(sg));
     }
-
-    LOG_I("Built event icons: %zu icon groups", m_iconGroups.size());
+    m_iconVisCaches.resize(m_iconGroups.size());
+    LOG_I("Built event icons: %zu icon groups",m_iconGroups.size());
 }
 
-void TileMesh::drawIcons(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const {
-    double margin = 20.0;
-    double vl = viewL - margin, vr = viewR + margin;
-    double vb = viewB - margin, vt = viewT + margin;
-
-    for (const auto& sg : m_iconGroups) {
-        std::vector<float> visOffsets;
-        visOffsets.reserve(sg.instances.size() * 3);
-        for (int ii = (int)sg.instances.size() - 1; ii >= 0; ii--) {
-            const auto& inst = sg.instances[ii];
-            if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt)
-                continue;
-            visOffsets.push_back((float)(inst.offX - camX));
-            visOffsets.push_back((float)(inst.offY - camY));
-            visOffsets.push_back(inst.offZ);
-        }
-        if (visOffsets.empty()) continue;
-
-        glBindVertexArray(sg.vao);
-        glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, visOffsets.size()*sizeof(float), visOffsets.data());
-        glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
-                                nullptr, (GLsizei)(visOffsets.size() / 3));
-        glBindVertexArray(0);
-    }
+void TileMesh::drawIcons(float vL,float vR,float vB,float vT,double cX,double cY) const {
+    double m=20.0,vl=vL-m,vr=vR+m,vb=vB-m,vt=vT+m;
+    for(size_t si=0;si<m_iconGroups.size();si++){const auto& sg=m_iconGroups[si];auto& ca=m_iconVisCaches[si];
+        if(sg.groupMaxX<vl||sg.groupMinX>vr||sg.groupMaxY<vb||sg.groupMinY>vt){ca.indices.clear();ca.offsets.clear();ca.valid=false;continue;}
+        bool re=!ca.valid||frustumCheck(ca,(float)vl,(float)vr,(float)vb,(float)vt);
+        if(re){ca.indices.clear();simdCullGroup(sg,vl,vr,vb,vt,ca.indices);ca.vl=vl;ca.vr=vr;ca.vb=vb;ca.vt=vt;ca.valid=true;ca.offsetsValid=false;}
+        if(ca.indices.empty())continue;
+        size_t vc=ca.indices.size();
+        if(ca.offsetsValid){float dx=(float)(ca.prevCamX-cX),dy=(float)(ca.prevCamY-cY);
+            for(size_t i=0;i<vc;i++){ca.offsets[i*3]+=dx;ca.offsets[i*3+1]+=dy;}}
+        else{ca.offsets.resize(vc*3);for(size_t i=0;i<vc;i++){int idx=ca.indices[i];
+            ca.offsets[i*3]=sg.posX[idx]-(float)cX;ca.offsets[i*3+1]=sg.posY[idx]-(float)cY;ca.offsets[i*3+2]=sg.posZ[idx];}ca.offsetsValid=true;}
+        ca.prevCamX=cX;ca.prevCamY=cY;
+        glBindVertexArray(sg.vao);glBindBuffer(GL_ARRAY_BUFFER,sg.instVbo);
+        glBufferSubData(GL_ARRAY_BUFFER,0,ca.offsets.size()*sizeof(float),ca.offsets.data());
+        glDrawElementsInstanced(GL_TRIANGLES,sg.indexCount,GL_UNSIGNED_INT,nullptr,(GLsizei)vc);glBindVertexArray(0);}
 }
 
-void TileMesh::drawHighlightedTile(int tileIdx, double camX, double camY) const {
-    if (tileIdx < 0 || tileIdx >= (int)m_tileToShape.size()) return;
-    int sgIdx = m_tileToShape[tileIdx];
-    int instIdx = m_tileToInstance[tileIdx];
-    if (sgIdx < 0 || instIdx < 0) return;
-
-    const auto& sg = m_shapes[sgIdx];
-    if (instIdx >= (int)sg.instances.size()) return;
-    const auto& inst = sg.instances[instIdx];
-
-    float off[3] = {
-        (float)(inst.offX - camX),
-        (float)(inst.offY - camY),
-        inst.offZ
-    };
-
-    glBindVertexArray(sg.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, sg.instVbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(off), off);
-    glDrawElementsInstanced(GL_TRIANGLES, sg.indexCount, GL_UNSIGNED_INT,
-                            nullptr, 1);
-    glBindVertexArray(0);
+void TileMesh::drawHighlightedTile(int ti,double cX,double cY) const {
+    if(ti<0||ti>=(int)m_tileToShape.size())return;int sI=m_tileToShape[ti],iI=m_tileToInstance[ti];if(sI<0||iI<0)return;
+    const auto& sg=m_shapes[sI];if(iI>=(int)sg.instanceCount)return;
+    float off[3]={sg.posX[iI]-(float)cX,sg.posY[iI]-(float)cY,sg.posZ[iI]};
+    glBindVertexArray(sg.vao);glBindBuffer(GL_ARRAY_BUFFER,sg.instVbo);glBufferSubData(GL_ARRAY_BUFFER,0,sizeof(off),off);
+    glDrawElementsInstanced(GL_TRIANGLES,sg.indexCount,GL_UNSIGNED_INT,nullptr,1);glBindVertexArray(0);
 }
 
-unsigned int TileMesh::hexToUInt(const std::string& hex) {
-    unsigned v = 0;
-    for (char c : hex) { v<<=4;
-        if (c>='0'&&c<='9')v|=c-'0';
-        else if (c>='a'&&c<='f')v|=c-'a'+10;
-        else if (c>='A'&&c<='F')v|=c-'A'+10;
-        else break; }
-    return v;
-}
+unsigned int TileMesh::hexToUInt(const std::string& hex) {unsigned v=0;for(char c:hex){v<<=4;
+    if(c>='0'&&c<='9')v|=c-'0';else if(c>='a'&&c<='f')v|=c-'a'+10;else if(c>='A'&&c<='F')v|=c-'A'+10;else break;}return v;}
 
-float TileMesh::tileZForIndex(int i, int n) {
-    if (n <= 1) return kMaxTileZ * 0.5f;
-    return kMaxTileZ * (1.0f - (float)i / (float)(n - 1));
-}
+float TileMesh::tileZForIndex(int i,int n){if(n<=1)return kMaxTileZ*0.5f;return kMaxTileZ*(1.0f-(float)i/(float)(n-1));}

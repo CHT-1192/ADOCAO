@@ -2,6 +2,7 @@
 #include <cstring>
 #include <thread>
 #include <future>
+#include <mutex>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -10,8 +11,11 @@
 static void report(LoadingProgress& p, float pct, const char* text) {
     p.stage++;
     p.percent.store(pct);
-    strncpy(p.stageText, text, sizeof(p.stageText) - 1);
-    p.stageText[sizeof(p.stageText) - 1] = '\0';
+    {
+        std::lock_guard<std::mutex> lock(p.textMutex);
+        strncpy(p.stageText, text, sizeof(p.stageText) - 1);
+        p.stageText[sizeof(p.stageText) - 1] = '\0';
+    }
 }
 
 void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadResult& result) {

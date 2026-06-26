@@ -7,9 +7,9 @@
 // Fixed relativeTo=Player, position=(0,0).
 class Camera {
 public:
-    Camera() = default;
+    Camera();
 
-    void setZoom(float zoom);           // ADOFAI zoom (100 = default)
+    void setZoom(float zoom);
     void setAspect(float width, float height);
     void setTarget(double x, double y);
 
@@ -28,8 +28,14 @@ private:
     double m_targetX = 0.0;
     double m_targetY = 0.0;
 
-    glm::mat4 m_proj = glm::mat4(1.0f);
-    glm::mat4 m_view = glm::mat4(1.0f);
+    // Lazy-evaluated cached values (mutable for const-method access)
+    mutable float m_halfH = 6.0f;
+    mutable float m_halfW = 6.0f * 16.0f / 9.0f;
+    mutable glm::mat4 m_proj = glm::mat4(1.0f);
+    mutable glm::mat4 m_projView = glm::mat4(1.0f);
+    mutable bool m_projDirty = true;
 
-    void update();
+    glm::mat4 m_view = glm::mat4(1.0f);  // constant after construction
+
+    void updateProj() const;
 };

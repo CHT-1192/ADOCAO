@@ -18,15 +18,23 @@ public:
     PlanetTrail& operator=(PlanetTrail&&) noexcept;
 
     void update(const glm::vec2& pos, float currentTime);
-    void setPoints(const float* xy, int count);  // batch set from flat XY array (like Re_ADOJAS)
+    void setPoints(const float* xy, int count);
     void draw(Shader& shader, const Camera& camera, double camX, double camY);
     void clear();
     void setPlanetRadius(float r) { m_planetRadius = r; }
 
 private:
     struct Point { glm::vec2 pos; float time; };
+    // Ring buffer: avoids O(n) erase(begin()) from std::vector
     std::vector<Point> m_points;
-    glm::vec2 m_center{0.0f};  // trail VBO is relative to this (for precision)
+    int m_head = 0;
+    int m_count = 0;
+
+    // Reusable CPU-side geometry buffers
+    std::vector<float> m_verts;
+    std::vector<unsigned> m_indices;
+
+    glm::vec2 m_center{0.0f};
 
     int m_maxPoints = 200;
     float m_trailDuration = 0.4f;
@@ -36,6 +44,11 @@ private:
     mutable GLuint m_vao = 0, m_vbo = 0, m_ebo = 0;
     mutable unsigned m_vertexCount = 0, m_indexCount = 0;
     mutable bool m_dirty = false;
+
+    Point& ringAt(int i) { return m_points[(m_head + i) % m_maxPoints]; }
+    const Point& ringAt(int i) const { return m_points[(m_head + i) % m_maxPoints]; }
+    void ringPushBack(const Point& pt);
+    void ringPopFront();
 
     static glm::vec2 catmullRom(const glm::vec2& p0, const glm::vec2& p1,
                                 const glm::vec2& p2, const glm::vec2& p3, float t);

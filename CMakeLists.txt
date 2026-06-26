@@ -146,6 +146,10 @@ set(SOURCES
     util/Logger.hpp
     util/Logger.cpp
 
+    # Thread pool
+    util/ThreadPool.hpp
+    util/ThreadPool.cpp
+
     # Render
     render/Shader.hpp
     render/Shader.cpp
@@ -247,7 +251,7 @@ endif()
 # ---- Install ----
 install(TARGETS adocao RUNTIME DESTINATION bin)
 
-# ---- Copy hitsounds and shaders to build directory ----
+# ---- Copy hitsounds, shaders, and MinGW DLLs to build directory ----
 add_custom_command(TARGET adocao POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_SOURCE_DIR}/hitsounds"
@@ -257,6 +261,27 @@ add_custom_command(TARGET adocao POST_BUILD
     "${CMAKE_BINARY_DIR}/shaders"
     COMMENT "Copying hitsounds and shaders to build directory"
 )
+
+# Copy MinGW runtime DLLs next to EXE
+if(MINGW)
+    get_filename_component(MINGW_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(MINGW_DLLS
+        "${MINGW_BIN}/libgcc_s_seh-1.dll"
+        "${MINGW_BIN}/libstdc++-6.dll"
+        "${MINGW_BIN}/libwinpthread-1.dll"
+    )
+    if(NOT EXISTS "${MINGW_BIN}/libgcc_s_seh-1.dll")
+        set(MINGW_DLLS
+            "${MINGW_BIN}/libgcc_s_dw2-1.dll"
+            "${MINGW_BIN}/libstdc++-6.dll"
+            "${MINGW_BIN}/libwinpthread-1.dll"
+        )
+    endif()
+    add_custom_command(TARGET adocao POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MINGW_DLLS} "${CMAKE_BINARY_DIR}"
+        COMMENT "Copying MinGW runtime DLLs to build directory"
+    )
+endif()
 
 # ---- Copy example level (if available) ----
 if(EXISTS "${CMAKE_SOURCE_DIR}/../re_adojas/lib/example/level.adofai")

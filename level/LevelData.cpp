@@ -32,6 +32,7 @@ static std::vector<double> parseAngleDataFast(const char* json, size_t len, size
     if (!pos) return {};
 
     std::vector<double> result;
+    result.reserve((len - (pos - json)) / 30);
     while (pos < json + len) {
         while (pos < json + len && (*pos == ' ' || *pos == '\t' || *pos == '\n' || *pos == '\r'))
             pos++;
@@ -234,21 +235,15 @@ void LevelData::calculateTilePositions() {
     if (n > 0) {
         Tile extra;
         extra.index = n;
-        double dir = 0.0;
-        if (n > 1) {
-            double dx = (double)tiles[n-1].position[0] - (double)tiles[n-2].position[0];
-            double dy = (double)tiles[n-1].position[1] - (double)tiles[n-2].position[1];
-            double dist = std::sqrt(dx*dx + dy*dy);
-            if (dist > 0.01) dir = std::atan2(dy, dx) * 180.0 / 3.14159265358979323846;
-        }
-        double rad = dir * 3.14159265358979323846 / 180.0;
-        double length = 1.0;
+        double dir = 0.0, length = 1.0;
         if (n > 1) {
             double dx = (double)tiles[n-1].position[0] - (double)tiles[n-2].position[0];
             double dy = (double)tiles[n-1].position[1] - (double)tiles[n-2].position[1];
             length = std::sqrt(dx*dx + dy*dy);
+            if (length > 0.01) dir = std::atan2(dy, dx) * 180.0 / 3.14159265358979323846;
             if (length < 0.01) length = 1.0;
         }
+        double rad = dir * 3.14159265358979323846 / 180.0;
         extra.position = {
             (float)(tiles[n-1].position[0] + std::cos(rad) * length),
             (float)(tiles[n-1].position[1] + std::sin(rad) * length)
@@ -321,15 +316,19 @@ void LevelData::processActions() {
         int floor = a["floor"].get<int>();
         if (floor < 0 || floor >= n) continue;
 
-        std::string etype = a["eventType"].get<std::string>();
+        const std::string& etype = a["eventType"].get_ref<const std::string&>();
 
         if (etype == "Twirl") {
             tileHasTwirl[floor] = true;
         } else if (etype == "SetSpeed") {
             tileHasSetSpeed[floor] = true;
-            std::string st = a.value("speedType", std::string("Bpm"));
             SS& ev = setSpeedByFloor[floor];
-            ev.isMultiplier = (st == "Multiplier");
+            if (a.contains("speedType")) {
+                const std::string& st = a["speedType"].get_ref<const std::string&>();
+                ev.isMultiplier = (st == "Multiplier");
+            } else {
+                ev.isMultiplier = false;
+            }
             if (ev.isMultiplier)
                 ev.multiplier = a.value("bpmMultiplier", 1.0f);
             else

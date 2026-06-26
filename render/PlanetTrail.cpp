@@ -8,6 +8,7 @@
 
 PlanetTrail::PlanetTrail(const glm::vec3& color, float planetRadius)
     : m_planetRadius(planetRadius), m_color(color) {
+    m_points.resize(m_maxPoints);
 }
 
 PlanetTrail::~PlanetTrail() {
@@ -17,7 +18,9 @@ PlanetTrail::~PlanetTrail() {
 }
 
 PlanetTrail::PlanetTrail(PlanetTrail&& o) noexcept
-    : m_points(std::move(o.m_points)), m_maxPoints(o.m_maxPoints),
+    : m_points(std::move(o.m_points)), m_head(o.m_head), m_count(o.m_count),
+      m_verts(std::move(o.m_verts)), m_indices(std::move(o.m_indices)),
+      m_center(o.m_center), m_maxPoints(o.m_maxPoints),
       m_trailDuration(o.m_trailDuration), m_planetRadius(o.m_planetRadius),
       m_color(o.m_color), m_vao(o.m_vao), m_vbo(o.m_vbo), m_ebo(o.m_ebo),
       m_vertexCount(o.m_vertexCount), m_indexCount(o.m_indexCount), m_dirty(o.m_dirty) {
@@ -30,9 +33,11 @@ PlanetTrail& PlanetTrail::operator=(PlanetTrail&& o) noexcept {
         if (m_ebo) glDeleteBuffers(1, &m_ebo);
         if (m_vbo) glDeleteBuffers(1, &m_vbo);
         if (m_vao) glDeleteVertexArrays(1, &m_vao);
-        m_points = std::move(o.m_points);
-        m_maxPoints = o.m_maxPoints; m_trailDuration = o.m_trailDuration;
-        m_planetRadius = o.m_planetRadius; m_color = o.m_color;
+        m_points = std::move(o.m_points); m_head = o.m_head; m_count = o.m_count;
+        m_verts = std::move(o.m_verts); m_indices = std::move(o.m_indices);
+        m_center = o.m_center; m_maxPoints = o.m_maxPoints;
+        m_trailDuration = o.m_trailDuration; m_planetRadius = o.m_planetRadius;
+        m_color = o.m_color;
         m_vao = o.m_vao; m_vbo = o.m_vbo; m_ebo = o.m_ebo;
         m_vertexCount = o.m_vertexCount; m_indexCount = o.m_indexCount;
         m_dirty = o.m_dirty;
@@ -40,6 +45,23 @@ PlanetTrail& PlanetTrail::operator=(PlanetTrail&& o) noexcept {
         o.m_vertexCount = o.m_indexCount = 0;
     }
     return *this;
+}
+
+void PlanetTrail::ringPushBack(const Point& pt) {
+    if (m_count < m_maxPoints) {
+        m_points[(m_head + m_count) % m_maxPoints] = pt;
+        m_count++;
+    } else {
+        m_points[m_head] = pt;
+        m_head = (m_head + 1) % m_maxPoints;
+    }
+}
+
+void PlanetTrail::ringPopFront() {
+    if (m_count > 0) {
+        m_head = (m_head + 1) % m_maxPoints;
+        m_count--;
+    }
 }
 
 glm::vec2 PlanetTrail::catmullRom(const glm::vec2& p0, const glm::vec2& p1,
@@ -63,213 +85,140 @@ glm::vec2 PlanetTrail::catmullRomTangent(const glm::vec2& p0, const glm::vec2& p
 }
 
 void PlanetTrail::update(const glm::vec2& pos, float currentTime) {
-    m_points.push_back({pos, currentTime});
-    while (!m_points.empty() && currentTime - m_points.front().time > m_trailDuration) {
-        m_points.erase(m_points.begin());
-    }
-    while ((int)m_points.size() > m_maxPoints) {
-        m_points.erase(m_points.begin());
-    }
+    ringPushBack({pos, currentTime});
+    while (m_count > 0 && currentTime - ringAt(0).time > m_trailDuration)
+        ringPopFront();
     m_dirty = true;
 }
 
 void PlanetTrail::clear() {
-    m_points.clear();
+    m_head = 0;
+    m_count = 0;
     m_dirty = true;
 }
 
 void PlanetTrail::setPoints(const float* xy, int count) {
-    if (count < 2) { m_points.clear(); m_dirty = true; return; }
-
-    // Convert flat XY array to internal points, using the final time as current
-    m_points.resize(count);
-    for (int i = 0; i < count; i++) {
-        m_points[i].pos = {xy[i * 2], xy[i * 2 + 1]};
-        m_points[i].time = 0.0f;  // time not needed for setPoints
+    if (count < 2) { clear(); return; }
+    m_head = 0;
+    m_count = std::min(count, m_maxPoints);
+    for (int i = 0; i < m_count; i++) {
+        m_points[i].pos = {xy[i*2], xy[i*2+1]};
+        m_points[i].time = 0.0f;
     }
-
-    // Build mesh from these points directly (not incremental)
     ensureGPUResources();
-
-    int n = count;
-    m_center = (m_points.front().pos + m_points.back().pos) * 0.5f;
-
+    int n = m_count;
+    m_center = (ringAt(0).pos + ringAt(n-1).pos) * 0.5f;
     const int segsPerPoint = 4;
-    int totalSegments = (n - 1) * segsPerPoint;
-    int vertCount = (totalSegments + 1) * 2;
-    int idxCount = totalSegments * 6;
-
-    std::vector<float> verts(vertCount * 3);
-    std::vector<unsigned> indices(idxCount);
-
-    float maxWidth = m_planetRadius * 2.0f;
-    int vi = 0;
-    for (int seg = 0; seg <= totalSegments; seg++) {
-        float globalT = (float)seg / (float)totalSegments;
-        float rawIdx = globalT * (n - 1);
-        int i = (int)rawIdx;
-        float localT = rawIdx - (float)i;
-        glm::vec2 p0 = m_points[std::max(0, i - 1)].pos;
-        glm::vec2 p1 = m_points[i].pos;
-        glm::vec2 p2 = m_points[std::min(n - 1, i + 1)].pos;
-        glm::vec2 p3 = m_points[std::min(n - 1, i + 2)].pos;
-        glm::vec2 pt = catmullRom(p0, p1, p2, p3, localT);
-        glm::vec2 tangent = catmullRomTangent(p0, p1, p2, p3, localT);
-        float len = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
-        glm::vec2 normal = (len > 0.001f) ? glm::vec2(-tangent.y / len, tangent.x / len) : glm::vec2(0.0f, 1.0f);
-        float width = maxWidth * globalT;
-        verts[vi * 3 + 0] = pt.x - m_center.x - normal.x * width * 0.5f;
-        verts[vi * 3 + 1] = pt.y - m_center.y - normal.y * width * 0.5f;
-        verts[vi * 3 + 2] = 0.0f; vi++;
-        verts[vi * 3 + 0] = pt.x - m_center.x + normal.x * width * 0.5f;
-        verts[vi * 3 + 1] = pt.y - m_center.y + normal.y * width * 0.5f;
-        verts[vi * 3 + 2] = 0.0f; vi++;
+    int totalSegments = (n-1) * segsPerPoint;
+    int vertCount = (totalSegments+1)*2, idxCount = totalSegments*6;
+    m_verts.resize(vertCount*3);
+    m_indices.resize(idxCount);
+    float maxWidth = m_planetRadius*2.0f;
+    int vi=0;
+    for (int seg=0; seg<=totalSegments; seg++) {
+        float globalT = (float)seg/(float)totalSegments;
+        float rawIdx = globalT*(n-1);
+        int i=(int)rawIdx; float localT=rawIdx-(float)i;
+        glm::vec2 p0=ringAt(std::max(0,i-1)).pos, p1=ringAt(i).pos;
+        glm::vec2 p2=ringAt(std::min(n-1,i+1)).pos, p3=ringAt(std::min(n-1,i+2)).pos;
+        glm::vec2 pt=catmullRom(p0,p1,p2,p3,localT);
+        glm::vec2 tangent=catmullRomTangent(p0,p1,p2,p3,localT);
+        float len=std::sqrt(tangent.x*tangent.x+tangent.y*tangent.y);
+        glm::vec2 normal=(len>0.001f)?glm::vec2(-tangent.y/len,tangent.x/len):glm::vec2(0,1);
+        float width=maxWidth*globalT;
+        m_verts[vi*3]=pt.x-m_center.x-normal.x*width*0.5f; m_verts[vi*3+1]=pt.y-m_center.y-normal.y*width*0.5f; m_verts[vi*3+2]=0; vi++;
+        m_verts[vi*3]=pt.x-m_center.x+normal.x*width*0.5f; m_verts[vi*3+1]=pt.y-m_center.y+normal.y*width*0.5f; m_verts[vi*3+2]=0; vi++;
     }
-
-    int ii = 0;
-    for (int seg = 0; seg < totalSegments; seg++) {
-        unsigned base = seg * 2;
-        indices[ii++] = base; indices[ii++] = base + 1; indices[ii++] = base + 2;
-        indices[ii++] = base + 1; indices[ii++] = base + 3; indices[ii++] = base + 2;
+    int ii=0;
+    for (int seg=0; seg<totalSegments; seg++) {
+        unsigned base=seg*2;
+        m_indices[ii++]=base; m_indices[ii++]=base+1; m_indices[ii++]=base+2;
+        m_indices[ii++]=base+1; m_indices[ii++]=base+3; m_indices[ii++]=base+2;
     }
-
-    m_vertexCount = vertCount;
-    m_indexCount = idxCount;
-    m_dirty = false;
-
+    m_vertexCount=vertCount; m_indexCount=idxCount; m_dirty=false;
     glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, verts.size() * sizeof(float), verts.data());
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
-    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, indices.size() * sizeof(unsigned), indices.data());
+    glBindBuffer(GL_ARRAY_BUFFER,m_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER,0,m_verts.size()*sizeof(float),m_verts.data());
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,m_ebo);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER,0,m_indices.size()*sizeof(unsigned),m_indices.data());
     glBindVertexArray(0);
 }
 
 void PlanetTrail::ensureGPUResources() const {
     if (m_vao != 0) return;
-
     glGenVertexArrays(1, &m_vao);
     glBindVertexArray(m_vao);
-
-    // Pre-allocate max buffer sizes (accounts for 4x spline subdivision)
     constexpr int segsPerPoint = 4;
     int maxSegments = (m_maxPoints - 1) * segsPerPoint;
-    int maxVerts = (maxSegments + 1) * 2;  // left + right per vertex
+    int maxVerts = (maxSegments + 1) * 2;
     int maxIndices = maxSegments * 6;
-
     glGenBuffers(1, &m_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferData(GL_ARRAY_BUFFER, maxVerts * 3 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-
     glGenBuffers(1, &m_ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, maxIndices * sizeof(unsigned), nullptr, GL_DYNAMIC_DRAW);
-
     glBindVertexArray(0);
 }
 
 void PlanetTrail::rebuildGeometry() {
     ensureGPUResources();
-
-    int n = (int)m_points.size();
+    int n = m_count;
     if (n < 2) { m_vertexCount = 0; m_indexCount = 0; return; }
-
-    // Center point: keep VBO values small for float precision
-    m_center = (m_points.front().pos + m_points.back().pos) * 0.5f;
-
+    m_center = (ringAt(0).pos + ringAt(n-1).pos) * 0.5f;
     const int segsPerPoint = 4;
-    int totalSegments = (n - 1) * segsPerPoint;
-    int vertCount = (totalSegments + 1) * 2;
-    int idxCount = totalSegments * 6;
-
-    std::vector<float> verts(vertCount * 3);
-    std::vector<unsigned> indices(idxCount);
-
-    float maxWidth = m_planetRadius * 2.0f;
-    int vi = 0;
-
-    for (int seg = 0; seg <= totalSegments; seg++) {
-        float globalT = (float)seg / (float)totalSegments;
-        float rawIdx = globalT * (n - 1);
-        int i = (int)rawIdx;
-        float localT = rawIdx - (float)i;
-
-        glm::vec2 p0 = m_points[std::max(0, i - 1)].pos;
-        glm::vec2 p1 = m_points[i].pos;
-        glm::vec2 p2 = m_points[std::min(n - 1, i + 1)].pos;
-        glm::vec2 p3 = m_points[std::min(n - 1, i + 2)].pos;
-
-        glm::vec2 pt = catmullRom(p0, p1, p2, p3, localT);
-        glm::vec2 tangent = catmullRomTangent(p0, p1, p2, p3, localT);
-
-        float len = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
-        glm::vec2 normal = (len > 0.001f) ? glm::vec2(-tangent.y / len, tangent.x / len) : glm::vec2(0.0f, 1.0f);
-
-        float width = maxWidth * globalT;
-
-        // Store relative to center (small numbers for float precision)
-        verts[vi * 3 + 0] = pt.x - m_center.x - normal.x * width * 0.5f;
-        verts[vi * 3 + 1] = pt.y - m_center.y - normal.y * width * 0.5f;
-        verts[vi * 3 + 2] = 0.0f;
-        vi++;
-
-        // Right vertex
-        verts[vi * 3 + 0] = pt.x - m_center.x + normal.x * width * 0.5f;
-        verts[vi * 3 + 1] = pt.y - m_center.y + normal.y * width * 0.5f;
-        verts[vi * 3 + 2] = 0.0f;
-        vi++;
+    int totalSegments = (n-1)*segsPerPoint, vertCount = (totalSegments+1)*2, idxCount = totalSegments*6;
+    m_verts.resize(vertCount*3);
+    m_indices.resize(idxCount);
+    float maxWidth = m_planetRadius*2.0f;
+    int vi=0;
+    for (int seg=0; seg<=totalSegments; seg++) {
+        float globalT=(float)seg/(float)totalSegments, rawIdx=globalT*(n-1);
+        int i=(int)rawIdx; float localT=rawIdx-(float)i;
+        glm::vec2 p0=ringAt(std::max(0,i-1)).pos, p1=ringAt(i).pos;
+        glm::vec2 p2=ringAt(std::min(n-1,i+1)).pos, p3=ringAt(std::min(n-1,i+2)).pos;
+        glm::vec2 pt=catmullRom(p0,p1,p2,p3,localT);
+        glm::vec2 tangent=catmullRomTangent(p0,p1,p2,p3,localT);
+        float len=std::sqrt(tangent.x*tangent.x+tangent.y*tangent.y);
+        glm::vec2 normal=(len>0.001f)?glm::vec2(-tangent.y/len,tangent.x/len):glm::vec2(0,1);
+        float width=maxWidth*globalT;
+        m_verts[vi*3]=pt.x-m_center.x-normal.x*width*0.5f; m_verts[vi*3+1]=pt.y-m_center.y-normal.y*width*0.5f; m_verts[vi*3+2]=0; vi++;
+        m_verts[vi*3]=pt.x-m_center.x+normal.x*width*0.5f; m_verts[vi*3+1]=pt.y-m_center.y+normal.y*width*0.5f; m_verts[vi*3+2]=0; vi++;
     }
-
-    // Build triangle indices: two triangles per segment
-    int ii = 0;
-    for (int seg = 0; seg < totalSegments; seg++) {
-        unsigned base = seg * 2;
-        indices[ii++] = base;
-        indices[ii++] = base + 1;
-        indices[ii++] = base + 2;
-        indices[ii++] = base + 1;
-        indices[ii++] = base + 3;
-        indices[ii++] = base + 2;
+    int ii=0;
+    for (int seg=0; seg<totalSegments; seg++) {
+        unsigned base=seg*2;
+        m_indices[ii++]=base; m_indices[ii++]=base+1; m_indices[ii++]=base+2;
+        m_indices[ii++]=base+1; m_indices[ii++]=base+3; m_indices[ii++]=base+2;
     }
-
-    m_vertexCount = vertCount;
-    m_indexCount = idxCount;
-
+    m_vertexCount=vertCount; m_indexCount=idxCount;
     glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, verts.size() * sizeof(float), verts.data());
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
-    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, indices.size() * sizeof(unsigned), indices.data());
+    glBindBuffer(GL_ARRAY_BUFFER,m_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER,0,m_verts.size()*sizeof(float),m_verts.data());
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,m_ebo);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER,0,m_indices.size()*sizeof(unsigned),m_indices.data());
     glBindVertexArray(0);
-
-    m_dirty = false;
+    m_dirty=false;
 }
 
 void PlanetTrail::draw(Shader& shader, const Camera& camera, double camX, double camY) {
-    if (m_points.size() < 2) return;
-
+    if (m_count < 2) return;
     if (m_dirty) rebuildGeometry();
     if (m_indexCount == 0) return;
-
-    // VBO is relative to m_center, translate by (center - camTarget) → camera-relative
     auto model = glm::translate(glm::mat4(1.0f),
-        glm::vec3(m_center.x - (float)camX, m_center.y - (float)camY, 0.0f));
+        glm::vec3(m_center.x-(float)camX, m_center.y-(float)camY, 0));
     auto mvp = camera.viewProj() * model;
-
     shader.use();
     shader.setMat4("uMVP", glm::value_ptr(mvp));
     shader.setVec4("uColor", m_color.x, m_color.y, m_color.z, 0.6f);
-
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
-
     glBindVertexArray(m_vao);
     glDrawElements(GL_TRIANGLES, m_indexCount, GL_UNSIGNED_INT, nullptr);
     glBindVertexArray(0);
-
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 }
