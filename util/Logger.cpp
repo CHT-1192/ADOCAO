@@ -46,7 +46,7 @@ Logger& Logger::instance() {
 
 void Logger::init(const std::string& logPath, bool debugConsole) {
     if (m_file) fclose(m_file);
-    m_file = fopen(logPath.c_str(), "w");
+    m_file = fopen(logPath.c_str(), "a");
     m_debugConsole = debugConsole;
     if (m_file) {
         fprintf(m_file, "=== ADOCAO Log started at %s ===\n", timestamp().c_str());
