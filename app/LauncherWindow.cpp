@@ -288,21 +288,16 @@ LauncherConfig showLauncher() {
         ImGui::SetNextItemWidth(200 * S);
         ImGui::Combo("##reso", &resoIdx, resoNames.data(), (int)resoNames.size());
 
-        // Fullscreen
-        ImGui::SameLine();
-        ImGui::Spacing(); ImGui::SameLine();
+        // Checkboxes row 1
+        ImGui::Checkbox("Trail", &cfg.showTrail);
+        ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
+        ImGui::Checkbox("Hitsounds", &enableHitsounds);
+        ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
         ImGui::Checkbox("Fullscreen", &cfg.fullscreen);
 
-        // Show trail
-        ImGui::SameLine();
-        ImGui::Spacing(); ImGui::SameLine();
-        ImGui::Checkbox("Trail", &cfg.showTrail);
-        ImGui::SameLine();
-        ImGui::Spacing(); ImGui::SameLine();
-        ImGui::Checkbox("Hitsounds", &enableHitsounds);
-        ImGui::SameLine();
+        // Checkboxes row 2
         ImGui::Checkbox("Force HS", &forceHitsounds);
-        ImGui::SameLine();
+        ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
         ImGui::Checkbox("GPU Cull", &gpuCulling);
 
         ImGui::Spacing();
