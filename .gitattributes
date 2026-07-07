@@ -1,10 +1,2 @@
-# Classify shader files as GLSL
-*.vert linguist-language=GLSL
-*.frag linguist-language=GLSL
-*.comp linguist-language=GLSL
-
-# Classify C++ headers correctly
-*.hpp linguist-language=C++
-
 # Exclude build dependencies from stats
 build/** linguist-vendored
