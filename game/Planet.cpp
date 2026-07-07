@@ -40,8 +40,8 @@ Planet& Planet::operator=(Planet&& o) noexcept {
 }
 
 void Planet::update(float currentTime) {
-    if (trail)
-        trail->update(glm::vec2(position.x, position.y), currentTime);
+    // Trail is now batch-fed via PlaybackEngine::computePlanetTrails()
+    (void)currentTime;
 }
 
 void Planet::setTrailPoints(const float* xy, int count) {
