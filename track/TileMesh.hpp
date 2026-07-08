@@ -76,9 +76,6 @@ private:
     mutable std::vector<VisibilityCache> m_iconVisCaches;
     std::vector<int> m_tileToShape, m_tileToInstance;
 
-    // Dirty check: skip GPU upload when camera hasn't moved
-    mutable double m_prevCamX = 0, m_prevCamY = 0;
-    mutable bool m_frameDirty = true;
     bool m_legacyCulling = false;
 
     // Spatial grid: accelerate culling for large levels

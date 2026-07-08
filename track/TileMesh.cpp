@@ -323,12 +323,6 @@ static void cullAndOffsetGroups(const std::vector<ShapeGroup>& groups,
 static ThreadPool& getPool() { static ThreadPool pool; return pool; }
 
 void TileMesh::draw(float vL, float vR, float vB, float vT, double cX, double cY) const {
-    // Dirty check: if camera hasn't moved at all, skip everything
-    if (!m_frameDirty && cX == m_prevCamX && cY == m_prevCamY)
-        return;
-    m_prevCamX = cX; m_prevCamY = cY;
-    m_frameDirty = false;
-
     double m=20.0, vl=vL-m, vr=vR+m, vb=vB-m, vt=vT+m;
     size_t n=m_shapes.size(); if(!n)return;
     if (m_legacyCulling) {
