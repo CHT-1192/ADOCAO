@@ -146,6 +146,12 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
     TileMesh tileMesh;
     tileMesh.build(*level, cfg.trackFillColor, cfg.trackStrokeColor);
 
+    // Free level data no longer needed after mesh building
+    std::vector<double>().swap(level->angleData);
+    level->tileBPMs.clear(); level->tileBPMs.shrink_to_fit();
+    level->tileHasTwirl.clear(); level->tileHasTwirl.shrink_to_fit();
+    level->tileHasSetSpeed.clear(); level->tileHasSetSpeed.shrink_to_fit();
+
     // ---- Camera ----
     Camera camera;
     GameInput input; input.camera = &camera;
@@ -344,6 +350,19 @@ void showGameWindow(const LauncherConfig& cfg, LoadResult& result) {
                 if (target >= 0) jumpToTile(playback, audioEngine, hitsoundMgr, *level, target);
             }
             wasLeft = left; wasRight = right;
+        }
+
+        // Arrow key tile navigation: Left/Right (only when stopped, tile selected)
+        if (!playback.isPlaying() && input.selectedTile >= 0) {
+            static bool wasArrowLeft = false, wasArrowRight = false;
+            bool arrowLeft  = (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS);
+            bool arrowRight = (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS);
+            int tn = (int)level->tiles.size() - 1;  // exclude extra tile
+            if (arrowLeft && !wasArrowLeft && input.selectedTile > 0)
+                input.selectedTile--;
+            if (arrowRight && !wasArrowRight && input.selectedTile < tn - 1)
+                input.selectedTile++;
+            wasArrowLeft = arrowLeft; wasArrowRight = arrowRight;
         }
 
         // Update playback — sync to audio clock when music playing, else wall-clock

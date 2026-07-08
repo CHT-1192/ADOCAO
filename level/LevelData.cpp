@@ -400,13 +400,16 @@ void LevelData::applyPositionTrackOffsets() {
 }
 
 void LevelData::releaseMemory() {
-    // Free large arrays no longer needed after loading
-    std::vector<double>().swap(angleData);
+    // Free arrays no longer needed after loading completes
     actions = nlohmann::json();
     decorations = nlohmann::json();
     tilePositionOffsets.clear(); tilePositionOffsets.shrink_to_fit();
+    tileHitsounds.clear(); tileHitsounds.shrink_to_fit();
+    std::string().swap(pathData);
+    // angleData kept: needed by TileMesh::build() for midspin detection
     // tileBPMs kept: needed by buildIcons() for SetSpeed icon coloring
-    bookmarkFloors.clear(); bookmarkFloors.shrink_to_fit();
+    // tileHasTwirl/tileHasSetSpeed kept: needed by buildIcons()
+    // bookmarkFloors kept: needed during gameplay for Ctrl+Left/Right navigation
 }
 
 void LevelData::convertPathToAngles() {
