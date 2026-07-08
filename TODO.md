@@ -42,6 +42,14 @@
 - [ ] Bloom / Flash 特效
 - [ ] Decoration 系统
 
+## 架构
+- [x] GameWindow 重构为类（init/update/render 分离）
+- [x] dirty check 跳过静止帧 GPU 上传
+- [x] Spatial grid 加速大关卡剔除
+- [ ] 帧率上限从编译期常量改为运行时配置（LauncherConfig 选项）
+- [ ] 缩放范围可配置（min/max zoom）
+- [ ] 剔除边距可配置
+
 ## 性能
 - [x] Visibility cache fix
 - [x] Frame profiler (per-section timing)

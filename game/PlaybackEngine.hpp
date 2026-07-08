@@ -38,8 +38,8 @@ public:
     std::vector<struct HitsoundTimestampGroup> getHitsoundTimestampGroups() const;
     void computePlanetTrails() const;
     void setForceHitsounds(bool v) { m_forceHitsounds = v; }
-    void setGpuCulling(bool v)      { m_gpuCulling = v; }
-    bool gpuCulling() const         { return m_gpuCulling; }
+    void setLagacyCulling(bool v)   { m_legacyCulling = v; }
+    bool legacyCulling() const      { return m_legacyCulling; }
     void computePositionsAtTime(float t, glm::vec2& redOut, glm::vec2& blueOut) const;
 
 private:
@@ -61,7 +61,7 @@ private:
 
     bool   m_isPlaying = false;
     bool   m_forceHitsounds = false;
-    bool   m_gpuCulling = true;
+    bool   m_legacyCulling = false;
     double m_elapsedTime = 0.0;   // double: sub-ns precision at 1000s total time
     double m_startWallClock = 0.0;  // wall-clock time when playback started
     int    m_currentTileIndex = 0;

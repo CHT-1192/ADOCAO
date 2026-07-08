@@ -29,6 +29,9 @@ struct ShapeGroup {
 
     double groupMinX = 1e99, groupMinY = 1e99;
     double groupMaxX = -1e99, groupMaxY = -1e99;
+
+    // Legacy culling: keep AoS instance data (only used when legacyCulling=true)
+    std::vector<TileInstance> instances;
 };
 
 class TileMesh {
@@ -42,7 +45,8 @@ public:
 
     void build(const LevelData& level,
                const std::string& fillColorHex = "FFFFFF",
-               const std::string& strokeColorHex = "000000");
+               const std::string& strokeColorHex = "000000",
+               bool legacyCulling = false);
     void draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const;
     void drawIcons(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const;
     void drawHighlightedTile(int tileIdx, double camX, double camY) const;
@@ -71,6 +75,24 @@ private:
     mutable std::vector<VisibilityCache> m_visCaches;
     mutable std::vector<VisibilityCache> m_iconVisCaches;
     std::vector<int> m_tileToShape, m_tileToInstance;
+
+    // Dirty check: skip GPU upload when camera hasn't moved
+    mutable double m_prevCamX = 0, m_prevCamY = 0;
+    mutable bool m_frameDirty = true;
+    bool m_legacyCulling = false;
+
+    // Spatial grid: accelerate culling for large levels
+    struct SpatialGrid {
+        double originX=0, originY=0, cellSize=10.0;
+        int cols=0, rows=0;
+        std::vector<int> cellStarts;     // prefix sum, size = cols*rows+1
+        std::vector<int> cellGroupIdx;   // flattened group indices per cell
+    };
+    SpatialGrid m_grid;
+
+    void buildGrid();
+    void queryGrid(double vl, double vr, double vb, double vt,
+                   std::vector<size_t>& outGroupIndices) const;
 
     void destroy();
     void buildIcons(const LevelData& level);
