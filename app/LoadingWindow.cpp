@@ -51,6 +51,7 @@ void showLoadingWindow(std::function<void(LoadingProgress&)> loader) {
     // ---- Init ImGui ----
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImGui::GetIO().IniFilename = nullptr;
     ImGui::StyleColorsDark();
 
     // DPI-aware sizing: scale all UI elements, load fonts at native resolution
