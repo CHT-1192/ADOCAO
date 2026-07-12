@@ -52,7 +52,7 @@ chmod +x build.sh
 |--------|---------|-------------|
 | `ADOCAO_PORTABLE` | OFF | Static-link portable build |
 | `ADOCAO_HIGH_FPS` | OFF | 1000 FPS cap (default 320) |
-| `ADOCAO_EXTREME_ZOOM` | OFF | Max zoom 4000 (default 1000) |
+| `ADOCAO_EXTREME_ZOOM` | OFF | Farthest zoom-out 0.5 (default 5.0) |
 
 ## Build Dependencies
 

@@ -18,7 +18,7 @@ endif()
 project(ADOCAO VERSION 0.5.0 LANGUAGES CXX C)
 
 option(ADOCAO_PORTABLE "Build a static-linked portable executable" OFF)
-option(ADOCAO_EXTREME_ZOOM "Max zoom 4000 instead of 1000" OFF)
+option(ADOCAO_EXTREME_ZOOM "Max zoom-out 0.5 (2x farther, default minZoom 5.0)" OFF)
 option(ADOCAO_HIGH_FPS "1000 FPS cap instead of 320" OFF)
 
 if(ADOCAO_EXTREME_ZOOM)

@@ -158,7 +158,7 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
         auto* in = static_cast<Input*>(glfwGetWindowUserPointer(w));
         float minZoom = 5.0f, maxZoom = 1000.0f;
 #ifdef ADOCAO_EXTREME_ZOOM
-        minZoom = 1.0f;
+        minZoom = 0.5f;
 #endif
         float z = in->camera->zoom() * (1.0f + (float)dy * 0.1f);
         if (z<minZoom)z=minZoom; if (z>maxZoom)z=maxZoom;
