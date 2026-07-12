@@ -164,7 +164,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
         glEnableVertexAttribArray(5);glVertexAttribPointer(5,1,GL_FLOAT,GL_FALSE,cs,(void*)(6*sizeof(float)));glVertexAttribDivisor(5,1);
         glBindVertexArray(0);si++;
     }
-    LOG_I("Built track: %d tiles -> %zu shape groups",n,m_shapes.size());
+    LOG_D("Built track: %d tiles -> %zu shape groups",n,m_shapes.size());
     m_visCaches.resize(m_shapes.size()); buildIcons(level);
     buildGrid();
 }
@@ -394,7 +394,7 @@ void TileMesh::buildIcons(const LevelData& level) {
         glBindVertexArray(0);m_iconGroups.push_back(std::move(sg));
     }
     m_iconVisCaches.resize(m_iconGroups.size());
-    LOG_I("Built event icons: %zu icon groups",m_iconGroups.size());
+    LOG_D("Built event icons: %zu icon groups",m_iconGroups.size());
 }
 
 void TileMesh::drawIcons(float vL,float vR,float vB,float vT,double cX,double cY) const {

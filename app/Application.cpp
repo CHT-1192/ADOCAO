@@ -108,7 +108,7 @@ int runApplication(bool debugConsole) {
         glfwTerminate();
         return 0;
     }
-    LOG_I("Launcher: level=%s, music=%s, resolution=%dx%d, fullscreen=%d",
+    LOG_D("Launcher: level=%s, music=%s, resolution=%dx%d, fullscreen=%d",
           cfg.levelPath.c_str(), cfg.musicPath.c_str(),
           cfg.resolutionW, cfg.resolutionH, cfg.fullscreen);
 
@@ -188,7 +188,7 @@ int runApplicationFromCLI(const LauncherConfig& cfg, bool debugConsole) {
     LauncherConfig config = cfg;
     if (debugConsole) config.enableHitsounds = false;
 
-    LOG_I("CLI: level=%s, music=%s, resolution=%dx%d, fullscreen=%d",
+    LOG_D("CLI: level=%s, music=%s, resolution=%dx%d, fullscreen=%d",
           config.levelPath.c_str(), config.musicPath.c_str(),
           config.resolutionW, config.resolutionH, config.fullscreen);
 

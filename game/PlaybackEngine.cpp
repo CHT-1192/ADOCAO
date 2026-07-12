@@ -260,7 +260,7 @@ void PlaybackEngine::precalculateTiming() {
     }
 
     auto [minBPM, maxBPM] = std::minmax_element(m_tileBPM.begin(), m_tileBPM.end());
-    LOG_I("PlaybackEngine: %d tiles, total duration %.2fs, bpm range %.0f-%.0f",
+    LOG_D("PlaybackEngine: %d tiles, total duration %.2fs, bpm range %.0f-%.0f",
           n - 1, preShiftTotal, *minBPM, *maxBPM);
 }
 
@@ -272,7 +272,7 @@ void PlaybackEngine::start(double wallClockSec) {
     m_currentTileIndex = 0;
     m_reportedEnd = false;
 
-    LOG_I("Playback started at t=%.3fs, countdown=%.1f beats", wallClockSec,
+    LOG_D("Playback started at t=%.3fs, countdown=%.1f beats", wallClockSec,
           m_level->settings.countdownTicks * (60.0f / m_level->settings.bpm));
 
     const auto& tiles = m_level->tiles;
@@ -286,7 +286,7 @@ void PlaybackEngine::start(double wallClockSec) {
     }
 
     updatePlanetPositions();
-    LOG_I("Playback started");
+    LOG_D("Playback started");
 }
 
 void PlaybackEngine::startAt(double wallClockSec, float audioPosSec, float offsetSec) {
@@ -303,13 +303,13 @@ void PlaybackEngine::startAt(double wallClockSec, float audioPosSec, float offse
     if (m_redPlanet)  { m_redPlanet->position  = glm::vec3(r.x, r.y, 9.5f); m_redPlanet->clearTrail(); }
     if (m_bluePlanet) { m_bluePlanet->position = glm::vec3(b.x, b.y, 9.5f); m_bluePlanet->clearTrail(); }
 
-    LOG_I("Playback started mid-level at tile %d, time=%.3fs", m_currentTileIndex, timeInLevel());
+    LOG_D("Playback started mid-level at tile %d, time=%.3fs", m_currentTileIndex, timeInLevel());
 }
 
 void PlaybackEngine::stop() {
     m_isPlaying = false;
     m_elapsedTime = 0.0;
-    LOG_I("Playback stopped");
+    LOG_D("Playback stopped");
 }
 
 float PlaybackEngine::timeInLevel() const {
@@ -391,7 +391,7 @@ void PlaybackEngine::updatePlanetPositions() {
         if (!m_reportedEnd) {
             m_reportedEnd = true;
             double wallNow = glfwGetTime();
-            LOG_I("Planet reached end: tileTime=%.3fs wallTime=%.3fs wallElapsed=%.3fs",
+            LOG_D("Planet reached end: tileTime=%.3fs wallTime=%.3fs wallElapsed=%.3fs",
                   t, wallNow, wallNow - m_startWallClock);
         }
         int lastIdx = n - 1;
@@ -498,7 +498,7 @@ void PlaybackEngine::computePlanetTrails() const {
 #ifndef NDEBUG
     static int callCount = 0;
     if (callCount < 3) {
-        LOG_I("Trail: t=%.3f red[0]=(%.1f,%.1f) red[79]=(%.1f,%.1f)", t, redXY[0], redXY[1], redXY[158], redXY[159]);
+        LOG_D("Trail: t=%.3f red[0]=(%.1f,%.1f) red[79]=(%.1f,%.1f)", t, redXY[0], redXY[1], redXY[158], redXY[159]);
         callCount++;
     }
 #endif

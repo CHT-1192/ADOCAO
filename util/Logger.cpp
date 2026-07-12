@@ -7,9 +7,10 @@
 
 static const char* levelStr(LogLevel lv) {
     switch (lv) {
-        case LogLevel::Debug: return "DEBUG";
-        case LogLevel::Info:  return "INFO";
-        case LogLevel::Error: return "ERROR";
+        case LogLevel::Debug:   return "DEBUG";
+        case LogLevel::Info:    return "INFO";
+        case LogLevel::Warning: return "WARN";
+        case LogLevel::Error:   return "ERROR";
     }
     return "?";
 }

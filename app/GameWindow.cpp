@@ -77,7 +77,7 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     glfwMakeContextCurrent(m_window);
     glfwSwapInterval(0);
     if (!loadGLCore()) { LOG_E("Failed to load OpenGL functions"); glfwDestroyWindow(m_window); return false; }
-    LOG_I("OpenGL %s | GLSL %s", glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
+    LOG_D("OpenGL %s | GLSL %s", glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
 
     // Shaders (heap-allocated, freed on destruction)
     m_tileShader = new Shader();
@@ -87,7 +87,7 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
 
     auto compileShader = [](Shader& s, const char* vp, const char* fp, const char* vs, const char* fs) -> bool {
         if (s.compileFile(vp, fp)) return true;
-        LOG_I("Shader file loading failed, using inline fallback");
+        LOG_W("Shader file loading failed, using inline fallback");
         return s.compile(vs, fs);
     };
     if (!compileShader(*m_tileShader, "shaders/tile.vert","shaders/tile.frag",Shaders::kTileVertSrc,Shaders::kTileFragSrc)

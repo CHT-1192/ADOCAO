@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <string>
 
-enum class LogLevel { Debug, Info, Error };
+enum class LogLevel { Debug, Info, Warning, Error };
 
 class Logger {
 public:
@@ -20,6 +20,7 @@ private:
     Logger() = default;
 };
 
-#define LOG_D(fmt, ...) Logger::instance().log(LogLevel::Debug, fmt, ##__VA_ARGS__)
-#define LOG_I(fmt, ...) Logger::instance().log(LogLevel::Info,  fmt, ##__VA_ARGS__)
-#define LOG_E(fmt, ...) Logger::instance().log(LogLevel::Error, fmt, ##__VA_ARGS__)
+#define LOG_D(fmt, ...) Logger::instance().log(LogLevel::Debug,   fmt, ##__VA_ARGS__)
+#define LOG_I(fmt, ...) Logger::instance().log(LogLevel::Info,    fmt, ##__VA_ARGS__)
+#define LOG_W(fmt, ...) Logger::instance().log(LogLevel::Warning, fmt, ##__VA_ARGS__)
+#define LOG_E(fmt, ...) Logger::instance().log(LogLevel::Error,   fmt, ##__VA_ARGS__)

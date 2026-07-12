@@ -112,7 +112,7 @@ bool HitsoundManager::readWav(const std::string& filepath,
     }
 
     FILE* f = fopen(filepath.c_str(), "rb");
-    if (!f) { LOG_E("Hitsound: Cannot open %s", filepath.c_str()); return false; }
+    if (!f) { LOG_W("Hitsound: Cannot open %s", filepath.c_str()); return false; }
 
     char riff[4]; uint32_t fs; char wave[4];
     fread(riff,1,4,f); fread(&fs,4,1,f); fread(wave,1,4,f);
@@ -169,7 +169,7 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
 
         std::string hp = hitsoundPath(g.type);
         if (hp.empty()) {
-            LOG_E("Hitsound: Unknown type '%s', redirecting to '%s'", g.type.c_str(), m_hitsoundType.c_str());
+            LOG_W("Hitsound: Unknown type '%s', redirecting to '%s'", g.type.c_str(), m_hitsoundType.c_str());
             hp = hitsoundPath(m_hitsoundType);
             if (hp.empty()) continue;
         }
@@ -177,7 +177,7 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
             std::vector<float> tmpSamples;
             GroupData gd;
             if (!readWav(hp, tmpSamples, gd.sr, gd.ch)) {
-                LOG_E("Hitsound: Failed to read WAV for '%s'", g.type.c_str());
+                LOG_W("Hitsound: Failed to read WAV for '%s'", g.type.c_str());
                 continue;
             }
             gd.rawSamples = &s_wavRawCache[hp];  // guaranteed populated by readWav
@@ -239,7 +239,7 @@ bool HitsoundManager::preSynthesize(const std::vector<HitsoundTimestampGroup>& g
         m_buffer[i] = (float)mixBuf[i] / 32768.0f;
 
     if (onProgress) onProgress(100.0f);
-    LOG_I("Hitsound: Synthesized %d hits from %zu groups into %.1fs buffer",
+    LOG_D("Hitsound: Synthesized %d hits from %zu groups into %.1fs buffer",
           processed, groups.size(), totalDuration);
     m_synthesized = true;
     return true;
@@ -281,6 +281,6 @@ bool HitsoundManager::writeWav(const std::string& filepath) {
     fwrite("data", 1, 4, f); w32(dataSize);
     fwrite(raw.data(), sizeof(int16_t), raw.size(), f);
     fclose(f);
-    LOG_I("Hitsound: Exported %zu frames to %s", n, filepath.c_str());
+    LOG_D("Hitsound: Exported %zu frames to %s", n, filepath.c_str());
     return true;
 }
