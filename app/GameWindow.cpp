@@ -41,6 +41,18 @@ static void jumpToTile(PlaybackEngine& pb, AudioEngine& audio, HitsoundManager& 
     else audio.play();
 }
 
+// Navigate camera to a tile without starting playback
+static void navigateToTile(const LevelData& level, int floor,
+                            Camera& camera, double& baseTX, double& baseTY,
+                            double& offX, double& offY, int& selTile) {
+    if (floor < 0 || floor >= (int)level.tiles.size()) return;
+    auto& t = level.tiles[floor];
+    camera.setTarget(t.position[0], t.position[1]);
+    baseTX = t.position[0]; baseTY = t.position[1];
+    offX = 0; offY = 0;
+    selTile = floor;
+}
+
 } // namespace
 
 bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
@@ -226,10 +238,10 @@ void GameWindow::handleInput() {
         bool rightK=(glfwGetKey(m_window,GLFW_KEY_RIGHT)==GLFW_PRESS);
         if (left&&!wasLeft) { int cur=m_playback->currentTileIndex(), target=-1;
             for (int b : m_level->bookmarkFloors) { if (b<cur) target=b; else break; }
-            if (target>=0) jumpToTile(*m_playback,*m_audioEngine,*m_hitsoundMgr,*m_level,target); }
+            if (target>=0) navigateToTile(*m_level,target,m_camera,m_input.baseTargetX,m_input.baseTargetY,m_input.offsetX,m_input.offsetY,m_input.selectedTile); }
         if (rightK&&!wasRight) { int cur=m_playback->currentTileIndex(), target=-1;
             for (int b : m_level->bookmarkFloors) { if (b>cur) { target=b; break; } }
-            if (target>=0) jumpToTile(*m_playback,*m_audioEngine,*m_hitsoundMgr,*m_level,target); }
+            if (target>=0) navigateToTile(*m_level,target,m_camera,m_input.baseTargetX,m_input.baseTargetY,m_input.offsetX,m_input.offsetY,m_input.selectedTile); }
         wasLeft=left; wasRight=rightK;
     }
 
