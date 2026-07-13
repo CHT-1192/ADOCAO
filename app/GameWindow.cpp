@@ -253,8 +253,10 @@ void GameWindow::handleInput() {
         } else { bmRHoldStart = 0; }
     }
 
-    // Arrow key tile navigation: long-press with 0.5s initial delay (only when stopped, tile selected)
-    if (!m_playback->isPlaying() && m_input.selectedTile >= 0) {
+    // Arrow key tile navigation: long-press with 0.5s initial delay (only when stopped, tile selected, Ctrl NOT held)
+    bool ctrlHeld = (glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+                 || (glfwGetKey(m_window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
+    if (!m_playback->isPlaying() && m_input.selectedTile >= 0 && !ctrlHeld) {
         static double arrowHoldStart = 0;
         bool al=(glfwGetKey(m_window,GLFW_KEY_LEFT)==GLFW_PRESS);
         bool ar=(glfwGetKey(m_window,GLFW_KEY_RIGHT)==GLFW_PRESS);
