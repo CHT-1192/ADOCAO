@@ -253,7 +253,7 @@ void GameWindow::handleInput() {
         int tn=(int)m_level->tiles.size()-1;
         if (al || ar) {
             arrowHoldFrames++;
-            constexpr int initialDelay = 20;
+            constexpr int initialDelay = 160;  // 0.5s at 320fps
             bool move = (arrowHoldFrames == 1) || (arrowHoldFrames >= initialDelay);
             if (move) {
                 if (al && m_input.selectedTile > 0) m_input.selectedTile--;
