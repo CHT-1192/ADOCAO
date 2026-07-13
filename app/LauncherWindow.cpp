@@ -226,7 +226,7 @@ LauncherConfig showLauncher() {
     int forceHSIdx = 0;  // 0 = Kick
     bool legacyCulling = false;
     bool msaa = false;
-    int  resoIdx = 1;  // default: 1920x1080
+    int  resoIdx = 2;  // default: 1920x1080
     const std::array<const char*, 5> resoNames = {"960x540", "1280x720", "1920x1080", "2560x1440", "3840x2160"};
     const std::array<int, 5> resoW = {960, 1280, 1920, 2560, 3840};
     const std::array<int, 5> resoH = {540, 720, 1080, 1440, 2160};
