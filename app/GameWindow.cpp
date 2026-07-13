@@ -229,20 +229,28 @@ void GameWindow::handleInput() {
         m_input.selectedTile = best;
     }
 
-    // Bookmark navigation: Ctrl+Left/Right (only when stopped)
-    bool ctrlHeld = (glfwGetKey(m_window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-                 || (glfwGetKey(m_window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
-    if (!m_playback->isPlaying() && ctrlHeld && !m_level->bookmarkFloors.empty()) {
-        static bool wasLeft=false, wasRight=false;
-        bool left=(glfwGetKey(m_window,GLFW_KEY_LEFT)==GLFW_PRESS);
-        bool rightK=(glfwGetKey(m_window,GLFW_KEY_RIGHT)==GLFW_PRESS);
-        if (left&&!wasLeft) { int cur=m_input.selectedTile, target=-1;
-            for (int b : m_level->bookmarkFloors) { if (b<cur) target=b; else break; }
-            if (target>=0) navigateToTile(*m_level,target,m_camera,m_input.baseTargetX,m_input.baseTargetY,m_input.offsetX,m_input.offsetY,m_input.selectedTile); }
-        if (rightK&&!wasRight) { int cur=m_input.selectedTile, target=-1;
-            for (int b : m_level->bookmarkFloors) { if (b>cur) { target=b; break; } }
-            if (target>=0) navigateToTile(*m_level,target,m_camera,m_input.baseTargetX,m_input.baseTargetY,m_input.offsetX,m_input.offsetY,m_input.selectedTile); }
-        wasLeft=left; wasRight=rightK;
+    // Bookmark navigation: Ctrl+Left/Right with long-press repeat (only when stopped)
+    if (!m_playback->isPlaying() && !m_level->bookmarkFloors.empty()) {
+        static double bmLHoldStart = 0, bmRHoldStart = 0;
+        bool bmL=(glfwGetKey(m_window,GLFW_KEY_LEFT_CONTROL)==GLFW_PRESS || glfwGetKey(m_window,GLFW_KEY_RIGHT_CONTROL)==GLFW_PRESS)
+              && (glfwGetKey(m_window,GLFW_KEY_LEFT)==GLFW_PRESS);
+        bool bmR=(glfwGetKey(m_window,GLFW_KEY_LEFT_CONTROL)==GLFW_PRESS || glfwGetKey(m_window,GLFW_KEY_RIGHT_CONTROL)==GLFW_PRESS)
+              && (glfwGetKey(m_window,GLFW_KEY_RIGHT)==GLFW_PRESS);
+        double now = glfwGetTime();
+        auto jumpBM = [&](bool left) {
+            int cur=m_input.selectedTile, target=-1;
+            if (left) { for (int b : m_level->bookmarkFloors) { if (b<cur) target=b; else break; } }
+            else      { for (int b : m_level->bookmarkFloors) { if (b>cur) { target=b; break; } } }
+            if (target>=0) navigateToTile(*m_level,target,m_camera,m_input.baseTargetX,m_input.baseTargetY,m_input.offsetX,m_input.offsetY,m_input.selectedTile);
+        };
+        if (bmL) {
+            if (bmLHoldStart == 0) { bmLHoldStart = now; jumpBM(true); }
+            else if (now - bmLHoldStart >= 0.5) { bmLHoldStart = now; jumpBM(true); }
+        } else { bmLHoldStart = 0; }
+        if (bmR) {
+            if (bmRHoldStart == 0) { bmRHoldStart = now; jumpBM(false); }
+            else if (now - bmRHoldStart >= 0.5) { bmRHoldStart = now; jumpBM(false); }
+        } else { bmRHoldStart = 0; }
     }
 
     // Arrow key tile navigation: long-press with 0.5s initial delay (only when stopped, tile selected)
