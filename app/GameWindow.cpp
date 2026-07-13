@@ -227,6 +227,9 @@ void GameWindow::handleInput() {
             if (d < bestDist*bestDist) { bestDist = std::sqrt(d); best = i; }
         }
         m_input.selectedTile = best;
+        if (best >= 0) navigateToTile(*m_level, best, m_camera,
+            m_input.baseTargetX, m_input.baseTargetY,
+            m_input.offsetX, m_input.offsetY, m_input.selectedTile);
     }
 
     // Bookmark navigation: Ctrl+Left/Right with long-press repeat (only when stopped)
@@ -269,6 +272,9 @@ void GameWindow::handleInput() {
             if (move) {
                 if (al && m_input.selectedTile > 0) m_input.selectedTile--;
                 if (ar && m_input.selectedTile < tn - 1) m_input.selectedTile++;
+                navigateToTile(*m_level, m_input.selectedTile, m_camera,
+                    m_input.baseTargetX, m_input.baseTargetY,
+                    m_input.offsetX, m_input.offsetY, m_input.selectedTile);
             }
         } else {
             arrowHoldStart = 0;
