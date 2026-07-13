@@ -12,7 +12,7 @@ struct LauncherConfig {
     std::string backgroundColor  = "000000";  // 6-char hex
     bool   autoStroke   = true;
     bool   enableHitsounds = true;
-    bool   forceHitsounds = false;  // force "None" hitsound → "Kick"
+    std::string forceHitsoundType;  // force "None" hitsound to this type (empty = disabled)
     bool   autoPlay = false;       // auto-start playback after loading
     bool   legacyCulling = false;  // use legacy brute-force culling
     bool   msaa = false;           // enable MSAA 2x anti-aliasing

@@ -222,13 +222,21 @@ LauncherConfig showLauncher() {
     char bgBuf[8]     = "000000";
     bool autoStroke = true;
     bool enableHitsounds = true;
-    bool forceHitsounds = false;
+    int forceHSIdx = 0;  // 0 = None (disabled)
     bool legacyCulling = false;
     bool msaa = false;
     int  resoIdx = 1;  // default: 1920x1080
     const std::array<const char*, 5> resoNames = {"960x540", "1280x720", "1920x1080", "2560x1440", "3840x2160"};
     const std::array<int, 5> resoW = {960, 1280, 1920, 2560, 3840};
     const std::array<int, 5> resoH = {540, 720, 1080, 1440, 2160};
+    const std::array<const char*, 29> hsTypes = {
+        "None", "Kick","KickHouse","KickChroma","KickRupture",
+        "Snare","SnareHouse","SnareVapor","Clap","ClapHit","ClapHitEcho",
+        "Hat","HatHouse","Chuck","Hammer","Shaker","ShakerLoud",
+        "Sidestick","Stick","ReverbClack","ReverbClap","Squareshot",
+        "FireTile","IceTile","PowerUp","PowerDown","VehiclePositive",
+        "VehicleNegative","Sizzle"
+    };
 
     bool done = false;
 
@@ -298,7 +306,8 @@ LauncherConfig showLauncher() {
         ImGui::Checkbox("Fullscreen", &cfg.fullscreen);
 
         // Checkboxes row 2
-        ImGui::Checkbox("Force HS", &forceHitsounds);
+        ImGui::SetNextItemWidth(140 * S);
+        ImGui::Combo("Force HS", &forceHSIdx, hsTypes.data(), (int)hsTypes.size());
         ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
         ImGui::Checkbox("Legacy Culling", &legacyCulling);
         ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
@@ -359,7 +368,7 @@ LauncherConfig showLauncher() {
             cfg.backgroundColor  = bgBuf;
             cfg.autoStroke       = autoStroke;
             cfg.enableHitsounds  = enableHitsounds;
-            cfg.forceHitsounds   = forceHitsounds;
+            cfg.forceHitsoundType = (forceHSIdx > 0) ? hsTypes[forceHSIdx] : "";
             cfg.legacyCulling    = legacyCulling;
             cfg.msaa             = msaa;
             cfg.resolutionW      = resoW[resoIdx];

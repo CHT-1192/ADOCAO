@@ -1,5 +1,6 @@
 #include "Application.hpp"
 #include "LauncherWindow.hpp"
+#include "util/Logger.hpp"
 #include <cstring>
 
 int main(int argc, char* argv[]) {
@@ -19,7 +20,23 @@ int main(int argc, char* argv[]) {
         else if (strcmp(argv[i], "--bg") == 0         && i+1<argc) cli.backgroundColor = argv[++i];
         else if (strcmp(argv[i], "--no-auto-stroke") == 0)        cli.autoStroke = false;
         else if (strcmp(argv[i], "--no-hitsound") == 0)           cli.enableHitsounds = false;
-        else if (strcmp(argv[i], "--force-hitsound") == 0)      cli.forceHitsounds = true;
+        else if (strcmp(argv[i], "--force-hitsound") == 0) {
+            if (i+1 < argc && argv[i+1][0] != '-') {
+                cli.forceHitsoundType = argv[++i];
+                // Validate type
+                static const char* valid[] = {"Kick","KickHouse","KickChroma","KickRupture",
+                    "Snare","SnareHouse","SnareVapor","Clap","ClapHit","ClapHitEcho",
+                    "Hat","HatHouse","Chuck","Hammer","Shaker","ShakerLoud",
+                    "Sidestick","Stick","ReverbClack","ReverbClap","Squareshot",
+                    "FireTile","IceTile","PowerUp","PowerDown","VehiclePositive",
+                    "VehicleNegative","Sizzle",nullptr};
+                bool ok = false;
+                for (int j = 0; valid[j]; j++) if (cli.forceHitsoundType == valid[j]) { ok = true; break; }
+                if (!ok) { LOG_W("Unknown hitsound type '%s', defaulting to Kick", cli.forceHitsoundType.c_str()); cli.forceHitsoundType = "Kick"; }
+            } else {
+                cli.forceHitsoundType = "Kick";
+            }
+        }
         else if (strcmp(argv[i], "--auto-play") == 0)           cli.autoPlay = true;
         else if (strcmp(argv[i], "--legacy-culling") == 0)   cli.legacyCulling = true;
         else if (strcmp(argv[i], "--msaa") == 0)                  cli.msaa = true;

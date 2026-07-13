@@ -349,7 +349,7 @@ std::vector<HitsoundTimestampGroup> PlaybackEngine::getHitsoundTimestampGroups()
     for (int i = 1; i < n; i++) {
         std::string type = (i < (int)m_level->tileHitsounds.size() && !m_level->tileHitsounds[i].empty())
             ? m_level->tileHitsounds[i] : defaultType;
-        if (m_forceHitsounds && type == "None") type = "Kick";
+        if (!m_forceHitsoundType.empty()) type = m_forceHitsoundType;
         float vol = defaultVol;
 
         auto key = std::make_pair(type, vol);
