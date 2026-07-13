@@ -245,22 +245,23 @@ void GameWindow::handleInput() {
         wasLeft=left; wasRight=rightK;
     }
 
-    // Arrow key tile navigation: long-press with initial delay (only when stopped, tile selected)
+    // Arrow key tile navigation: long-press with 0.5s initial delay (only when stopped, tile selected)
     if (!m_playback->isPlaying() && m_input.selectedTile >= 0) {
-        static int arrowHoldFrames = 0;
+        static double arrowHoldStart = 0;
         bool al=(glfwGetKey(m_window,GLFW_KEY_LEFT)==GLFW_PRESS);
         bool ar=(glfwGetKey(m_window,GLFW_KEY_RIGHT)==GLFW_PRESS);
         int tn=(int)m_level->tiles.size()-1;
         if (al || ar) {
-            arrowHoldFrames++;
-            constexpr int initialDelay = 160;  // 0.5s at 320fps
-            bool move = (arrowHoldFrames == 1) || (arrowHoldFrames >= initialDelay);
+            double now = glfwGetTime();
+            bool firstPress = (arrowHoldStart == 0);
+            if (firstPress) arrowHoldStart = now;
+            bool move = firstPress || (now - arrowHoldStart >= 0.5);
             if (move) {
                 if (al && m_input.selectedTile > 0) m_input.selectedTile--;
                 if (ar && m_input.selectedTile < tn - 1) m_input.selectedTile++;
             }
         } else {
-            arrowHoldFrames = 0;
+            arrowHoldStart = 0;
         }
     }
 }
