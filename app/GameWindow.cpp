@@ -65,6 +65,7 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
 
     // Create window
     GLFWmonitor* targetMonitor = cfg.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
+    if (cfg.msaa) glfwWindowHint(GLFW_SAMPLES, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -89,6 +90,7 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     glfwMakeContextCurrent(m_window);
     glfwSwapInterval(0);
     if (!loadGLCore()) { LOG_E("Failed to load OpenGL functions"); glfwDestroyWindow(m_window); return false; }
+    if (cfg.msaa) glEnable(GL_MULTISAMPLE);
     LOG_D("OpenGL %s | GLSL %s", glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
 
     // Shaders (heap-allocated, freed on destruction)

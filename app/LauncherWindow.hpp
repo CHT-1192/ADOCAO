@@ -15,6 +15,7 @@ struct LauncherConfig {
     bool   forceHitsounds = false;  // force "None" hitsound → "Kick"
     bool   autoPlay = false;       // auto-start playback after loading
     bool   legacyCulling = false;  // use legacy brute-force culling
+    bool   msaa = false;           // enable MSAA 2x anti-aliasing
     int  resolutionW = 1920;
     int  resolutionH = 1080;
     bool fullscreen = false;

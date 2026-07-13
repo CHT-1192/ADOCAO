@@ -224,6 +224,7 @@ LauncherConfig showLauncher() {
     bool enableHitsounds = true;
     bool forceHitsounds = false;
     bool legacyCulling = false;
+    bool msaa = false;
     int  resoIdx = 1;  // default: 1920x1080
     const std::array<const char*, 5> resoNames = {"960x540", "1280x720", "1920x1080", "2560x1440", "3840x2160"};
     const std::array<int, 5> resoW = {960, 1280, 1920, 2560, 3840};
@@ -300,6 +301,8 @@ LauncherConfig showLauncher() {
         ImGui::Checkbox("Force HS", &forceHitsounds);
         ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
         ImGui::Checkbox("Legacy Culling", &legacyCulling);
+        ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
+        ImGui::Checkbox("MSAA 2x", &msaa);
 
         ImGui::Spacing();
 
@@ -358,6 +361,7 @@ LauncherConfig showLauncher() {
             cfg.enableHitsounds  = enableHitsounds;
             cfg.forceHitsounds   = forceHitsounds;
             cfg.legacyCulling    = legacyCulling;
+            cfg.msaa             = msaa;
             cfg.resolutionW      = resoW[resoIdx];
             cfg.resolutionH      = resoH[resoIdx];
             cfg.cancelled        = false;
