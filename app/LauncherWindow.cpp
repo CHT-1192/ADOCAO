@@ -222,7 +222,8 @@ LauncherConfig showLauncher() {
     char bgBuf[8]     = "000000";
     bool autoStroke = true;
     bool enableHitsounds = true;
-    int forceHSIdx = 0;  // 0 = None (disabled)
+    bool forceHS = false;
+    int forceHSIdx = 0;  // 0 = Kick
     bool legacyCulling = false;
     bool msaa = false;
     int  resoIdx = 1;  // default: 1920x1080
@@ -306,8 +307,10 @@ LauncherConfig showLauncher() {
         ImGui::Checkbox("Fullscreen", &cfg.fullscreen);
 
         // Checkboxes row 2
+        ImGui::Checkbox("Force HS", &forceHS);
+        ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
         ImGui::SetNextItemWidth(140 * S);
-        ImGui::Combo("Force HS", &forceHSIdx, hsTypes.data(), (int)hsTypes.size());
+        ImGui::Combo("##forceHSType", &forceHSIdx, hsTypes.data(), (int)hsTypes.size());
         ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
         ImGui::Checkbox("Legacy Culling", &legacyCulling);
         ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
@@ -368,7 +371,7 @@ LauncherConfig showLauncher() {
             cfg.backgroundColor  = bgBuf;
             cfg.autoStroke       = autoStroke;
             cfg.enableHitsounds  = enableHitsounds;
-            cfg.forceHitsoundType = hsTypes[forceHSIdx];
+            cfg.forceHitsoundType = forceHS ? hsTypes[forceHSIdx] : "";
             cfg.legacyCulling    = legacyCulling;
             cfg.msaa             = msaa;
             cfg.resolutionW      = resoW[resoIdx];
