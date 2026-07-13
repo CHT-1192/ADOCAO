@@ -236,24 +236,32 @@ void GameWindow::handleInput() {
         static bool wasLeft=false, wasRight=false;
         bool left=(glfwGetKey(m_window,GLFW_KEY_LEFT)==GLFW_PRESS);
         bool rightK=(glfwGetKey(m_window,GLFW_KEY_RIGHT)==GLFW_PRESS);
-        if (left&&!wasLeft) { int cur=m_playback->currentTileIndex(), target=-1;
+        if (left&&!wasLeft) { int cur=m_input.selectedTile, target=-1;
             for (int b : m_level->bookmarkFloors) { if (b<cur) target=b; else break; }
             if (target>=0) navigateToTile(*m_level,target,m_camera,m_input.baseTargetX,m_input.baseTargetY,m_input.offsetX,m_input.offsetY,m_input.selectedTile); }
-        if (rightK&&!wasRight) { int cur=m_playback->currentTileIndex(), target=-1;
+        if (rightK&&!wasRight) { int cur=m_input.selectedTile, target=-1;
             for (int b : m_level->bookmarkFloors) { if (b>cur) { target=b; break; } }
             if (target>=0) navigateToTile(*m_level,target,m_camera,m_input.baseTargetX,m_input.baseTargetY,m_input.offsetX,m_input.offsetY,m_input.selectedTile); }
         wasLeft=left; wasRight=rightK;
     }
 
-    // Arrow key tile navigation (only when stopped, tile selected)
+    // Arrow key tile navigation: long-press with initial delay (only when stopped, tile selected)
     if (!m_playback->isPlaying() && m_input.selectedTile >= 0) {
-        static bool wasAL=false, wasAR=false;
+        static int arrowHoldFrames = 0;
         bool al=(glfwGetKey(m_window,GLFW_KEY_LEFT)==GLFW_PRESS);
         bool ar=(glfwGetKey(m_window,GLFW_KEY_RIGHT)==GLFW_PRESS);
         int tn=(int)m_level->tiles.size()-1;
-        if (al&&!wasAL&&m_input.selectedTile>0) m_input.selectedTile--;
-        if (ar&&!wasAR&&m_input.selectedTile<tn-1) m_input.selectedTile++;
-        wasAL=al; wasAR=ar;
+        if (al || ar) {
+            arrowHoldFrames++;
+            constexpr int initialDelay = 20;
+            bool move = (arrowHoldFrames == 1) || (arrowHoldFrames >= initialDelay);
+            if (move) {
+                if (al && m_input.selectedTile > 0) m_input.selectedTile--;
+                if (ar && m_input.selectedTile < tn - 1) m_input.selectedTile++;
+            }
+        } else {
+            arrowHoldFrames = 0;
+        }
     }
 }
 
