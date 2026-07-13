@@ -229,8 +229,8 @@ LauncherConfig showLauncher() {
     const std::array<const char*, 5> resoNames = {"960x540", "1280x720", "1920x1080", "2560x1440", "3840x2160"};
     const std::array<int, 5> resoW = {960, 1280, 1920, 2560, 3840};
     const std::array<int, 5> resoH = {540, 720, 1080, 1440, 2160};
-    const std::array<const char*, 29> hsTypes = {
-        "None", "Kick","KickHouse","KickChroma","KickRupture",
+    const std::array<const char*, 27> hsTypes = {
+        "Kick","KickHouse","KickChroma","KickRupture",
         "Snare","SnareHouse","SnareVapor","Clap","ClapHit","ClapHitEcho",
         "Hat","HatHouse","Chuck","Hammer","Shaker","ShakerLoud",
         "Sidestick","Stick","ReverbClack","ReverbClap","Squareshot",
@@ -368,7 +368,7 @@ LauncherConfig showLauncher() {
             cfg.backgroundColor  = bgBuf;
             cfg.autoStroke       = autoStroke;
             cfg.enableHitsounds  = enableHitsounds;
-            cfg.forceHitsoundType = (forceHSIdx > 0) ? hsTypes[forceHSIdx] : "";
+            cfg.forceHitsoundType = hsTypes[forceHSIdx];
             cfg.legacyCulling    = legacyCulling;
             cfg.msaa             = msaa;
             cfg.resolutionW      = resoW[resoIdx];
