@@ -57,7 +57,7 @@ void Logger::init(const std::string& logPath, bool debugConsole) {
 
 void Logger::log(LogLevel level, const char* fmt, ...) {
     std::string ts = timestamp();
-    std::string prefix = "[ " + ts + " / " + levelStr(level) + " ] ";
+    std::string prefix = "[ " + ts + " | " + levelStr(level) + " ] ";
 
     va_list args;
 
