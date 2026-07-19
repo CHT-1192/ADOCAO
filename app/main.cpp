@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
         }
         else if (strcmp(argv[i], "--auto-play") == 0)           cli.autoPlay = true;
         else if (strcmp(argv[i], "--legacy-culling") == 0)   cli.legacyCulling = true;
-        else if (strcmp(argv[i], "--msaa") == 0)                  cli.msaa = true;
+        else if (strcmp(argv[i], "--msaa") == 0 && i+1<argc)   cli.msaaSamples = atoi(argv[++i]);
         else if (strcmp(argv[i], "--no-trail") == 0)              cli.showTrail = false;
         else if (strcmp(argv[i], "--export") == 0)                cli.exportHitsounds = true;
     }

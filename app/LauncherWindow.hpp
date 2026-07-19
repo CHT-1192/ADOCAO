@@ -15,7 +15,7 @@ struct LauncherConfig {
     std::string forceHitsoundType;  // force "None" hitsound to this type (empty = disabled)
     bool   autoPlay = false;       // auto-start playback after loading
     bool   legacyCulling = false;  // use legacy brute-force culling
-    bool   msaa = false;           // enable MSAA 2x anti-aliasing
+    int    msaaSamples = 0;        // MSAA samples (0=off, 2, 4, 8)
     int  resolutionW = 1920;
     int  resolutionH = 1080;
     bool fullscreen = false;
