@@ -226,6 +226,9 @@ LauncherConfig showLauncher() {
     int forceHSIdx = 0;  // 0 = Kick
     bool legacyCulling = false;
     bool msaa = false;
+#ifdef ADOCAO_EXTREME_ZOOM
+    msaa = true;
+#endif
     int msaaSIdx = 0;  // 0=2x, 1=4x, 2=8x
     const std::array<const char*, 3> msaaNames = {"2x", "4x", "8x (not recommended)"};
     const std::array<int, 3> msaaSamplesArr = {2, 4, 8};
