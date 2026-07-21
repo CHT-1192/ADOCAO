@@ -36,11 +36,13 @@ public:
     float totalDuration() const;
     std::vector<double> getHitsoundTimestamps() const;
     std::vector<struct HitsoundTimestampGroup> getHitsoundTimestampGroups() const;
+    float preRoll() const { return m_preRoll; }
+    float audioStartOffset() const { return m_audioStartOffset; }
     void computePlanetTrails() const;
     void setForceHitsoundType(const std::string& t) { m_forceHitsoundType = t; }
     void setLagacyCulling(bool v)   { m_legacyCulling = v; }
     bool legacyCulling() const      { return m_legacyCulling; }
-    void computePositionsAtTime(float t, glm::vec2& redOut, glm::vec2& blueOut) const;
+    void computePositionsAtTime(float t, glm::dvec2& redOut, glm::dvec2& blueOut) const;
 
 private:
     const LevelData* m_level = nullptr;
@@ -66,6 +68,8 @@ private:
     double m_startWallClock = 0.0;  // wall-clock time when playback started
     int    m_currentTileIndex = 0;
     bool   m_reportedEnd = false;   // track if end-of-level log was emitted
+    float  m_preRoll = 0;           // total pre-tile-1 time (≥360° on tile 0)
+    float  m_audioStartOffset = 0;  // seconds before music starts (wall-clock)
 
     void precalculateTiming();
     int  findTileIndex(float timeInLevel) const;

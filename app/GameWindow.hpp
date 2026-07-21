@@ -3,6 +3,7 @@
 #include "LauncherWindow.hpp"
 #include "LevelLoader.hpp"
 #include "camera/Camera.hpp"
+#include <future>
 
 struct GLFWwindow;
 class TileMesh;
@@ -18,6 +19,10 @@ public:
 
 private:
     GLFWwindow* m_window = nullptr;
+    GLFWwindow* m_sharedWindow = nullptr;
+    std::future<void> m_buildFuture;
+    bool m_meshReady = false;
+    bool m_useAsyncBuild = false;
     const LauncherConfig* m_cfg = nullptr;
     LevelData* m_level = nullptr;
     PlaybackEngine* m_playback = nullptr;
@@ -40,7 +45,13 @@ private:
     float m_bgR=0, m_bgG=0, m_bgB=0;
     double m_lastFrameTime = 0;
     bool m_wasSpacePressed = false;
+    bool m_wasAltEnterPressed = false;
     double m_autoPlayTriggerTime = 0;
+    bool m_musicPending = false;
+    bool m_exclusiveFullscreen = true;
+    bool m_isFullscreen = false;
+    int m_windowedX = 0, m_windowedY = 0;
+    int m_windowedW = 1920, m_windowedH = 1080;
 
     // Rendering objects
     Shader* m_tileShader = nullptr;
@@ -51,4 +62,5 @@ private:
     void handleInput();
     void update(float deltaMs);
     void render();
+    void toggleFullscreen();
 };

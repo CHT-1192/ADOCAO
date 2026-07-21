@@ -118,24 +118,42 @@ bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress
         size_t angleDataEnd = 0;
         angleData = parseAngleDataFast(jsonStr.c_str(), jsonStr.size(), angleDataEnd);
 
-        // Build a stripped version: replace the angleData array with [] so
-        // nlohmann only parses the small objects (settings, actions, etc.)
-        std::string stripped;
-        if (angleDataEnd > 0) {
-            // Find the start of the angleData array
-            const char* p = std::strstr(jsonStr.c_str(), "\"angleData\"");
-            size_t arrStart = p ? (p - jsonStr.c_str()) + 11 : 0;
-            // Skip whitespace and colon
-            while (arrStart < jsonStr.size() && (jsonStr[arrStart] == ' ' || jsonStr[arrStart] == ':'
-                   || jsonStr[arrStart] == '\t' || jsonStr[arrStart] == '\n'))
+        // Helper: strip a JSON array value from a string, replacing it with [].
+        // Returns the stripped string. Prevents nlohmann from parsing huge unused arrays.
+        auto stripArray = [](const std::string& src, const char* key) -> std::string {
+            const char* p = std::strstr(src.c_str(), key);
+            if (!p) return src;
+            size_t keyStart = p - src.c_str();
+            size_t arrStart = keyStart + strlen(key);
+            while (arrStart < src.size() && (src[arrStart] == ' ' || src[arrStart] == ':'
+                   || src[arrStart] == '\t' || src[arrStart] == '\n'))
                 arrStart++;
-            stripped.reserve(arrStart + 2 + (jsonStr.size() - angleDataEnd));
-            stripped.append(jsonStr, 0, arrStart);
-            stripped += "[]";
-            stripped.append(jsonStr, angleDataEnd, std::string::npos);
-        } else {
-            stripped = jsonStr;
+            if (arrStart >= src.size() || src[arrStart] != '[') return src;
+            // Count brackets to find matching ]
+            int depth = 1;
+            size_t arrEnd = arrStart + 1;
+            bool inString = false;
+            for (; arrEnd < src.size() && depth > 0; arrEnd++) {
+                char c = src[arrEnd];
+                if (c == '"' && (arrEnd == 0 || src[arrEnd-1] != '\\')) inString = !inString;
+                if (inString) continue;
+                if (c == '[') depth++;
+                else if (c == ']') depth--;
+            }
+            std::string out;
+            out.reserve(keyStart + 2 + (src.size() - arrEnd));
+            out.append(src, 0, arrStart);
+            out += "[]";
+            out.append(src, arrEnd, std::string::npos);
+            return out;
+        };
+
+        // Strip angleData + decorations so nlohmann only parses small objects
+        std::string stripped = jsonStr;
+        if (angleDataEnd > 0) {
+            stripped = stripArray(jsonStr, "\"angleData\"");
         }
+        stripped = stripArray(stripped, "\"decorations\"");
 
         if (onProgress) onProgress(0.12f, "Parsing JSON...");
         auto root = nlohmann::json::parse(stripped);
@@ -178,10 +196,7 @@ bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress
             actions = root["actions"];
         }
 
-        // decorations
-        if (root.contains("decorations")) {
-            decorations = root["decorations"];
-        }
+        // decorations: not used, skip parsing entirely
 
         if (onProgress) onProgress(0.20f, "Processing level data...");
 
@@ -402,7 +417,6 @@ void LevelData::applyPositionTrackOffsets() {
 void LevelData::releaseMemory() {
     // Free arrays no longer needed after loading completes
     actions = nlohmann::json();
-    decorations = nlohmann::json();
     tilePositionOffsets.clear(); tilePositionOffsets.shrink_to_fit();
     tileHitsounds.clear(); tileHitsounds.shrink_to_fit();
     std::string().swap(pathData);

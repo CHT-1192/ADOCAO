@@ -16,6 +16,7 @@ struct LauncherConfig {
     bool   autoPlay = false;       // auto-start playback after loading
     bool   legacyCulling = false;  // use legacy brute-force culling
     int    msaaSamples = 0;        // MSAA samples (0=off, 2, 4, 8)
+    bool   exclusiveFullscreen = true; // exclusive fullscreen (vs borderless windowed)
     int  resolutionW = 1920;
     int  resolutionH = 1080;
     bool fullscreen = false;

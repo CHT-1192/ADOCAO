@@ -62,27 +62,41 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     m_hitsoundMgr = &result.hitsounds;
     m_audioEngine = &result.audio;
     m_targetAspect = (float)cfg.resolutionW / (float)cfg.resolutionH;
+    LOG_D("GameWindow::init: %zu tiles, fullscreen=%d exclusive=%d", m_level->tiles.size(), cfg.fullscreen, cfg.exclusiveFullscreen);
 
     // Create window
-    GLFWmonitor* targetMonitor = cfg.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
+    m_exclusiveFullscreen = cfg.exclusiveFullscreen;
+    m_isFullscreen = cfg.fullscreen;
+    m_windowedW = cfg.resolutionW;
+    m_windowedH = cfg.resolutionH;
+
     if (cfg.msaaSamples > 0) glfwWindowHint(GLFW_SAMPLES, cfg.msaaSamples);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 
-    if (targetMonitor) {
-        const GLFWvidmode* mode = glfwGetVideoMode(targetMonitor);
-        m_window = glfwCreateWindow(mode->width, mode->height, "ADOCAO", targetMonitor, nullptr);
+    GLFWmonitor* primary = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = primary ? glfwGetVideoMode(primary) : nullptr;
+
+    if (cfg.fullscreen) {
+        if (cfg.exclusiveFullscreen) {
+            // Exclusive fullscreen: GPU dedicated to this app, mode switch
+            glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
+            m_window = glfwCreateWindow(mode->width, mode->height, "ADOCAO", primary, nullptr);
+        } else {
+            // Borderless windowed fullscreen: compositor still active
+            glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+            m_window = glfwCreateWindow(mode->width, mode->height, "ADOCAO", nullptr, nullptr);
+            glfwSetWindowPos(m_window, 0, 0);
+        }
     } else {
+        glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
         m_window = glfwCreateWindow(cfg.resolutionW, cfg.resolutionH, "ADOCAO", nullptr, nullptr);
-        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-        if (monitor) {
-            const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-            if (mode) {
-                glfwSetWindowPos(m_window, (mode->width-cfg.resolutionW)/2, (mode->height-cfg.resolutionH)/2);
-            }
+        if (mode) {
+            glfwSetWindowPos(m_window, (mode->width-cfg.resolutionW)/2, (mode->height-cfg.resolutionH)/2);
+            m_windowedX = (mode->width-cfg.resolutionW)/2;
+            m_windowedY = (mode->height-cfg.resolutionH)/2;
         }
     }
     if (!m_window) { LOG_E("Failed to create game window"); return false; }
@@ -92,6 +106,24 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     if (!loadGLCore()) { LOG_E("Failed to load OpenGL functions"); glfwDestroyWindow(m_window); return false; }
     if (cfg.msaaSamples > 0) glEnable(GL_MULTISAMPLE);
     LOG_D("OpenGL %s | GLSL %s", glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+    // Detect GPU: only NVIDIA has reliable GL context sharing across threads.
+    // Intel & AMD iGPUs often fail to share VAO/VBO between contexts → sync build.
+    const char* vendor = (const char*)glGetString(GL_VENDOR);
+    const char* renderer = (const char*)glGetString(GL_RENDERER);
+    LOG_D("GPU vendor=%s renderer=%s", vendor ? vendor : "?", renderer ? renderer : "?");
+    if (vendor) {
+        std::string v(vendor);
+        m_useAsyncBuild = (v.find("NVIDIA") != std::string::npos);
+    } else {
+        m_useAsyncBuild = false;
+    }
+    LOG_D("Async build: %s", m_useAsyncBuild ? "ON" : "OFF (sync)");
+
+    // Show window immediately so user sees it while heavy init runs
+    glClearColor(0.12f, 0.12f, 0.14f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glfwSwapBuffers(m_window);
 
     // Shaders (heap-allocated, freed on destruction)
     m_tileShader = new Shader();
@@ -113,12 +145,40 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
 
     // Track
     m_tileMesh = new TileMesh();
-    m_tileMesh->build(*m_level, cfg.trackFillColor, cfg.trackStrokeColor, cfg.legacyCulling);
-    std::vector<double>().swap(m_level->angleData);
-    m_level->tileBPMs.clear(); m_level->tileBPMs.shrink_to_fit();
-    m_level->tileHasTwirl.clear(); m_level->tileHasTwirl.shrink_to_fit();
-    m_level->tileHasSetSpeed.clear(); m_level->tileHasSetSpeed.shrink_to_fit();
 
+    if (m_useAsyncBuild) {
+        // Async: build on shared GL context in background thread
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+        glfwWindowHint(GLFW_SAMPLES, 0);
+        m_sharedWindow = glfwCreateWindow(1, 1, "buildctx", nullptr, m_window);
+        if (m_sharedWindow) {
+            LOG_D("Spawning background mesh build thread");
+            m_buildFuture = std::async(std::launch::async, [this, &cfg]() {
+                glfwMakeContextCurrent(m_sharedWindow);
+                m_tileMesh->build(*m_level, cfg.trackFillColor, cfg.trackStrokeColor, cfg.legacyCulling);
+                if (m_playback->redPlanet()) {
+                    m_playback->redPlanet()->buildGPU();
+                    m_playback->bluePlanet()->buildGPU();
+                }
+                glfwMakeContextCurrent(nullptr);
+            });
+        } else {
+            LOG_W("Shared context creation failed, falling back to sync build");
+            m_useAsyncBuild = false;
+        }
+    }
+
+    if (!m_useAsyncBuild) {
+        // Sync: build on main thread (window already visible)
+        m_tileMesh->build(*m_level, cfg.trackFillColor, cfg.trackStrokeColor, cfg.legacyCulling);
+        std::vector<double>().swap(m_level->angleData);
+        m_level->tileBPMs.clear(); m_level->tileBPMs.shrink_to_fit();
+        m_level->tileHasTwirl.clear(); m_level->tileHasTwirl.shrink_to_fit();
+        m_level->tileHasSetSpeed.clear(); m_level->tileHasSetSpeed.shrink_to_fit();
+        if (m_playback->redPlanet()) { m_playback->redPlanet()->buildGPU(); m_playback->bluePlanet()->buildGPU(); }
+        m_meshReady = true;
+    }
     // Camera + background
     {
         std::string hex = cfg.backgroundColor;
@@ -131,9 +191,6 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
         m_input.baseTargetX = t.position[0]; m_input.baseTargetY = t.position[1];
     }
     m_input.camera = &m_camera;
-
-    // Planet GPU
-    if (m_playback->redPlanet()) { m_playback->redPlanet()->buildGPU(); m_playback->bluePlanet()->buildGPU(); }
 
     // Hitsound attach
     if (m_hitsoundMgr->isSynthesized()) {
@@ -179,6 +236,15 @@ void GameWindow::handleInput() {
     if (glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(m_window, GLFW_TRUE);
 
+    // Alt+Enter toggles fullscreen
+    bool altEnter = (glfwGetKey(m_window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS
+                  || glfwGetKey(m_window, GLFW_KEY_RIGHT_ALT) == GLFW_PRESS)
+                 && glfwGetKey(m_window, GLFW_KEY_ENTER) == GLFW_PRESS;
+    if (altEnter && !m_wasAltEnterPressed) {
+        toggleFullscreen();
+    }
+    m_wasAltEnterPressed = altEnter;
+
     double now = glfwGetTime();
 
     // Space toggles playback (or auto-play trigger)
@@ -199,11 +265,11 @@ void GameWindow::handleInput() {
                 m_input.selectedTile = -1;
             } else {
                 m_playback->start(glfwGetTime());
-                m_hitsoundMgr->resetAt(offsetSec);
-                if (m_audioEngine->hasMusic()) { m_audioEngine->seek(offsetSec); m_audioEngine->play(); }
-                else m_audioEngine->play();
+                m_hitsoundMgr->resetAt(0);
+                m_musicPending = m_audioEngine->hasMusic();
+                if (!m_musicPending) m_audioEngine->play();
             }
-        } else { m_playback->stop(); m_audioEngine->pause(); }
+        } else { m_playback->stop(); m_audioEngine->pause(); m_musicPending = false; }
     }
     m_wasSpacePressed = spacePressed;
 
@@ -289,6 +355,12 @@ void GameWindow::update(float) {
 
     // Playback update
     if (m_playback->isPlaying()) {
+        // Delayed music start: wait for audioStartOffset before playing from position 0
+        if (m_musicPending && m_playback->elapsedTimeMs() >= m_playback->audioStartOffset() * 1000.0f) {
+            m_musicPending = false;
+            m_audioEngine->seek(0);
+            m_audioEngine->play();
+        }
         if (m_audioEngine->hasMusic() && m_audioEngine->isPlaying()) {
             m_playback->syncToAudio(m_audioEngine->position(), m_level->settings.offset/1000.0f);
         } else {
@@ -379,6 +451,26 @@ void GameWindow::render() {
     glfwSwapBuffers(m_window);
 }
 
+void GameWindow::toggleFullscreen() {
+    if (m_isFullscreen) {
+        // Go windowed
+        glfwSetWindowMonitor(m_window, nullptr,
+            m_windowedX, m_windowedY, m_windowedW, m_windowedH, 0);
+        m_isFullscreen = false;
+    } else {
+        // Save windowed position and size
+        glfwGetWindowPos(m_window, &m_windowedX, &m_windowedY);
+        glfwGetWindowSize(m_window, &m_windowedW, &m_windowedH);
+
+        GLFWmonitor* primary = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = glfwGetVideoMode(primary);
+        if (!mode) return;
+
+        glfwSetWindowMonitor(m_window, primary, 0, 0, mode->width, mode->height, GLFW_DONT_CARE);
+        m_isFullscreen = true;
+    }
+}
+
 void GameWindow::run() {
     double targetFrameTime;
 #ifdef ADOCAO_HIGH_FPS
@@ -390,6 +482,23 @@ void GameWindow::run() {
     while (!glfwWindowShouldClose(m_window)) {
         glfwPollEvents();
         handleInput();
+
+        // Check async build completion (NVIDIA/AMD only)
+        if (!m_meshReady && m_buildFuture.valid()) {
+            if (m_buildFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+                m_buildFuture.get();
+                m_meshReady = true;
+                if (m_sharedWindow) {
+                    glfwDestroyWindow(m_sharedWindow);
+                    m_sharedWindow = nullptr;
+                }
+                std::vector<double>().swap(m_level->angleData);
+                m_level->tileBPMs.clear(); m_level->tileBPMs.shrink_to_fit();
+                m_level->tileHasTwirl.clear(); m_level->tileHasTwirl.shrink_to_fit();
+                m_level->tileHasSetSpeed.clear(); m_level->tileHasSetSpeed.shrink_to_fit();
+                LOG_D("Async mesh build complete");
+            }
+        }
 
         // Frame pacing
         double now = glfwGetTime();
@@ -406,8 +515,18 @@ void GameWindow::run() {
         if (deltaMs > 500.0f) deltaMs = 0.0f;
         else if (deltaMs > 100.0f) deltaMs = 100.0f;
 
-        update(deltaMs);
-        render();
+        if (m_meshReady) {
+            update(deltaMs);
+            render();
+        } else {
+            // Still building async: show background color, keep responsive
+            int fbW, fbH;
+            glfwGetFramebufferSize(m_window, &fbW, &fbH);
+            glViewport(0, 0, fbW, fbH);
+            glClearColor(m_bgR, m_bgG, m_bgB, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glfwSwapBuffers(m_window);
+        }
     }
 
     m_audioEngine->shutdown();

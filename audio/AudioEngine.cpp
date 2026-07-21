@@ -1,6 +1,9 @@
 #include "AudioEngine.hpp"
 #include "util/Logger.hpp"
 
+#define STB_VORBIS_HEADER_ONLY
+#include <stb_vorbis.c>  // enables MA_HAS_VORBIS in miniaudio
+
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 

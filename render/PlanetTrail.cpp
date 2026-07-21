@@ -64,27 +64,27 @@ void PlanetTrail::ringPopFront() {
     }
 }
 
-glm::vec2 PlanetTrail::catmullRom(const glm::vec2& p0, const glm::vec2& p1,
-                                   const glm::vec2& p2, const glm::vec2& p3, float t) {
-    float t2 = t * t, t3 = t2 * t;
-    float c0 = -0.5f * t3 + t2 - 0.5f * t;
-    float c1 =  1.5f * t3 - 2.5f * t2 + 1.0f;
-    float c2 = -1.5f * t3 + 2.0f * t2 + 0.5f * t;
-    float c3 =  0.5f * t3 - 0.5f * t2;
+glm::dvec2 PlanetTrail::catmullRom(const glm::dvec2& p0, const glm::dvec2& p1,
+                                    const glm::dvec2& p2, const glm::dvec2& p3, float t) {
+    double t2 = t * t, t3 = t2 * t;
+    double c0 = -0.5 * t3 + t2 - 0.5 * t;
+    double c1 =  1.5 * t3 - 2.5 * t2 + 1.0;
+    double c2 = -1.5 * t3 + 2.0 * t2 + 0.5 * t;
+    double c3 =  0.5 * t3 - 0.5 * t2;
     return c0 * p0 + c1 * p1 + c2 * p2 + c3 * p3;
 }
 
-glm::vec2 PlanetTrail::catmullRomTangent(const glm::vec2& p0, const glm::vec2& p1,
-                                          const glm::vec2& p2, const glm::vec2& p3, float t) {
-    float t2 = t * t;
-    float c0 = -1.5f * t2 + 2.0f * t - 0.5f;
-    float c1 =  4.5f * t2 - 5.0f * t;
-    float c2 = -4.5f * t2 + 4.0f * t + 0.5f;
-    float c3 =  1.5f * t2 - 1.0f * t;
+glm::dvec2 PlanetTrail::catmullRomTangent(const glm::dvec2& p0, const glm::dvec2& p1,
+                                           const glm::dvec2& p2, const glm::dvec2& p3, float t) {
+    double t2 = t * t;
+    double c0 = -1.5 * t2 + 2.0 * t - 0.5;
+    double c1 =  4.5 * t2 - 5.0 * t;
+    double c2 = -4.5 * t2 + 4.0 * t + 0.5;
+    double c3 =  1.5 * t2 - 1.0 * t;
     return c0 * p0 + c1 * p1 + c2 * p2 + c3 * p3;
 }
 
-void PlanetTrail::update(const glm::vec2& pos, float currentTime) {
+void PlanetTrail::update(const glm::dvec2& pos, float currentTime) {
     ringPushBack({pos, currentTime});
     while (m_count > 0 && currentTime - ringAt(0).time > m_trailDuration)
         ringPopFront();
@@ -97,7 +97,7 @@ void PlanetTrail::clear() {
     m_dirty = true;
 }
 
-void PlanetTrail::setPoints(const float* xy, int count) {
+void PlanetTrail::setPoints(const double* xy, int count) {
     if (count < 2) { clear(); return; }
     m_head = 0;
     m_count = std::min(count, m_maxPoints);
@@ -107,27 +107,29 @@ void PlanetTrail::setPoints(const float* xy, int count) {
     }
     ensureGPUResources();
     int n = m_count;
-    m_center = (ringAt(0).pos + ringAt(n-1).pos) * 0.5f;
+    m_center = (ringAt(0).pos + ringAt(n-1).pos) * 0.5;
     const int segsPerPoint = 4;
     int totalSegments = (n-1) * segsPerPoint;
     int vertCount = (totalSegments+1)*2, idxCount = totalSegments*6;
     m_verts.resize(vertCount*3);
     m_indices.resize(idxCount);
-    float maxWidth = m_planetRadius*2.0f;
+    double maxWidth = (double)(m_planetRadius * 2.0f);
     int vi=0;
     for (int seg=0; seg<=totalSegments; seg++) {
-        float globalT = (float)seg/(float)totalSegments;
-        float rawIdx = globalT*(n-1);
-        int i=(int)rawIdx; float localT=rawIdx-(float)i;
-        glm::vec2 p0=ringAt(std::max(0,i-1)).pos, p1=ringAt(i).pos;
-        glm::vec2 p2=ringAt(std::min(n-1,i+1)).pos, p3=ringAt(std::min(n-1,i+2)).pos;
-        glm::vec2 pt=catmullRom(p0,p1,p2,p3,localT);
-        glm::vec2 tangent=catmullRomTangent(p0,p1,p2,p3,localT);
-        float len=std::sqrt(tangent.x*tangent.x+tangent.y*tangent.y);
-        glm::vec2 normal=(len>0.001f)?glm::vec2(-tangent.y/len,tangent.x/len):glm::vec2(0,1);
-        float width=maxWidth*globalT;
-        m_verts[vi*3]=pt.x-m_center.x-normal.x*width*0.5f; m_verts[vi*3+1]=pt.y-m_center.y-normal.y*width*0.5f; m_verts[vi*3+2]=0; vi++;
-        m_verts[vi*3]=pt.x-m_center.x+normal.x*width*0.5f; m_verts[vi*3+1]=pt.y-m_center.y+normal.y*width*0.5f; m_verts[vi*3+2]=0; vi++;
+        double globalT = (double)seg / (double)totalSegments;
+        double rawIdx = globalT * (double)(n - 1);
+        int i=(int)rawIdx; double localT = rawIdx - (double)i;
+        glm::dvec2 p0=ringAt(std::max(0,i-1)).pos, p1=ringAt(i).pos;
+        glm::dvec2 p2=ringAt(std::min(n-1,i+1)).pos, p3=ringAt(std::min(n-1,i+2)).pos;
+        glm::dvec2 pt=catmullRom(p0,p1,p2,p3,(float)localT);
+        glm::dvec2 tangent=catmullRomTangent(p0,p1,p2,p3,(float)localT);
+        double len=std::sqrt(tangent.x*tangent.x+tangent.y*tangent.y);
+        glm::dvec2 normal=(len>0.001)?glm::dvec2(-tangent.y/len,tangent.x/len):glm::dvec2(0,1);
+        double width=maxWidth*globalT;
+        m_verts[vi*3]=(float)(pt.x-m_center.x-normal.x*width*0.5);
+        m_verts[vi*3+1]=(float)(pt.y-m_center.y-normal.y*width*0.5); m_verts[vi*3+2]=0; vi++;
+        m_verts[vi*3]=(float)(pt.x-m_center.x+normal.x*width*0.5);
+        m_verts[vi*3+1]=(float)(pt.y-m_center.y+normal.y*width*0.5); m_verts[vi*3+2]=0; vi++;
     }
     int ii=0;
     for (int seg=0; seg<totalSegments; seg++) {
@@ -167,25 +169,27 @@ void PlanetTrail::rebuildGeometry() {
     ensureGPUResources();
     int n = m_count;
     if (n < 2) { m_vertexCount = 0; m_indexCount = 0; return; }
-    m_center = (ringAt(0).pos + ringAt(n-1).pos) * 0.5f;
+    m_center = (ringAt(0).pos + ringAt(n-1).pos) * 0.5;
     const int segsPerPoint = 4;
     int totalSegments = (n-1)*segsPerPoint, vertCount = (totalSegments+1)*2, idxCount = totalSegments*6;
     m_verts.resize(vertCount*3);
     m_indices.resize(idxCount);
-    float maxWidth = m_planetRadius*2.0f;
+    double maxWidth = (double)(m_planetRadius * 2.0f);
     int vi=0;
     for (int seg=0; seg<=totalSegments; seg++) {
-        float globalT=(float)seg/(float)totalSegments, rawIdx=globalT*(n-1);
-        int i=(int)rawIdx; float localT=rawIdx-(float)i;
-        glm::vec2 p0=ringAt(std::max(0,i-1)).pos, p1=ringAt(i).pos;
-        glm::vec2 p2=ringAt(std::min(n-1,i+1)).pos, p3=ringAt(std::min(n-1,i+2)).pos;
-        glm::vec2 pt=catmullRom(p0,p1,p2,p3,localT);
-        glm::vec2 tangent=catmullRomTangent(p0,p1,p2,p3,localT);
-        float len=std::sqrt(tangent.x*tangent.x+tangent.y*tangent.y);
-        glm::vec2 normal=(len>0.001f)?glm::vec2(-tangent.y/len,tangent.x/len):glm::vec2(0,1);
-        float width=maxWidth*globalT;
-        m_verts[vi*3]=pt.x-m_center.x-normal.x*width*0.5f; m_verts[vi*3+1]=pt.y-m_center.y-normal.y*width*0.5f; m_verts[vi*3+2]=0; vi++;
-        m_verts[vi*3]=pt.x-m_center.x+normal.x*width*0.5f; m_verts[vi*3+1]=pt.y-m_center.y+normal.y*width*0.5f; m_verts[vi*3+2]=0; vi++;
+        double globalT=(double)seg/(double)totalSegments, rawIdx=globalT*(double)(n-1);
+        int i=(int)rawIdx; double localT=rawIdx-(double)i;
+        glm::dvec2 p0=ringAt(std::max(0,i-1)).pos, p1=ringAt(i).pos;
+        glm::dvec2 p2=ringAt(std::min(n-1,i+1)).pos, p3=ringAt(std::min(n-1,i+2)).pos;
+        glm::dvec2 pt=catmullRom(p0,p1,p2,p3,(float)localT);
+        glm::dvec2 tangent=catmullRomTangent(p0,p1,p2,p3,(float)localT);
+        double len=std::sqrt(tangent.x*tangent.x+tangent.y*tangent.y);
+        glm::dvec2 normal=(len>0.001)?glm::dvec2(-tangent.y/len,tangent.x/len):glm::dvec2(0,1);
+        double width=maxWidth*globalT;
+        m_verts[vi*3]=(float)(pt.x-m_center.x-normal.x*width*0.5);
+        m_verts[vi*3+1]=(float)(pt.y-m_center.y-normal.y*width*0.5); m_verts[vi*3+2]=0; vi++;
+        m_verts[vi*3]=(float)(pt.x-m_center.x+normal.x*width*0.5);
+        m_verts[vi*3+1]=(float)(pt.y-m_center.y+normal.y*width*0.5); m_verts[vi*3+2]=0; vi++;
     }
     int ii=0;
     for (int seg=0; seg<totalSegments; seg++) {
@@ -207,8 +211,10 @@ void PlanetTrail::draw(Shader& shader, const Camera& camera, double camX, double
     if (m_count < 2) return;
     if (m_dirty) rebuildGeometry();
     if (m_indexCount == 0) return;
+    // Camera-relative offset in double precision (like tiles)
+    glm::dvec2 offset = m_center - glm::dvec2(camX, camY);
     auto model = glm::translate(glm::mat4(1.0f),
-        glm::vec3(m_center.x-(float)camX, m_center.y-(float)camY, 0));
+        glm::vec3((float)offset.x, (float)offset.y, 0));
     auto mvp = camera.viewProj() * model;
     shader.use();
     shader.setMat4("uMVP", glm::value_ptr(mvp));

@@ -44,7 +44,7 @@ void Planet::update(float currentTime) {
     (void)currentTime;
 }
 
-void Planet::setTrailPoints(const float* xy, int count) {
+void Planet::setTrailPoints(const double* xy, int count) {
     if (trail)
         trail->setPoints(xy, count);
 }

@@ -224,6 +224,7 @@ LauncherConfig showLauncher() {
     bool enableHitsounds = true;
     bool forceHS = false;
     int forceHSIdx = 0;  // 0 = Kick
+    bool exclusiveFS = true;
     bool legacyCulling = false;
     bool msaa = false;
 #ifdef ADOCAO_EXTREME_ZOOM
@@ -311,6 +312,10 @@ LauncherConfig showLauncher() {
         ImGui::Checkbox("Hitsounds", &enableHitsounds);
         ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
         ImGui::Checkbox("Fullscreen", &cfg.fullscreen);
+        ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
+        if (!cfg.fullscreen) ImGui::BeginDisabled();
+        ImGui::Checkbox("Exclusive", &exclusiveFS);
+        if (!cfg.fullscreen) ImGui::EndDisabled();
 
         // Checkboxes row 2
         ImGui::Checkbox("Force HS", &forceHS);
@@ -383,6 +388,7 @@ LauncherConfig showLauncher() {
             cfg.forceHitsoundType = forceHS ? hsTypes[forceHSIdx] : "";
             cfg.legacyCulling    = legacyCulling;
             cfg.msaaSamples      = msaa ? msaaSamplesArr[msaaSIdx] : 0;
+            cfg.exclusiveFullscreen = exclusiveFS;
             cfg.resolutionW      = resoW[resoIdx];
             cfg.resolutionH      = resoH[resoIdx];
             cfg.cancelled        = false;

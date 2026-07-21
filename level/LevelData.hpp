@@ -39,7 +39,6 @@ struct LevelData {
     std::string        pathData;       // raw pathData string (alternative to angleData)
     std::vector<Tile>  tiles;
     nlohmann::json     actions;       // raw JSON array
-    nlohmann::json     decorations;   // raw JSON array
 
     struct TilePositionOffset {
         float offsetX = 0.0f;

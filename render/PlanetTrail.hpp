@@ -17,14 +17,14 @@ public:
     PlanetTrail(PlanetTrail&&) noexcept;
     PlanetTrail& operator=(PlanetTrail&&) noexcept;
 
-    void update(const glm::vec2& pos, float currentTime);
-    void setPoints(const float* xy, int count);
+    void update(const glm::dvec2& pos, float currentTime);
+    void setPoints(const double* xy, int count);
     void draw(Shader& shader, const Camera& camera, double camX, double camY);
     void clear();
     void setPlanetRadius(float r) { m_planetRadius = r; }
 
 private:
-    struct Point { glm::vec2 pos; float time; };
+    struct Point { glm::dvec2 pos; float time; };
     // Ring buffer: avoids O(n) erase(begin()) from std::vector
     std::vector<Point> m_points;
     int m_head = 0;
@@ -34,7 +34,7 @@ private:
     std::vector<float> m_verts;
     std::vector<unsigned> m_indices;
 
-    glm::vec2 m_center{0.0f};
+    glm::dvec2 m_center{0.0};
 
     int m_maxPoints = 200;
     float m_trailDuration = 0.4f;
@@ -50,10 +50,10 @@ private:
     void ringPushBack(const Point& pt);
     void ringPopFront();
 
-    static glm::vec2 catmullRom(const glm::vec2& p0, const glm::vec2& p1,
-                                const glm::vec2& p2, const glm::vec2& p3, float t);
-    static glm::vec2 catmullRomTangent(const glm::vec2& p0, const glm::vec2& p1,
-                                       const glm::vec2& p2, const glm::vec2& p3, float t);
+    static glm::dvec2 catmullRom(const glm::dvec2& p0, const glm::dvec2& p1,
+                                 const glm::dvec2& p2, const glm::dvec2& p3, float t);
+    static glm::dvec2 catmullRomTangent(const glm::dvec2& p0, const glm::dvec2& p1,
+                                        const glm::dvec2& p2, const glm::dvec2& p3, float t);
 
     void rebuildGeometry();
     void ensureGPUResources() const;
