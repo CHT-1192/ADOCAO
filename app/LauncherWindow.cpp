@@ -225,7 +225,7 @@ LauncherConfig showLauncher() {
     bool exclusiveFS = true;
     bool legacyCulling = false;
     bool msaa = false;
-#ifdef ADOCAO_EXTREME_ZOOM
+#ifdef ADOCAO_EXTRA_ZOOM
     msaa = true;
 #endif
     int msaaSIdx = 0;  // 0=2x, 1=4x, 2=8x

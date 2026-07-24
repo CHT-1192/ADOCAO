@@ -18,14 +18,10 @@ endif()
 project(ADOCAO VERSION 3.0.0 LANGUAGES CXX C)
 
 option(ADOCAO_PORTABLE "Build a static-linked portable executable" OFF)
-option(ADOCAO_EXTREME_ZOOM "Max zoom-out 0.5 (2x farther, default minZoom 5.0)" OFF)
-option(ADOCAO_HIGH_FPS "1000 FPS cap instead of 320" OFF)
+option(ADOCAO_EXTRA_ZOOM "Max zoom-out 0.5 (2x farther, default minZoom 5.0)" OFF)
 
-if(ADOCAO_EXTREME_ZOOM)
-    add_compile_definitions(ADOCAO_EXTREME_ZOOM)
-endif()
-if(ADOCAO_HIGH_FPS)
-    add_compile_definitions(ADOCAO_HIGH_FPS)
+if(ADOCAO_EXTRA_ZOOM)
+    add_compile_definitions(ADOCAO_EXTRA_ZOOM)
 endif()
 
 set(CMAKE_CXX_STANDARD 20)

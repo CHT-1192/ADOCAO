@@ -31,19 +31,16 @@ A [Vulkan 1.2 port](https://github.com/CHT-1192/ADOCAV) is also available.
 ### Windows
 ```bash
 build.bat                     # default: 320 FPS, zoom max 1000
-build.bat highfps             # 1000 FPS cap
-build.bat exzoom              # max zoom 4000
-build.bat highfps exzoom      # both
+build.bat exzoom              # extra zoom (min 0.5x)
 build.bat portable            # static-linked portable build
-build.bat portable highfps    # portable + 1000 FPS
+build.bat portable exzoom     # both
 ```
 
 ### Linux
 ```bash
 chmod +x build.sh
-./build.sh                    # default: 320 FPS, zoom max 1000
-./build.sh highfps            # 1000 FPS cap
-./build.sh exzoom             # min zoom 1.0
+./build.sh                    # default build
+./build.sh exzoom             # extra zoom (min 0.5x)
 ```
 
 ### CMake Options
@@ -51,8 +48,7 @@ chmod +x build.sh
 | Option | Default | Description |
 |--------|---------|-------------|
 | `ADOCAO_PORTABLE` | OFF | Static-link portable build |
-| `ADOCAO_HIGH_FPS` | OFF | 1000 FPS cap (default 320) |
-| `ADOCAO_EXTREME_ZOOM` | OFF | Farthest zoom-out 0.5 (default 5.0) |
+| `ADOCAO_EXTRA_ZOOM` | OFF | Farthest zoom-out 0.5 (default 5.0) |
 
 ## Build Dependencies
 

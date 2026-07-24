@@ -30,7 +30,7 @@ A WinUI 3 C# launcher is in a separate repo at `../ADOCAO_WinUI3_Launcher/`.
 
 ## Build & Run
 
-**Windows:** `build.bat` (`build.bat portable` for static, `build.bat highfps` for 1000fps cap, `build.bat exzoom` for min zoom 1.0)
+**Windows:** `build.bat` (`build.bat portable` for static, `build.bat exzoom` for min zoom 0.5)
 **Linux:** `chmod +x build.sh && ./build.sh`
 **Manual:** `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . --parallel`
 
@@ -108,7 +108,7 @@ Vertex shader: `aType` (0=stroke, 1=fill) mixes `iColor`/`iBgColor` per-instance
 `LevelData::releaseMemory()` frees angleData, actions/decorations JSON, tilePositionOffsets after loading. `tileBPMs` kept — needed by `buildIcons()` for SetSpeed icon coloring.
 
 ### Frame pacing
-Sleep-based: `sleep_for(remaining - 1ms)` + spin last 1ms for precision. 320 FPS soft cap (1000 with highfps build). DPI awareness + CPU pin to performance cores on Windows.
+Sleep-based: `sleep_for(remaining - 1ms)` + spin last 1ms for precision. 320 FPS soft cap. DPI awareness + CPU pin to performance cores on Windows.
 
 ### Event icons
 Twirl (purple), SetSpeed up (red), SetSpeed down (blue). Per-tile icon instances with depth-sorted Z.

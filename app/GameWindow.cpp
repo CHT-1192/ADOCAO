@@ -216,7 +216,7 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     glfwSetScrollCallback(m_window, [](GLFWwindow* w, double, double dy) {
         auto* in = static_cast<Input*>(glfwGetWindowUserPointer(w));
         float minZoom = 5.0f, maxZoom = 1000.0f;
-#ifdef ADOCAO_EXTREME_ZOOM
+#ifdef ADOCAO_EXTRA_ZOOM
         minZoom = 0.5f;
 #endif
         float z = in->camera->zoom() * (1.0f + (float)dy * 0.1f);
@@ -473,12 +473,7 @@ void GameWindow::toggleFullscreen() {
 }
 
 void GameWindow::run() {
-    double targetFrameTime;
-#ifdef ADOCAO_HIGH_FPS
-    targetFrameTime = 1.0 / 1000.0;
-#else
-    targetFrameTime = 1.0 / 320.0;
-#endif
+    double targetFrameTime = 1.0 / 320.0;
 
     while (!glfwWindowShouldClose(m_window)) {
         glfwPollEvents();

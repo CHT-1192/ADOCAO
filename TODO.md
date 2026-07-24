@@ -33,7 +33,7 @@
 - [x] `--auto-play` CLI flag
 - [x] DPI awareness + CPU pin to big cores
 - [x] Planet trail: Catmull-Rom spline + GPU rendering
-- [x] CMake options: HIGH_FPS, EXTREME_ZOOM, PORTABLE
+- [x] CMake options: EXTRA_ZOOM, PORTABLE
 - [ ] MoveCamera (5 relativeTo modes)
 - [ ] PositionTrack: relativeTo, rotation, scale, opacity, stickToFloors
 - [ ] Bloom / Flash 特效
