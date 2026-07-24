@@ -64,8 +64,6 @@ public:
         return std::abs((float)c.vl-vl)>0.5f || std::abs((float)c.vr-vr)>0.5f
             || std::abs((float)c.vb-vb)>0.5f || std::abs((float)c.vt-vt)>0.5f;
     }
-    static bool frustumChanged(const VisibilityCache& cache, float vl, float vr, float vb, float vt);
-
     static constexpr float kMaxTileZ = 9.0f, kIconZBase = 0.002f, kIconZExtra = 0.003f;
     static float tileZForIndex(int i, int n);
 
@@ -77,19 +75,6 @@ private:
     std::vector<int> m_tileToShape, m_tileToInstance;
 
     bool m_legacyCulling = false;
-
-    // Spatial grid: accelerate culling for large levels
-    struct SpatialGrid {
-        double originX=0, originY=0, cellSize=10.0;
-        int cols=0, rows=0;
-        std::vector<int> cellStarts;     // prefix sum, size = cols*rows+1
-        std::vector<int> cellGroupIdx;   // flattened group indices per cell
-    };
-    SpatialGrid m_grid;
-
-    void buildGrid();
-    void queryGrid(double vl, double vr, double vb, double vt,
-                   std::vector<size_t>& outGroupIndices) const;
 
     void destroy();
     void buildIcons(const LevelData& level);

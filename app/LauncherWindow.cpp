@@ -8,8 +8,6 @@
 #include <cstdio>
 #include <array>
 #include <string>
-#include <codecvt>
-#include <locale>
 
 #ifdef _WIN32
 #include <shobjidl.h>
@@ -306,8 +304,16 @@ LauncherConfig showLauncher() {
         ImGui::SetNextItemWidth(200 * S);
         ImGui::Combo("##reso", &resoIdx, resoNames.data(), (int)resoNames.size());
 
-        // Checkboxes row 1
+        // Trail config
         ImGui::Checkbox("Trail", &cfg.showTrail);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(45 * S);
+        ImGui::DragFloat("Dur##trail", &cfg.trailDuration, 0.01f, 0.05f, 2.0f, "%.2fs");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(45 * S);
+        ImGui::DragFloat("Rate##trail", &cfg.trailSampleRate, 5.0f, 10.0f, 500.0f, "%.0f/s");
+
+        // Checkboxes row 1
         ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();
         ImGui::Checkbox("Hitsounds", &enableHitsounds);
         ImGui::SameLine(); ImGui::Spacing(); ImGui::SameLine();

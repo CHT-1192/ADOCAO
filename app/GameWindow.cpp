@@ -266,8 +266,7 @@ void GameWindow::handleInput() {
             } else {
                 m_playback->start(glfwGetTime());
                 m_hitsoundMgr->resetAt(0);
-                m_musicPending = m_audioEngine->hasMusic();
-                if (!m_musicPending) m_audioEngine->play();
+                m_musicPending = true;  // always delay audio start by audioStartOffset (pre-roll)
             }
         } else { m_playback->stop(); m_audioEngine->pause(); m_musicPending = false; }
     }
@@ -358,7 +357,9 @@ void GameWindow::update(float) {
         // Delayed music start: wait for audioStartOffset before playing from position 0
         if (m_musicPending && m_playback->elapsedTimeMs() >= m_playback->audioStartOffset() * 1000.0f) {
             m_musicPending = false;
-            m_audioEngine->seek(0);
+            if (m_audioEngine->hasMusic()) {
+                m_audioEngine->seek(0);
+            }
             m_audioEngine->play();
         }
         if (m_audioEngine->hasMusic() && m_audioEngine->isPlaying()) {

@@ -48,6 +48,8 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
     result.playback.init(*result.level, cfg.showTrail);
     result.playback.setForceHitsoundType(cfg.forceHitsoundType);
     result.playback.setLagacyCulling(cfg.legacyCulling);
+    result.playback.setTrailDuration(cfg.trailDuration);
+    result.playback.setTrailSampleRate(cfg.trailSampleRate);
 
     // Wait for background audio init to finish (if started)
     if (audioFuture.valid()) {

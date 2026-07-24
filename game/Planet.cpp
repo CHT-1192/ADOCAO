@@ -39,14 +39,9 @@ Planet& Planet::operator=(Planet&& o) noexcept {
     return *this;
 }
 
-void Planet::update(float currentTime) {
-    // Trail is now batch-fed via PlaybackEngine::computePlanetTrails()
-    (void)currentTime;
-}
-
-void Planet::setTrailPoints(const double* xy, int count) {
+void Planet::setTrailPoints(const double* xy, int count, int maxExpected) {
     if (trail)
-        trail->setPoints(xy, count);
+        trail->setPoints(xy, count, maxExpected);
 }
 
 void Planet::clearTrail() {

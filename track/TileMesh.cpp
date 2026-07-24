@@ -1,6 +1,7 @@
 #include "TileMesh.hpp"
 #include "TileGeometry.hpp"
 #include "glad/gl_core.hpp"
+#include "render/CullSIMD.hpp"
 #include "util/Logger.hpp"
 #include "util/ThreadPool.hpp"
 #include <cmath>
@@ -201,124 +202,28 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
     LOG_D("Built track: %d tiles -> %zu shape groups",n,m_shapes.size());
     m_visCaches.resize(m_shapes.size()); buildIcons(level);
     LOG_D("buildIcons done, %zu icon groups", m_iconGroups.size());
-    buildGrid();
-    LOG_D("buildGrid done, cols=%d rows=%d", m_grid.cols, m_grid.rows);
-    LOG_D("TileMesh::build complete");
 }
 
-void TileMesh::buildGrid() {
-    size_t n = m_shapes.size();
-    if (n < 64) return;  // grid only beneficial for large levels
 
-    // Determine grid extent
-    double gMinX=1e99,gMinY=1e99,gMaxX=-1e99,gMaxY=-1e99;
-    for (auto& sg : m_shapes) {
-        if (sg.instanceCount == 0) continue;
-        if (sg.groupMinX < gMinX) gMinX = sg.groupMinX;
-        if (sg.groupMinY < gMinY) gMinY = sg.groupMinY;
-        if (sg.groupMaxX > gMaxX) gMaxX = sg.groupMaxX;
-        if (sg.groupMaxY > gMaxY) gMaxY = sg.groupMaxY;
-    }
-    if (gMinX >= gMaxX || gMinY >= gMaxY) return;
-
-    double margin = 1.0;
-    m_grid.originX = gMinX - margin; m_grid.originY = gMinY - margin;
-    m_grid.cellSize = 20.0;  // ~frustum half-width
-    double w = gMaxX - gMinX + margin*2, h = gMaxY - gMinY + margin*2;
-    m_grid.cols = std::max(1, (int)std::ceil(w / m_grid.cellSize));
-    m_grid.rows = std::max(1, (int)std::ceil(h / m_grid.cellSize));
-
-    // Cap grid to avoid explosion on extreme levels (e.g. 6.7M tiles)
-    constexpr int MAX_GRID_DIM = 1024;
-    if (m_grid.cols > MAX_GRID_DIM || m_grid.rows > MAX_GRID_DIM) {
-        LOG_D("buildGrid: world extent (%.0f x %.0f) too large, grid skipped (would be %d x %d)",
-              w, h, m_grid.cols, m_grid.rows);
-        m_grid.cols = 0; m_grid.rows = 0;
-        return;
-    }
-    size_t nc = (size_t)m_grid.cols * m_grid.rows;
-
-    // Count groups per cell
-    std::vector<int> counts(nc, 0);
-    for (size_t si = 0; si < n; si++) {
-        auto& sg = m_shapes[si];
-        if (sg.instanceCount == 0) continue;
-        double cx = (sg.groupMinX + sg.groupMaxX)*0.5, cy = (sg.groupMinY + sg.groupMaxY)*0.5;
-        int col = std::max(0, std::min(m_grid.cols-1, (int)((cx - m_grid.originX)/m_grid.cellSize)));
-        int row = std::max(0, std::min(m_grid.rows-1, (int)((cy - m_grid.originY)/m_grid.cellSize)));
-        counts[row*m_grid.cols+col]++;
-    }
-
-    // Prefix sum
-    m_grid.cellStarts.resize(nc + 1);
-    size_t total = 0;
-    for (size_t i = 0; i < nc; i++) { m_grid.cellStarts[i] = (int)total; total += counts[i]; }
-    m_grid.cellStarts[nc] = (int)total;
-    m_grid.cellGroupIdx.resize(total);
-
-    // Fill
-    std::vector<int> pos = counts; // copy as rolling counters
-    for (size_t si = 0; si < n; si++) {
-        auto& sg = m_shapes[si];
-        if (sg.instanceCount == 0) continue;
-        double cx = (sg.groupMinX + sg.groupMaxX)*0.5, cy = (sg.groupMinY + sg.groupMaxY)*0.5;
-        int col = std::max(0, std::min(m_grid.cols-1, (int)((cx - m_grid.originX)/m_grid.cellSize)));
-        int row = std::max(0, std::min(m_grid.rows-1, (int)((cy - m_grid.originY)/m_grid.cellSize)));
-        int cell = row*m_grid.cols+col;
-        m_grid.cellGroupIdx[m_grid.cellStarts[cell] + (--pos[cell])] = (int)si;
-    }
-}
-
-void TileMesh::queryGrid(double vl, double vr, double vb, double vt,
-                          std::vector<size_t>& outGroupIndices) const {
-    outGroupIndices.clear();
-    if (m_grid.cols == 0 || m_grid.rows == 0) return;
-
-    int c0 = std::max(0, (int)((vl - m_grid.originX)/m_grid.cellSize));
-    int c1 = std::min(m_grid.cols-1, (int)((vr - m_grid.originX)/m_grid.cellSize));
-    int r0 = std::max(0,  (int)((vb - m_grid.originY)/m_grid.cellSize));
-    int r1 = std::min(m_grid.rows-1, (int)((vt - m_grid.originY)/m_grid.cellSize));
-
-    for (int r = r0; r <= r1; r++) {
-        for (int c = c0; c <= c1; c++) {
-            int cell = r*m_grid.cols + c;
-            int start = m_grid.cellStarts[cell];
-            int end   = m_grid.cellStarts[cell+1];
-            for (int i = start; i < end; i++)
-                outGroupIndices.push_back((size_t)m_grid.cellGroupIdx[i]);
-        }
-    }
-}
-
-#ifdef __AVX2__
-#include <immintrin.h>
+// Culling loop: tests AABBs in batches of CullSIMD::WIDTH.
+// When C++26 std::simd lands, update CullSIMD::test4 — no changes needed here.
 static void simdCullGroup(const ShapeGroup& sg, double vl, double vr, double vb, double vt, std::vector<int>& out) {
-    size_t n=sg.instanceCount; if(!n)return; out.reserve(n);
-    __m256d v_vl=_mm256_set1_pd(vl),v_vr=_mm256_set1_pd(vr),v_vb=_mm256_set1_pd(vb),v_vt=_mm256_set1_pd(vt);
-    size_t i=0;
-    for(;i+3<n;i+=4){
-        __m256d minX=_mm256_loadu_pd(sg.cullMinX+i),maxX=_mm256_loadu_pd(sg.cullMaxX+i);
-        __m256d minY=_mm256_loadu_pd(sg.cullMinY+i),maxY=_mm256_loadu_pd(sg.cullMaxY+i);
-        __m256d c0=_mm256_cmp_pd(maxX,v_vl,_CMP_NLT_UQ); // maxX >= vl
-        __m256d c1=_mm256_cmp_pd(minX,v_vr,_CMP_LE_OQ);  // minX <= vr
-        __m256d c2=_mm256_cmp_pd(maxY,v_vb,_CMP_NLT_UQ); // maxY >= vb
-        __m256d c3=_mm256_cmp_pd(minY,v_vt,_CMP_LE_OQ);  // minY <= vt
-        __m256d vis=_mm256_and_pd(_mm256_and_pd(c0,c1),_mm256_and_pd(c2,c3));
-        int mask=_mm256_movemask_pd(vis);
-        if(mask&8)out.push_back((int)(i+3));if(mask&4)out.push_back((int)(i+2));
-        if(mask&2)out.push_back((int)(i+1));if(mask&1)out.push_back((int)(i));
+    size_t n = sg.instanceCount; if (!n) return; out.reserve(n);
+    size_t i = 0;
+    constexpr size_t W = CullSIMD::WIDTH;
+    for (; i + (W-1) < n; i += W) {
+        int mask = CullSIMD::test4(sg.cullMinX + i, sg.cullMaxX + i,
+                                    sg.cullMinY + i, sg.cullMaxY + i,
+                                    vl, vr, vb, vt);
+        for (size_t b = 0; b < W; b++)
+            if (mask & (1 << (int)b)) out.push_back((int)(i + b));
     }
-    for(;i<n;i++){if(sg.cullMaxX[i]<vl||sg.cullMinX[i]>vr||sg.cullMaxY[i]<vb||sg.cullMinY[i]>vt)continue;out.push_back((int)i);}
+    for (; i < n; i++) {
+        if (sg.cullMaxX[i] < vl || sg.cullMinX[i] > vr || sg.cullMaxY[i] < vb || sg.cullMinY[i] > vt) continue;
+        out.push_back((int)i);
+    }
 }
-#else
-static void simdCullGroup(const ShapeGroup& sg, double vl, double vr, double vb, double vt, std::vector<int>& out) {
-    size_t n=sg.instanceCount; if(!n)return; out.reserve(n);
-    for(size_t i=n;i>0;i--){size_t ii=i-1;
-        if(sg.cullMaxX[ii]<vl||sg.cullMinX[ii]>vr||sg.cullMaxY[ii]<vb||sg.cullMinY[ii]>vt)continue;out.push_back((int)ii);}
-}
-#endif
 
-bool TileMesh::frustumChanged(const VisibilityCache& c, float vl, float vr, float vb, float vt) { return frustumCheck(c,vl,vr,vb,vt); }
 
 // Legacy culling: brute-force AoS path (used when legacyCulling=true)
 static void cullAndOffsetGroupsLegacy(const std::vector<ShapeGroup>& groups,

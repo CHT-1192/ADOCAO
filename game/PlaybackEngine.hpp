@@ -41,8 +41,11 @@ public:
     void computePlanetTrails() const;
     void setForceHitsoundType(const std::string& t) { m_forceHitsoundType = t; }
     void setLagacyCulling(bool v)   { m_legacyCulling = v; }
+    void setTrailDuration(float d)  { m_trailDuration = d; }
+    void setTrailSampleRate(float r){ m_trailSampleRate = r; }
     bool legacyCulling() const      { return m_legacyCulling; }
     void computePositionsAtTime(float t, glm::dvec2& redOut, glm::dvec2& blueOut) const;
+    void computePositionsAtTimeTile(float t, int tileIdx, glm::dvec2& redOut, glm::dvec2& blueOut) const;
 
 private:
     const LevelData* m_level = nullptr;
@@ -64,6 +67,8 @@ private:
     bool   m_isPlaying = false;
     std::string m_forceHitsoundType;
     bool   m_legacyCulling = false;
+    float  m_trailDuration = 0.4f;
+    float  m_trailSampleRate = 200.0f;
     double m_elapsedTime = 0.0;   // double: sub-ns precision at 1000s total time
     double m_startWallClock = 0.0;  // wall-clock time when playback started
     int    m_currentTileIndex = 0;

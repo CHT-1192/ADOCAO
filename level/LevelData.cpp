@@ -321,7 +321,7 @@ void LevelData::processActions() {
     struct SS { float multiplier = 0.0f; float bpm = 0.0f; bool isMultiplier = false; };
     std::vector<SS> setSpeedByFloor(n);
 
-    // SetHitsound / ColorTrack: collect floors+values, then forward-propagate in O(n+m)
+    // SetHitsound: collect floors+values, then forward-propagate in O(n+m)
     struct HSChange { int floor; std::string type; };
     std::vector<HSChange> hsChanges;
     for (size_t i = 0; i < actions.size(); i++) {
@@ -398,6 +398,9 @@ void LevelData::applyPositionTrackOffsets() {
     double cumX = 0.0, cumY = 0.0;
     int n = (int)tiles.size();
 
+    // PositionTrack offsets permanently accumulate (matching ADOFAI-JS behavior).
+    // justThisTile is intentionally ignored for position calculation — resetting cum
+    // would cause track discontinuities when previous offsets were already applied.
     for (int i = 0; i < n; i++) {
         if (i < (int)tilePositionOffsets.size()) {
             cumX += tilePositionOffsets[i].offsetX;
@@ -406,11 +409,6 @@ void LevelData::applyPositionTrackOffsets() {
 
         tiles[i].position[0] += cumX;
         tiles[i].position[1] += cumY;
-
-        if (i < (int)tilePositionOffsets.size() && tilePositionOffsets[i].justThisTile) {
-            cumX = 0.0;
-            cumY = 0.0;
-        }
     }
 }
 

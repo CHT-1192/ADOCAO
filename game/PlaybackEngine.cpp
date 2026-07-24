@@ -395,22 +395,23 @@ void PlaybackEngine::updatePlanetPositions() {
     m_currentTileIndex = tileIdx;
 
     // Before first tile: orbit backward at constant BPM (for long offsets)
+    // Uses double precision to match computePositionsAtTime output exactly
     if (t < m_tileStartTimes[0]) {
         const auto& p0 = tiles[0].position;
-        float bpm = m_tileBPM[0];
+        double bpm = m_tileBPM[0];
         bool cw = m_tileIsCW[0];
-        float startAngle = (m_level->settings.rotation + 180.0f) * 3.14159265f / 180.0f;
-        float dt = m_tileStartTimes[0] - t;  // positive: how far before tile 0
-        float rps = (bpm / 60.0f) * 3.14159265f;
-        float angle = cw ? (startAngle + dt * rps) : (startAngle - dt * rps);
-        float dist = 1.0f;
+        double startAngle = (m_level->settings.rotation + 180.0) * 3.14159265358979 / 180.0;
+        double dt = m_tileStartTimes[0] - (double)t;
+        double rps = (bpm / 60.0) * 3.14159265358979;
+        double angle = cw ? (startAngle + dt * rps) : (startAngle - dt * rps);
+        double dist = 1.0;
         bool isRed = (0 % 2 == 0);
         if (isRed) {
-            m_redPlanet->position    = glm::vec3(p0[0], p0[1], 9.5f);
-            m_bluePlanet->position   = glm::vec3(p0[0] + std::cos(angle) * dist, p0[1] + std::sin(angle) * dist, 9.5f);
+            m_redPlanet->position    = glm::vec3((float)p0[0], (float)p0[1], 9.5f);
+            m_bluePlanet->position   = glm::vec3((float)(p0[0] + std::cos(angle) * dist), (float)(p0[1] + std::sin(angle) * dist), 9.5f);
         } else {
-            m_bluePlanet->position   = glm::vec3(p0[0], p0[1], 9.5f);
-            m_redPlanet->position    = glm::vec3(p0[0] + std::cos(angle) * dist, p0[1] + std::sin(angle) * dist, 9.5f);
+            m_bluePlanet->position   = glm::vec3((float)p0[0], (float)p0[1], 9.5f);
+            m_redPlanet->position    = glm::vec3((float)(p0[0] + std::cos(angle) * dist), (float)(p0[1] + std::sin(angle) * dist), 9.5f);
         }
         return;
     }
@@ -525,30 +526,93 @@ void PlaybackEngine::computePositionsAtTime(float t, glm::dvec2& redOut, glm::dv
     else       { blueOut=pv; redOut=mv; }
 }
 
+void PlaybackEngine::computePositionsAtTimeTile(float t, int tileIdx, glm::dvec2& redOut, glm::dvec2& blueOut) const {
+    const auto& tiles = m_level->tiles;
+    int n = (int)tiles.size();
+    if (n < 2) return;
+    if (t < m_tileStartTimes[0]) {
+        const auto& p0 = tiles[0].position;
+        double bpm = m_tileBPM[0]; bool cw = m_tileIsCW[0];
+        double startAngle = (m_level->settings.rotation + 180.0) * 3.14159265358979 / 180.0;
+        double dts = m_tileStartTimes[0] - (double)t;
+        double rps = (bpm / 60.0) * 3.14159265358979;
+        double angle = cw ? (startAngle + dts * rps) : (startAngle - dts * rps);
+        glm::dvec2 mv(p0[0] + std::cos(angle), p0[1] + std::sin(angle));
+        glm::dvec2 pv(p0[0], p0[1]);
+        if (0 % 2 == 0) { redOut = pv; blueOut = mv; }
+        else            { blueOut = pv; redOut = mv; }
+        return;
+    }
+    if (tileIdx >= n - 1) {
+        int lastIdx = n - 1;
+        const auto& pivotPos = tiles[lastIdx].position;
+        double startAngle = 0.0;
+        if (lastIdx > 0) {
+            const auto& prevPos = tiles[lastIdx - 1].position;
+            startAngle = std::atan2(prevPos[1]-pivotPos[1], prevPos[0]-pivotPos[0]);
+        }
+        double extraTime = (double)(t - m_tileStartTimes[lastIdx]);
+        double rps = (double)(m_tileBPM[lastIdx]/60.0) * 3.14159265358979;
+        double currentAngle = m_tileIsCW[lastIdx] ? (startAngle-extraTime*rps) : (startAngle+extraTime*rps);
+        glm::dvec2 mv(pivotPos[0]+std::cos(currentAngle), pivotPos[1]+std::sin(currentAngle));
+        if (lastIdx%2==0) { redOut=glm::dvec2(pivotPos[0],pivotPos[1]); blueOut=mv; }
+        else              { blueOut=glm::dvec2(pivotPos[0],pivotPos[1]); redOut=mv; }
+        return;
+    }
+    bool isRed = (tileIdx%2==0);
+    const auto& pivotPos = tiles[tileIdx].position;
+    double startTime = m_tileStartTimes[tileIdx];
+    double duration = m_tileDurations[tileIdx];
+    double progress = (duration>0.0001)?((double)t-startTime)/duration:1.0;
+    if (progress<0) progress=0; if (progress>1) progress=1;
+    double angle = (double)m_tileStartAngles[tileIdx]+(double)m_tileTotalAngles[tileIdx]*progress;
+    double dist = (double)m_tileStartDist[tileIdx]+((double)m_tileEndDist[tileIdx]-(double)m_tileStartDist[tileIdx])*progress;
+    glm::dvec2 pv(pivotPos[0],pivotPos[1]);
+    glm::dvec2 mv(pivotPos[0]+std::cos(angle)*dist, pivotPos[1]+std::sin(angle)*dist);
+    if (isRed) { redOut=pv; blueOut=mv; }
+    else       { blueOut=pv; redOut=mv; }
+}
+
 void PlaybackEngine::computePlanetTrails() const {
     if (!m_redPlanet || !m_bluePlanet) return;
     if (!m_redPlanet->trail || !m_bluePlanet->trail) return;
 
-    float t = timeInLevel();
-    const int samples = 80;
-    std::vector<double> redXY(samples*2), blueXY(samples*2);
+    const int maxSamples = (int)std::ceil(m_trailDuration * m_trailSampleRate) + 1;
+    if (m_trailSampleRate <= 0.0f || m_trailDuration <= 0.0f) return;
+    const float dt = 1.0f / m_trailSampleRate;
 
-    for (int i = 0; i < samples; i++) {
-        float tt = t - 0.4f + (0.4f*(float)i/(float)(samples-1));
+    float t = timeInLevel();
+    std::vector<double> redXY(maxSamples*2 + 2), blueXY(maxSamples*2 + 2);
+    int samples = 0;
+
+    float startTime = t - m_trailDuration;
+    int tileIdx = findTileIndex(startTime);
+    if (tileIdx < 0) tileIdx = 0;
+    int tsz = (int)m_tileStartTimes.size();
+
+    for (int i = 0; i < maxSamples; i++) {
+        float tt = startTime + dt * (float)i;
+        if (tt > t) break;
+        while (tileIdx + 1 < tsz && tt >= m_tileStartTimes[tileIdx + 1])
+            tileIdx++;
         glm::dvec2 r(0), b(0);
-        computePositionsAtTime(tt, r, b);
-        redXY[i*2]=r.x; redXY[i*2+1]=r.y;
-        blueXY[i*2]=b.x; blueXY[i*2+1]=b.y;
+        computePositionsAtTimeTile(tt, tileIdx, r, b);
+        redXY[samples*2]=r.x; redXY[samples*2+1]=r.y;
+        blueXY[samples*2]=b.x; blueXY[samples*2+1]=b.y;
+        samples++;
     }
-#ifndef NDEBUG
-    static int callCount = 0;
-    if (callCount < 3) {
-        LOG_D("Trail: t=%.3f red[0]=(%.1f,%.1f) red[79]=(%.1f,%.1f)", (double)t, redXY[0], redXY[1], redXY[158], redXY[159]);
-        callCount++;
+    {
+        while (tileIdx + 1 < tsz && t >= m_tileStartTimes[tileIdx + 1])
+            tileIdx++;
+        glm::dvec2 r(0), b(0);
+        computePositionsAtTimeTile(t, tileIdx, r, b);
+        redXY[samples*2]=r.x; redXY[samples*2+1]=r.y;
+        blueXY[samples*2]=b.x; blueXY[samples*2+1]=b.y;
+        samples++;
     }
-#endif
-    m_redPlanet->setTrailPoints(redXY.data(), samples);
-    m_bluePlanet->setTrailPoints(blueXY.data(), samples);
+    int maxPoints = (int)std::ceil(m_trailDuration * m_trailSampleRate) + 1;
+    m_redPlanet->setTrailPoints(redXY.data(), samples, maxPoints);
+    m_bluePlanet->setTrailPoints(blueXY.data(), samples, maxPoints);
 }
 
 void PlaybackEngine::syncToAudio(float audioPosSec, float offsetSec) {
@@ -556,9 +620,6 @@ void PlaybackEngine::syncToAudio(float audioPosSec, float offsetSec) {
     m_elapsedTime = ((double)audioPosSec + (double)m_audioStartOffset) * 1000.0;
     if (m_elapsedTime < 0.0) m_elapsedTime = 0.0;
     updatePlanetPositions();
-    float tSec = m_elapsedTime / 1000.0f;
-    if (m_redPlanet)  m_redPlanet->update(tSec);
-    if (m_bluePlanet) m_bluePlanet->update(tSec);
     computePlanetTrails();
 }
 
@@ -567,9 +628,6 @@ void PlaybackEngine::updateWallClock(double wallClockSec) {
     m_elapsedTime = (wallClockSec - m_startWallClock) * 1000.0;
     if (m_elapsedTime < 0.0f) m_elapsedTime = 0.0;
     updatePlanetPositions();
-    float tSec = m_elapsedTime / 1000.0f;
-    if (m_redPlanet)  m_redPlanet->update(tSec);
-    if (m_bluePlanet) m_bluePlanet->update(tSec);
     computePlanetTrails();
 }
 
@@ -577,8 +635,5 @@ void PlaybackEngine::update(float deltaMs) {
     if (!m_isPlaying) return;
     m_elapsedTime += deltaMs;
     updatePlanetPositions();
-    float tSec = m_elapsedTime / 1000.0f;
-    if (m_redPlanet)  m_redPlanet->update(tSec);
-    if (m_bluePlanet) m_bluePlanet->update(tSec);
     computePlanetTrails();
 }

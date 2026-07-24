@@ -14,11 +14,8 @@ public:
     Shader& operator=(Shader&& other) noexcept;
 
     bool compile(const char* vertSrc, const char* fragSrc);
-    bool compileCompute(const char* compSrc);
     bool compileFile(const char* vertPath, const char* fragPath);
-    bool compileComputeFile(const char* compPath);
     void use() const;
-    void dispatch(GLuint x, GLuint y = 1, GLuint z = 1) const;
     void destroy();
 
     GLuint id() const { return m_program; }

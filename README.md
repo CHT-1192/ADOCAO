@@ -24,7 +24,7 @@ A [Vulkan 1.2 port](https://github.com/CHT-1192/ADOCAV) is also available.
 - `SetSpeed`, `Twirl`, `Pause`, `Midspin` event support
 - `--auto-play` for automatic playback
 - `--force-hitsound` to override level hitsound type
-- `--cpu-culling` to disable GPU culling experiments
+- `--legacy-culling` to disable GPU culling experiments
 
 ## Quick Start
 
@@ -74,7 +74,7 @@ All dependencies are fetched automatically via CMake `FetchContent`:
 adocao.exe --level <file> --music <file> [--width N] [--height N]
            [--fullscreen] [--fill HEX] [--stroke HEX] [--bg HEX]
            [--no-auto-stroke] [--no-hitsound] [--no-trail] [--debug]
-           [--force-hitsound] [--auto-play] [--export] [--cpu-culling]
+           [--force-hitsound] [--auto-play] [--export] [--legacy-culling]
 ```
 
 Without `--level`, falls through to the ImGui launcher.

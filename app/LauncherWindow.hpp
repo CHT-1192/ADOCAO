@@ -21,6 +21,8 @@ struct LauncherConfig {
     int  resolutionH = 1080;
     bool fullscreen = false;
     bool showTrail = true;
+    float trailDuration = 0.4f;    // seconds of trail history
+    float trailSampleRate = 200.0f; // samples per second
     bool exportHitsounds = false;
     bool cancelled = false;
 };

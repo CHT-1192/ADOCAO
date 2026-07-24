@@ -9,9 +9,7 @@
 - [x] `--force-hitsound` (GUI + CLI): None → Kick
 - [x] Export button in launcher + `--export` CLI
 - [x] ma_decoder: AIFF, OGG, WAV, FLAC support
-- [ ] Phase 3: ColorTrack COLOR_FUNCS (Single, Glow, Blink, Switch, Rainbow, Stripes)
-- [ ] Phase 3: ColorTrack FLOOR_FUNCS (Standard, Neon, NeonLight, Basic, Gems, Minimal)
-- [ ] Phase 3: ColorTrack RecolorTrack runtime triggers
+- [ ] ColorTrack（COLOR_FUNCS / FLOOR_FUNCS / RecolorTrack）
 
 ## 渲染
 - [x] Per-instance color (iColor/iBgColor/iOpacity)
@@ -24,8 +22,7 @@
 - [x] `setPoints` trail: buffer under-allocation fixed (segsPerPoint=4 factor)
 - [ ] 中旋（angleData=999）渲染：应为圆角五边形（原版 curvaturePoints=3），当前大圆+菱形像发卡弯
 - [ ] MoveTrack (tile position/rotation/scale animation)
-- [x] Compute shader infrastructure (OpenGL 4.3, SSBO, indirect draw)
-- [ ] Wire up GPU compute culling in draw loop (Phase 4, reverted — retry based on ADOCAV)
+- [ ] GPU compute culling（已回退，ADOCAV 参考）
 - [x] Multithreaded CPU culling (>= 64 groups → std::async parallel)
 
 ## 功能
@@ -44,8 +41,8 @@
 
 ## 架构
 - [x] GameWindow 重构为类（init/update/render 分离）
-- [x] dirty check 跳过静止帧 GPU 上传
-- [x] Spatial grid 加速大关卡剔除
+- [x] dirty check 跳过静止帧 GPU 上传（已回退：导致静止帧黑屏）
+- [x] Spatial grid 加速大关卡剔除（已回退：queryGrid 从未接入 draw，复杂度和 O(n) 遍历无差距）
 - [ ] 帧率上限从编译期常量改为运行时配置（LauncherConfig 选项）
 - [ ] 缩放范围可配置（min/max zoom）
 - [ ] 剔除边距可配置

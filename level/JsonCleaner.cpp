@@ -88,9 +88,12 @@ bool parseBool(const nlohmann::json& obj, const char* key, bool def) {
     if (!obj.contains(key)) return def;
     auto& v = obj[key];
     if (v.is_boolean()) return v.get<bool>();
+    if (v.is_number_integer()) return v.get<int>() != 0;
     if (v.is_string()) {
         std::string s = v.get<std::string>();
-        return s == "Enabled" || s == "true";
+        // ADOFAI uses "Enabled"/"Disabled" strings for boolean fields
+        if (s == "Enabled" || s == "true" || s == "True") return true;
+        if (s == "Disabled" || s == "false" || s == "False") return false;
     }
     return def;
 }

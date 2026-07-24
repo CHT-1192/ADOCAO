@@ -15,7 +15,7 @@ if(NOT CMAKE_C_COMPILER AND NOT CMAKE_CXX_COMPILER)
     endif()
 endif()
 
-project(ADOCAO VERSION 0.5.0 LANGUAGES CXX C)
+project(ADOCAO VERSION 3.0.0 LANGUAGES CXX C)
 
 option(ADOCAO_PORTABLE "Build a static-linked portable executable" OFF)
 option(ADOCAO_EXTREME_ZOOM "Max zoom-out 0.5 (2x farther, default minZoom 5.0)" OFF)
@@ -80,7 +80,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
-# stb_image (single-header)
+# stb (shared by stb_vorbis)
 FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
@@ -104,6 +104,17 @@ set(MINIAUDIO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(SDL2_LIBRARY "SDL2_LIBRARY-NOTFOUND" CACHE FILEPATH "" FORCE)
 set(STEAMAUDIO_LIBRARY "STEAMAUDIO_LIBRARY-NOTFOUND" CACHE FILEPATH "" FORCE)
 FetchContent_MakeAvailable(miniaudio)
+
+# miniz (single-file zip library, public domain)
+FetchContent_Declare(
+    miniz
+    GIT_REPOSITORY https://github.com/richgel999/miniz.git
+    GIT_TAG 3.0.2
+    GIT_SHALLOW TRUE
+)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+FetchContent_MakeAvailable(miniz)
+target_include_directories(miniz PUBLIC ${miniz_SOURCE_DIR})
 
 # tinyfiledialogs (single-header C library)
 FetchContent_Declare(
@@ -150,7 +161,12 @@ set(SOURCES
     util/ThreadPool.hpp
     util/ThreadPool.cpp
 
+    # Data file reader (zip/folder/fallback)
+    util/DataFile.hpp
+    util/DataFile.cpp
+
     # Render
+    render/CullSIMD.hpp
     render/Shader.hpp
     render/Shader.cpp
     render/Shaders.hpp
@@ -183,17 +199,12 @@ set(SOURCES
 # ImGui sources
 set(IMGUI_SOURCES
     ${imgui_SOURCE_DIR}/imgui.cpp
-    ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
-
-# stb_image (header-only, implementation in util/stb_impl.cpp)
-add_library(stb_image STATIC util/stb_impl.cpp)
-target_include_directories(stb_image PUBLIC ${stb_SOURCE_DIR})
 
 # stb_vorbis (implementation in audio/stb_vorbis_impl.cpp)
 add_library(stb_vorbis STATIC audio/stb_vorbis_impl.cpp)
@@ -218,9 +229,9 @@ target_link_libraries(adocao PRIVATE
     glfw
     glm::glm
     nlohmann_json::nlohmann_json
-    stb_image
     stb_vorbis
     tinyfiledialogs
+    miniz
 )
 
 # Platform-specific

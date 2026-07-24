@@ -1,20 +1,15 @@
 #include "Shader.hpp"
 #include "util/Logger.hpp"
+#include "util/DataFile.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
 #include <string>
 
 static std::string readFile(const char* path) {
-    FILE* f = fopen(path, "rb");
-    if (!f) return {};
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    std::string s(sz, '\0');
-    fread(&s[0], 1, sz, f);
-    fclose(f);
-    return s;
+    auto data = readDataFile(path);
+    if (data.empty()) return {};
+    return std::string((const char*)data.data(), data.size());
 }
 
 Shader::~Shader() { destroy(); }
@@ -52,28 +47,6 @@ GLuint Shader::compileShader(GLenum type, const char* src) {
     return shader;
 }
 
-bool Shader::compileCompute(const char* compSrc) {
-    destroy();
-    GLuint cs = compileShader(GL_COMPUTE_SHADER, compSrc);
-    if (!cs) return false;
-
-    m_program = glCreateProgram();
-    glAttachShader(m_program, cs);
-    glLinkProgram(m_program);
-
-    GLint success;
-    glGetProgramiv(m_program, GL_LINK_STATUS, &success);
-    if (!success) {
-        char log[1024];
-        glGetProgramInfoLog(m_program, sizeof(log), nullptr, log);
-        LOG_E("[Shader] Compute link error:\n%s", log);
-        destroy();
-    }
-
-    glDeleteShader(cs);
-    return m_program != 0;
-}
-
 bool Shader::compile(const char* vertSrc, const char* fragSrc) {
     destroy();
     GLuint vs = compileShader(GL_VERTEX_SHADER, vertSrc);
@@ -107,11 +80,6 @@ void Shader::use() const {
     glUseProgram(m_program);
 }
 
-void Shader::dispatch(GLuint x, GLuint y, GLuint z) const {
-    glUseProgram(m_program);
-    glad_DispatchCompute(x, y, z);
-}
-
 void Shader::setMat4(const char* name, const float* value) const {
     glUniformMatrix4fv(glGetUniformLocation(m_program, name), 1, GL_FALSE, value);
 }
@@ -134,11 +102,3 @@ bool Shader::compileFile(const char* vertPath, const char* fragPath) {
     return compile(vs.c_str(), fs.c_str());
 }
 
-bool Shader::compileComputeFile(const char* compPath) {
-    std::string cs = readFile(compPath);
-    if (cs.empty()) {
-        LOG_E("[Shader] Failed to read shader file: %s", compPath);
-        return false;
-    }
-    return compileCompute(cs.c_str());
-}

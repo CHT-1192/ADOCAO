@@ -1,6 +1,7 @@
 #include "HitsoundManager.hpp"
 #include "AudioEngine.hpp"
 #include "util/Logger.hpp"
+#include "util/DataFile.hpp"
 
 #include <cmath>
 #include <algorithm>
@@ -8,8 +9,6 @@
 #include <cstring>
 #include <cstdint>
 #include <unordered_map>
-#include <thread>
-#include <future>
 
 static std::unordered_map<std::string, std::vector<float>> s_wavCache;
 static std::unordered_map<std::string, std::vector<int16_t>> s_wavRawCache;
@@ -111,33 +110,39 @@ bool HitsoundManager::readWav(const std::string& filepath,
         return true;
     }
 
-    FILE* f = fopen(filepath.c_str(), "rb");
-    if (!f) { LOG_W("Hitsound: Cannot open %s", filepath.c_str()); return false; }
+    auto wavData = readDataFile(filepath);
+    if (wavData.empty()) { LOG_W("Hitsound: Cannot open %s", filepath.c_str()); return false; }
+    const uint8_t* p = wavData.data();
+    const uint8_t* end = p + wavData.size();
+    auto read32 = [&]() { if(p+4>end)return(uint32_t)0; uint32_t v; memcpy(&v,p,4); p+=4; return v; };
+    auto read16 = [&]() { if(p+2>end)return(uint16_t)0; uint16_t v; memcpy(&v,p,2); p+=2; return v; };
 
-    char riff[4]; uint32_t fs; char wave[4];
-    fread(riff,1,4,f); fread(&fs,4,1,f); fread(wave,1,4,f);
-    if (memcmp(riff,"RIFF",4) || memcmp(wave,"WAVE",4)) { fclose(f); return false; }
+    if (memcmp(p, "RIFF", 4)) return false; p += 4;
+    uint32_t fs = read32();
+    if (memcmp(p, "WAVE", 4)) return false; p += 4;
 
-    uint16_t bits=0, nch=0; uint32_t sr=0, dsize=0; long doff=0;
-    while (!feof(f)) {
-        char id[4]; uint32_t cs;
-        if (fread(id,1,4,f)!=4) break;
-        if (fread(&cs,4,1,f)!=1) break;
-        if (!memcmp(id,"fmt ",4) && cs>=16) {
-            uint16_t af; fread(&af,2,1,f); fread(&nch,2,1,f);
-            fread(&sr,4,1,f); fseek(f,6,SEEK_CUR); fread(&bits,2,1,f);
-            if (cs>16) fseek(f, cs-16, SEEK_CUR);
-        } else if (!memcmp(id,"data",4)) {
-            dsize=cs; doff=ftell(f); fseek(f,cs,SEEK_CUR);
-        } else fseek(f,cs,SEEK_CUR);
+    uint16_t bits=0, nch=0; uint32_t sr=0, dsize=0;
+    const uint8_t* dataPtr = nullptr;
+    while (p + 8 <= end) {
+        char id[4]; memcpy(id, p, 4); p += 4;
+        uint32_t cs = read32();
+        if (!memcmp(id, "fmt ", 4) && cs >= 16) {
+            read16(); // audio format
+            nch = read16(); sr = read32();
+            p += 6; bits = read16();
+            if (cs > 16) p += cs - 16;
+        } else if (!memcmp(id, "data", 4)) {
+            dsize = cs; dataPtr = p; p += cs;
+        } else {
+            p += cs;
+        }
     }
-    if (bits!=16 || dsize==0) { fclose(f); return false; }
+    if (bits!=16 || dsize==0 || !dataPtr) return false;
 
     sampleRate=(int)sr; channels=(int)nch;
     int nf=(int)dsize/((int)bits/8)/channels;
     std::vector<int16_t> raw((size_t)nf*channels);
-    fseek(f,doff,SEEK_SET); fread(raw.data(),sizeof(int16_t),raw.size(),f);
-    fclose(f);
+    memcpy(raw.data(), dataPtr, raw.size() * sizeof(int16_t));
 
     samples.resize(raw.size());
     for (size_t i=0;i<raw.size();i++) samples[i]=(float)raw[i]/32768.0f;
