@@ -1,6 +1,9 @@
 #pragma once
 
 #include <cstddef>
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
 
 // SIMD-accelerated AABB-frustum culling, abstracted behind a clean interface
 // so the backend (AVX2, std::simd, scalar) is pluggable.
@@ -19,7 +22,6 @@ inline int test4(const double* minX, const double* maxX,
                  double vl, double vr, double vb, double vt) {
     int mask = 0;
 #ifdef __AVX2__
-    #include <immintrin.h>
     __m256d v_vl = _mm256_set1_pd(vl), v_vr = _mm256_set1_pd(vr);
     __m256d v_vb = _mm256_set1_pd(vb), v_vt = _mm256_set1_pd(vt);
     __m256d v_minX = _mm256_loadu_pd(minX), v_maxX = _mm256_loadu_pd(maxX);
