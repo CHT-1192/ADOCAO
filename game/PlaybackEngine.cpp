@@ -6,9 +6,10 @@
 #include <future>
 #include <thread>
 
-void PlaybackEngine::init(const LevelData& level, bool showTrail) {
+void PlaybackEngine::init(const LevelData& level, bool showTrail, bool exportOnly) {
     m_level = &level;
     m_showTrail = showTrail;
+    m_exportOnly = exportOnly;
     m_isPlaying = false;
     m_elapsedTime = 0.0;
     m_currentTileIndex = 0;
@@ -53,13 +54,13 @@ static void precalcTileRange(
         bool isCW = tileIsCW[i];
         float currentBPM = tileBPM[i];
 
+        // startAngle = direction INTO tile i (from tile i-1).
+        // Unit-step tiles: incoming = tiles[i-1].direction + 180° (reverse).
         float startAngle;
         if (i == 0) {
             startAngle = (level.settings.rotation + 180.0f) * 3.14159265f / 180.0f;
         } else {
-            const auto& pivotPos = tiles[i].position;
-            const auto& prevPos  = tiles[i - 1].position;
-            startAngle = std::atan2(prevPos[1] - pivotPos[1], prevPos[0] - pivotPos[0]);
+            startAngle = std::fmod(tiles[i - 1].direction + 180.0f, 360.0f) * 3.14159265f / 180.0f;
         }
         outStartAngles[i] = startAngle;
 
@@ -90,22 +91,8 @@ static void precalcTileRange(
         float duration = rotationAmount * 2.0f * (60.0f / currentBPM);
         outDurations[i] = duration;
 
-        float distToPrev = 1.0f, distToNext = 1.0f;
-        const auto& p = tiles[i].position;
-        if (i > 0) {
-            const auto& pp = tiles[i - 1].position;
-            float dx = (float)(p[0] - pp[0]), dy = (float)(p[1] - pp[1]);
-            distToPrev = std::sqrt(dx * dx + dy * dy);
-            if (distToPrev < 0.01f) distToPrev = 1.0f;
-        }
-        if (i + 1 < n) {
-            const auto& np = tiles[i + 1].position;
-            float dx = (float)(np[0] - p[0]), dy = (float)(np[1] - p[1]);
-            distToNext = std::sqrt(dx * dx + dy * dy);
-            if (distToNext < 0.01f) distToNext = 1.0f;
-        }
-        outStartDist[i] = distToPrev;
-        outEndDist[i]   = distToNext;
+        outStartDist[i] = 1.0f;
+        outEndDist[i]   = 1.0f;
     }
 }
 
@@ -124,49 +111,37 @@ void PlaybackEngine::precalculateTiming() {
     m_tileStartDist.resize(n);
     m_tileEndDist.resize(n);
 
-    // Phase 0: Pre-index actions by floor
-    std::vector<std::vector<size_t>> actionsByFloor(n);
-    if (!m_level->actions.is_null() && m_level->actions.is_array()) {
-        for (size_t j = 0; j < m_level->actions.size(); j++) {
-            auto& a = m_level->actions[j];
-            if (!a.is_object() || !a.contains("floor") || !a.contains("eventType")) continue;
-            int floor = a["floor"].get<int>();
-            if (floor >= 0 && floor < n) actionsByFloor[floor].push_back(j);
-        }
+    // Phase 0: Build sorted flat action index (O(m) space instead of O(n))
+    std::vector<std::pair<int, size_t>> flatActions;
+    for (size_t j = 0; j < m_level->actions.size(); j++) {
+        auto& a = m_level->actions[j];
+        if (a.floor >= 0 && a.floor < n) flatActions.push_back({a.floor, j});
     }
+    std::stable_sort(flatActions.begin(), flatActions.end());
 
-    // Phase 1 (sequential): Write directly to m_tileIsCW/m_tileBPM (no temp vectors)
+    // Phase 1 (sequential): Write directly to m_tileIsCW/m_tileBPM
     std::vector<float> preAngleDir(n - 1);
     std::vector<float> preExtraRot(n - 1, 0.0f);
 
     bool isCW = true;
     float currentBPM = m_level->settings.bpm;
     float angleDir = 180.0f;
+    size_t actionCursor = 0;
 
     for (int i = 0; i < n - 1; i++) {
         preAngleDir[i] = angleDir;
         float extraRotation = 0.0f;
 
-        for (size_t j : actionsByFloor[i]) {
-            auto& a = m_level->actions[j];
-            const std::string& etype = a["eventType"].get_ref<const std::string&>();
-
-            if (etype == "Twirl") {
-                isCW = !isCW;
-            } else if (etype == "SetSpeed") {
-                if (a.contains("speedType")) {
-                    const std::string& stype = a["speedType"].get_ref<const std::string&>();
-                    if (stype == "Multiplier")
-                        currentBPM *= a.value("bpmMultiplier", 1.0f);
-                    else
-                        currentBPM = a.value("beatsPerMinute", currentBPM);
-                } else {
-                    currentBPM = a.value("beatsPerMinute", currentBPM);
-                }
-            } else if (etype == "Pause") {
-                float dur = a.value("duration", 0.0f);
-                extraRotation += dur / 2.0f;
+        while (actionCursor < flatActions.size() && flatActions[actionCursor].first == i) {
+            auto& a = m_level->actions[flatActions[actionCursor].second];
+            switch (a.type) {
+            case LevelData::FastAction::Twirl: isCW = !isCW; break;
+            case LevelData::FastAction::SetSpeed:
+                if (a.flag) currentBPM *= a.val1; else currentBPM = a.val1; break;
+            case LevelData::FastAction::Pause: extraRotation += a.val1 / 2.0f; break;
+            default: break;
             }
+            actionCursor++;
         }
 
         m_tileIsCW[i] = isCW;
@@ -186,37 +161,52 @@ void PlaybackEngine::precalculateTiming() {
     m_tileIsCW[n - 1] = isCW;
     m_tileBPM[n - 1] = currentBPM;
 
-    // Phase 2 (parallel): Per-tile geometry
-    constexpr int PARALLEL_THRESHOLD = 256;
-    int workItems = n - 1;
-
-    if (workItems >= PARALLEL_THRESHOLD) {
-        unsigned int hw = std::thread::hardware_concurrency();
-        if (hw == 0) hw = 2;
-        unsigned int numThreads = std::min(hw, (unsigned)(workItems / 64));
-        if (numThreads < 2) numThreads = 2;
-        size_t chunk = ((size_t)workItems + numThreads - 1) / numThreads;
-
-        std::vector<std::future<void>> futures;
-        for (unsigned int t = 0; t < numThreads; t++) {
-            size_t s = t * chunk;
-            size_t e = std::min(s + chunk, (size_t)workItems);
-            if (s >= e) break;
-            futures.push_back(std::async(std::launch::async,
-                precalcTileRange,
-                std::cref(*m_level),
-                std::cref(m_tileIsCW), std::cref(m_tileBPM),
-                std::cref(preAngleDir), std::cref(preExtraRot),
-                std::ref(m_tileStartAngles), std::ref(m_tileTotalAngles),
-                std::ref(m_tileDurations), std::ref(m_tileStartDist), std::ref(m_tileEndDist),
-                (int)s, (int)e, n));
+    // Phase 2: Per-tile durations
+    if (m_exportOnly) {
+        for (int i = 0; i < n - 1; i++) {
+            double rawAng = (i < (int)angleData.size()) ? angleData[i] : 180.0;
+            double relAngle;
+            if (rawAng == 999.0) { relAngle = 0.0; } else {
+                double delta = std::fmod((double)preAngleDir[i] - rawAng, 360.0);
+                if (delta < 0) delta += 360.0;
+                if (!m_tileIsCW[i]) relAngle = (delta < 0.0001) ? 360.0 : 360.0 - delta;
+                else relAngle = (delta < 0.0001) ? 360.0 : delta;
+            }
+            double rot = relAngle / 360.0 + (double)preExtraRot[i];
+            m_tileDurations[i] = (float)(rot * 2.0 * (60.0 / m_tileBPM[i]));
+            m_tileStartAngles[i] = 0.0f; m_tileTotalAngles[i] = 0.0f;
+            m_tileStartDist[i] = 1.0f; m_tileEndDist[i] = 1.0f;
         }
-        for (auto& f : futures) f.wait();
+        m_tileDurations[n - 1] = 0.1f;
     } else {
-        precalcTileRange(*m_level, m_tileIsCW, m_tileBPM, preAngleDir, preExtraRot,
-                         m_tileStartAngles, m_tileTotalAngles,
-                         m_tileDurations, m_tileStartDist, m_tileEndDist,
-                         0, workItems, n);
+        constexpr int PARALLEL_THRESHOLD = 256;
+        int workItems = n - 1;
+        if (workItems >= PARALLEL_THRESHOLD) {
+            unsigned int hw = std::thread::hardware_concurrency();
+            if (hw == 0) hw = 2;
+            unsigned int numThreads = std::min(hw, (unsigned)(workItems / 64));
+            if (numThreads < 2) numThreads = 2;
+            size_t chunk = ((size_t)workItems + numThreads - 1) / numThreads;
+            std::vector<std::future<void>> futures;
+            for (unsigned int t = 0; t < numThreads; t++) {
+                size_t s = t * chunk;
+                size_t e = std::min(s + chunk, (size_t)workItems);
+                if (s >= e) break;
+                futures.push_back(std::async(std::launch::async,
+                    precalcTileRange, std::cref(*m_level),
+                    std::cref(m_tileIsCW), std::cref(m_tileBPM),
+                    std::cref(preAngleDir), std::cref(preExtraRot),
+                    std::ref(m_tileStartAngles), std::ref(m_tileTotalAngles),
+                    std::ref(m_tileDurations), std::ref(m_tileStartDist), std::ref(m_tileEndDist),
+                    (int)s, (int)e, n));
+            }
+            for (auto& f : futures) f.wait();
+        } else {
+            precalcTileRange(*m_level, m_tileIsCW, m_tileBPM, preAngleDir, preExtraRot,
+                             m_tileStartAngles, m_tileTotalAngles,
+                             m_tileDurations, m_tileStartDist, m_tileEndDist,
+                             0, workItems, n);
+        }
     }
 
     // Phase 3: Prefix sum
@@ -238,23 +228,15 @@ void PlaybackEngine::precalculateTiming() {
     m_tileDurations[lastIdx] = 0.0f;
     m_tileStartAngles[lastIdx] = (lastIdx > 0) ? m_tileStartAngles[lastIdx - 1] : 0.0f;
 
-    for (size_t j : actionsByFloor[lastIdx]) {
-        auto& a = m_level->actions[j];
-        const std::string& etype = a["eventType"].get_ref<const std::string&>();
-
-        if (etype == "Twirl") {
-            m_tileIsCW[lastIdx] = !m_tileIsCW[lastIdx];
-        } else if (etype == "SetSpeed") {
-            if (a.contains("speedType")) {
-                const std::string& stype = a["speedType"].get_ref<const std::string&>();
-                if (stype == "Multiplier")
-                    m_tileBPM[lastIdx] *= a.value("bpmMultiplier", 1.0f);
-                else
-                    m_tileBPM[lastIdx] = a.value("beatsPerMinute", m_tileBPM[lastIdx]);
-            } else {
-                m_tileBPM[lastIdx] = a.value("beatsPerMinute", m_tileBPM[lastIdx]);
-            }
+    while (actionCursor < flatActions.size() && flatActions[actionCursor].first == lastIdx) {
+        auto& a = m_level->actions[flatActions[actionCursor].second];
+        switch (a.type) {
+        case LevelData::FastAction::Twirl: m_tileIsCW[lastIdx] = !m_tileIsCW[lastIdx]; break;
+        case LevelData::FastAction::SetSpeed:
+            if (a.flag) m_tileBPM[lastIdx] *= a.val1; else m_tileBPM[lastIdx] = a.val1; break;
+        default: break;
         }
+        actionCursor++;
     }
 
     {
@@ -321,14 +303,14 @@ void PlaybackEngine::stop() {
     LOG_D("Playback stopped");
 }
 
-float PlaybackEngine::timeInLevel() const {
-    return (float)(m_elapsedTime / 1000.0 - (double)m_preRoll);
+double PlaybackEngine::timeInLevel() const {
+    return m_elapsedTime / 1000.0 - (double)m_preRoll;
 }
 
-float PlaybackEngine::totalDuration() const {
+double PlaybackEngine::totalDuration() const {
     int n = (int)m_tileStartTimes.size();
     if (n < 2) return 0.0f;
-    return m_tileStartTimes[n - 1] + 10.0f;
+    return m_tileStartTimes[n - 1] + 10.0;
 }
 
 std::vector<double> PlaybackEngine::getHitsoundTimestamps() const {
@@ -354,10 +336,11 @@ std::vector<HitsoundTimestampGroup> PlaybackEngine::getHitsoundTimestampGroups()
     std::map<std::pair<std::string, float>, size_t> groupMap;
 
     for (int i = 1; i < n; i++) {
-        std::string type = (i < (int)m_level->tileHitsounds.size() && !m_level->tileHitsounds[i].empty())
-            ? m_level->tileHitsounds[i] : defaultType;
+        auto hsIt = m_level->tileHitsounds.find(i);
+        std::string type = (hsIt != m_level->tileHitsounds.end()) ? hsIt->second : defaultType;
         if (!m_forceHitsoundType.empty()) type = m_forceHitsoundType;
-        float vol = defaultVol;
+        auto volIt = m_level->tileHitsoundVolumes.find(i);
+        float vol = (volIt != m_level->tileHitsoundVolumes.end()) ? volIt->second : defaultVol;
 
         auto key = std::make_pair(type, vol);
         auto it = groupMap.find(key);
@@ -370,7 +353,7 @@ std::vector<HitsoundTimestampGroup> PlaybackEngine::getHitsoundTimestampGroups()
     return groups;
 }
 
-int PlaybackEngine::findTileIndex(float t) const {
+int PlaybackEngine::findTileIndex(double t) const {
     int n = (int)m_tileStartTimes.size();
     if (n < 2) return 0;
     int lo = 0, hi = n - 1;
@@ -390,7 +373,7 @@ void PlaybackEngine::updatePlanetPositions() {
     int n = (int)tiles.size();
     if (n < 2) return;
 
-    float t = timeInLevel();
+    double t = timeInLevel();
     int tileIdx = findTileIndex(t);
     m_currentTileIndex = tileIdx;
 
@@ -401,7 +384,7 @@ void PlaybackEngine::updatePlanetPositions() {
         double bpm = m_tileBPM[0];
         bool cw = m_tileIsCW[0];
         double startAngle = (m_level->settings.rotation + 180.0) * 3.14159265358979 / 180.0;
-        double dt = m_tileStartTimes[0] - (double)t;
+        double dt = m_tileStartTimes[0] - t;
         double rps = (bpm / 60.0) * 3.14159265358979;
         double angle = cw ? (startAngle + dt * rps) : (startAngle - dt * rps);
         double dist = 1.0;
@@ -425,20 +408,20 @@ void PlaybackEngine::updatePlanetPositions() {
         }
         int lastIdx = n - 1;
         const auto& pivotPos = tiles[lastIdx].position;
-        float bpm = m_tileBPM[lastIdx];
+        double bpm = (double)m_tileBPM[lastIdx];
         bool cw = m_tileIsCW[lastIdx];
 
-        float startAngle = 0.0f;
+        double startAngle = 0.0;
         if (lastIdx > 0) {
             const auto& prevPos = tiles[lastIdx - 1].position;
             startAngle = std::atan2(prevPos[1] - pivotPos[1], prevPos[0] - pivotPos[0]);
         }
 
-        float extraTime = t - m_tileStartTimes[lastIdx];
-        float radiansPerSec = (bpm / 60.0f) * 3.14159265f;
-        float extraAngle = extraTime * radiansPerSec;
-        float currentAngle = cw ? (startAngle - extraAngle) : (startAngle + extraAngle);
-        float dist = 1.0f;
+        double extraTime = t - m_tileStartTimes[lastIdx];
+        double radiansPerSec = ((double)bpm / 60.0) * 3.14159265358979;
+        double extraAngle = extraTime * radiansPerSec;
+        double currentAngle = cw ? (startAngle - extraAngle) : (startAngle + extraAngle);
+        double dist = 1.0;
 
         bool isRedPivot = (lastIdx % 2 == 0);
         Planet* pivotPlanet  = isRedPivot ? m_redPlanet.get() : m_bluePlanet.get();
@@ -454,25 +437,23 @@ void PlaybackEngine::updatePlanetPositions() {
     Planet* movingPlanet = isRedPivot ? m_bluePlanet.get() : m_redPlanet.get();
 
     const auto& pivotPos = tiles[tileIdx].position;
-    float startTime = m_tileStartTimes[tileIdx];
-    float duration = m_tileDurations[tileIdx];
-    float progress = (duration > 0.0001f) ? (t - startTime) / duration : 1.0f;
-    if (progress < 0.0f) progress = 0.0f;
-    if (progress > 1.0f) progress = 1.0f;
-
-    float startAngle = m_tileStartAngles[tileIdx];
-    float totalAngle = m_tileTotalAngles[tileIdx];
-    float currentAngle = startAngle + totalAngle * progress;
-
-    float startDist = m_tileStartDist[tileIdx];
-    float endDist   = m_tileEndDist[tileIdx];
-    float currentDist = startDist + (endDist - startDist) * progress;
+    double startTime = (double)m_tileStartTimes[tileIdx];
+    double duration = (double)m_tileDurations[tileIdx];
+    double progress = (duration > 0.0001) ? (t - startTime) / duration : 1.0;
+    if (progress < 0.0) progress = 0.0;
+    if (progress > 1.0) progress = 1.0;
+    double startAngle = (double)m_tileStartAngles[tileIdx];
+    double totalAngle = (double)m_tileTotalAngles[tileIdx];
+    double currentAngle = startAngle + totalAngle * progress;
+    double startDist = (double)m_tileStartDist[tileIdx];
+    double endDist   = (double)m_tileEndDist[tileIdx];
+    double currentDist = startDist + (endDist - startDist) * progress;
 
     if (pivotPlanet)  pivotPlanet->position = glm::vec3(pivotPos[0], pivotPos[1], 9.5f);
     if (movingPlanet) movingPlanet->position = glm::vec3(pivotPos[0]+std::cos(currentAngle)*currentDist, pivotPos[1]+std::sin(currentAngle)*currentDist, 9.5f);
 }
 
-void PlaybackEngine::computePositionsAtTime(float t, glm::dvec2& redOut, glm::dvec2& blueOut) const {
+void PlaybackEngine::computePositionsAtTime(double t, glm::dvec2& redOut, glm::dvec2& blueOut) const {
     const auto& tiles = m_level->tiles;
     int n = (int)tiles.size();
     if (n < 2) return;
@@ -484,7 +465,7 @@ void PlaybackEngine::computePositionsAtTime(float t, glm::dvec2& redOut, glm::dv
         double bpm = m_tileBPM[0];
         bool cw = m_tileIsCW[0];
         double startAngle = (m_level->settings.rotation + 180.0) * 3.14159265358979 / 180.0;
-        double dt = m_tileStartTimes[0] - (double)t;
+        double dt = m_tileStartTimes[0] - t;
         double rps = (bpm / 60.0) * 3.14159265358979;
         double angle = cw ? (startAngle + dt * rps) : (startAngle - dt * rps);
         double dist = 1.0;
@@ -503,7 +484,7 @@ void PlaybackEngine::computePositionsAtTime(float t, glm::dvec2& redOut, glm::dv
             const auto& prevPos = tiles[lastIdx - 1].position;
             startAngle = std::atan2(prevPos[1]-pivotPos[1], prevPos[0]-pivotPos[0]);
         }
-        double extraTime = (double)(t - m_tileStartTimes[lastIdx]);
+        double extraTime = t - m_tileStartTimes[lastIdx];
         double rps = (double)(m_tileBPM[lastIdx]/60.0) * 3.14159265358979;
         double currentAngle = m_tileIsCW[lastIdx] ? (startAngle-extraTime*rps) : (startAngle+extraTime*rps);
         glm::dvec2 mv(pivotPos[0]+std::cos(currentAngle), pivotPos[1]+std::sin(currentAngle));
@@ -516,7 +497,7 @@ void PlaybackEngine::computePositionsAtTime(float t, glm::dvec2& redOut, glm::dv
     const auto& pivotPos = tiles[tileIdx].position;
     double startTime = m_tileStartTimes[tileIdx];
     double duration = m_tileDurations[tileIdx];
-    double progress = (duration>0.0001)?((double)t-startTime)/duration:1.0;
+    double progress = (duration>0.0001)?(t-startTime)/duration:1.0;
     if (progress<0) progress=0; if (progress>1) progress=1;
     double angle = (double)m_tileStartAngles[tileIdx]+(double)m_tileTotalAngles[tileIdx]*progress;
     double dist = (double)m_tileStartDist[tileIdx]+((double)m_tileEndDist[tileIdx]-(double)m_tileStartDist[tileIdx])*progress;
@@ -526,7 +507,7 @@ void PlaybackEngine::computePositionsAtTime(float t, glm::dvec2& redOut, glm::dv
     else       { blueOut=pv; redOut=mv; }
 }
 
-void PlaybackEngine::computePositionsAtTimeTile(float t, int tileIdx, glm::dvec2& redOut, glm::dvec2& blueOut) const {
+void PlaybackEngine::computePositionsAtTimeTile(double t, int tileIdx, glm::dvec2& redOut, glm::dvec2& blueOut) const {
     const auto& tiles = m_level->tiles;
     int n = (int)tiles.size();
     if (n < 2) return;
@@ -534,7 +515,7 @@ void PlaybackEngine::computePositionsAtTimeTile(float t, int tileIdx, glm::dvec2
         const auto& p0 = tiles[0].position;
         double bpm = m_tileBPM[0]; bool cw = m_tileIsCW[0];
         double startAngle = (m_level->settings.rotation + 180.0) * 3.14159265358979 / 180.0;
-        double dts = m_tileStartTimes[0] - (double)t;
+        double dts = m_tileStartTimes[0] - t;
         double rps = (bpm / 60.0) * 3.14159265358979;
         double angle = cw ? (startAngle + dts * rps) : (startAngle - dts * rps);
         glm::dvec2 mv(p0[0] + std::cos(angle), p0[1] + std::sin(angle));
@@ -551,7 +532,7 @@ void PlaybackEngine::computePositionsAtTimeTile(float t, int tileIdx, glm::dvec2
             const auto& prevPos = tiles[lastIdx - 1].position;
             startAngle = std::atan2(prevPos[1]-pivotPos[1], prevPos[0]-pivotPos[0]);
         }
-        double extraTime = (double)(t - m_tileStartTimes[lastIdx]);
+        double extraTime = t - m_tileStartTimes[lastIdx];
         double rps = (double)(m_tileBPM[lastIdx]/60.0) * 3.14159265358979;
         double currentAngle = m_tileIsCW[lastIdx] ? (startAngle-extraTime*rps) : (startAngle+extraTime*rps);
         glm::dvec2 mv(pivotPos[0]+std::cos(currentAngle), pivotPos[1]+std::sin(currentAngle));
@@ -563,7 +544,7 @@ void PlaybackEngine::computePositionsAtTimeTile(float t, int tileIdx, glm::dvec2
     const auto& pivotPos = tiles[tileIdx].position;
     double startTime = m_tileStartTimes[tileIdx];
     double duration = m_tileDurations[tileIdx];
-    double progress = (duration>0.0001)?((double)t-startTime)/duration:1.0;
+    double progress = (duration>0.0001)?(t-startTime)/duration:1.0;
     if (progress<0) progress=0; if (progress>1) progress=1;
     double angle = (double)m_tileStartAngles[tileIdx]+(double)m_tileTotalAngles[tileIdx]*progress;
     double dist = (double)m_tileStartDist[tileIdx]+((double)m_tileEndDist[tileIdx]-(double)m_tileStartDist[tileIdx])*progress;
@@ -579,19 +560,19 @@ void PlaybackEngine::computePlanetTrails() const {
 
     const int maxSamples = (int)std::ceil(m_trailDuration * m_trailSampleRate) + 1;
     if (m_trailSampleRate <= 0.0f || m_trailDuration <= 0.0f) return;
-    const float dt = 1.0f / m_trailSampleRate;
+    const double dt = 1.0 / m_trailSampleRate;
 
-    float t = timeInLevel();
+    double t = timeInLevel();
     std::vector<double> redXY(maxSamples*2 + 2), blueXY(maxSamples*2 + 2);
     int samples = 0;
 
-    float startTime = t - m_trailDuration;
+    double startTime = t - m_trailDuration;
     int tileIdx = findTileIndex(startTime);
     if (tileIdx < 0) tileIdx = 0;
     int tsz = (int)m_tileStartTimes.size();
 
     for (int i = 0; i < maxSamples; i++) {
-        float tt = startTime + dt * (float)i;
+        double tt = startTime + dt * (double)i;
         if (tt > t) break;
         while (tileIdx + 1 < tsz && tt >= m_tileStartTimes[tileIdx + 1])
             tileIdx++;
@@ -602,12 +583,11 @@ void PlaybackEngine::computePlanetTrails() const {
         samples++;
     }
     {
-        while (tileIdx + 1 < tsz && t >= m_tileStartTimes[tileIdx + 1])
-            tileIdx++;
-        glm::dvec2 r(0), b(0);
-        computePositionsAtTimeTile(t, tileIdx, r, b);
-        redXY[samples*2]=r.x; redXY[samples*2+1]=r.y;
-        blueXY[samples*2]=b.x; blueXY[samples*2+1]=b.y;
+        // Bind trail head directly to planet's actual position (set by updatePlanetPositions)
+        redXY[samples*2]   = m_redPlanet->position.x;
+        redXY[samples*2+1] = m_redPlanet->position.y;
+        blueXY[samples*2]   = m_bluePlanet->position.x;
+        blueXY[samples*2+1] = m_bluePlanet->position.y;
         samples++;
     }
     int maxPoints = (int)std::ceil(m_trailDuration * m_trailSampleRate) + 1;

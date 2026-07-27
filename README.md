@@ -30,25 +30,61 @@ A [Vulkan 1.2 port](https://github.com/CHT-1192/ADOCAV) is also available.
 
 ### Windows
 ```bash
-build.bat                     # default: 320 FPS, zoom max 1000
-build.bat exzoom              # extra zoom (min 0.5x)
-build.bat portable            # static-linked portable build
-build.bat portable exzoom     # both
+build.bat                     # default: Ultra zoom (min 1x), dynamic link
+build.bat -Hyper              # Hyper zoom (min 0.5x)
+build.bat -Portable           # static-linked portable build
+build.bat -P -H               # short form: portable + Hyper
 ```
+All arguments skip interactive mode. Run without arguments for prompts.
 
 ### Linux
 ```bash
 chmod +x build.sh
-./build.sh                    # default build
-./build.sh exzoom             # extra zoom (min 0.5x)
+./build.sh                    # default: Ultra zoom (min 1x)
+./build.sh -Hyper             # Hyper zoom (min 0.5x)
+./build.sh -Extreme -Portable # Extreme zoom + portable
 ```
+
+### Zoom Levels
+
+Zoom controls how far out you can scroll. Smaller = further out, good for huge levels.
+
+| Level | Min Zoom | Long Arg | Short | Description |
+|-------|----------|----------|-------|-------------|
+| Normal | 10× | `-Normal` | `-N` | Standard zoom range |
+| Extra | 5× | `-Extra` | `-T` | Slightly wider view |
+| Super | 2.5× | `-Super` | `-S` | Good for medium-large levels |
+| **Ultra** | **1×** | **`-Ultra`** | **`-U`** | **Default. Covers most extreme levels** |
+| Hyper | 0.5× | `-Hyper` | `-H` | Very wide, 2× further than Ultra |
+| Extreme | 0.25× | `-Extreme` | `-X` | 4× further than Ultra |
+| Unimaginable | 0.1× | `-Unimaginable` | `-I` | Maximum zoom-out, 10× further than Ultra |
+
+### Build Script Arguments
+
+| Argument | Short | Description |
+|----------|-------|-------------|
+| `-Portable` | `-P` | Static-link MinGW DLLs (no runtime dependency) |
+| `-Normal` | `-N` | Min zoom 10× |
+| `-Extra` | `-T` | Min zoom 5× |
+| `-Super` | `-S` | Min zoom 2.5× |
+| `-Ultra` | `-U` | Min zoom 1× (default) |
+| `-Hyper` | `-H` | Min zoom 0.5× |
+| `-Extreme` | `-X` | Min zoom 0.25× |
+| `-Unimaginable` | `-I` | Min zoom 0.1× |
+
+Arguments can be combined and are case-insensitive. Any argument skips interactive prompts.
 
 ### CMake Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `ADOCAO_PORTABLE` | OFF | Static-link portable build |
-| `ADOCAO_EXTRA_ZOOM` | OFF | Farthest zoom-out 0.5 (default 5.0) |
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `ADOCAO_PORTABLE` | BOOL | OFF | Static-link portable build |
+| `ADOCAO_ZOOM_LEVEL` | STRING | Ultra | Min zoom level. One of: `Normal`, `Extra`, `Super`, `Ultra`, `Hyper`, `Extreme`, `Unimaginable` |
+
+Manual CMake example:
+```bash
+cmake .. -DADOCAO_PORTABLE=ON -DADOCAO_ZOOM_LEVEL=Hyper
+```
 
 ## Build Dependencies
 

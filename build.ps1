@@ -5,13 +5,14 @@
 
 .DESCRIPTION
     Without arguments, prompts interactively for each build option.
-    With arguments, runs non-interactively (matching legacy build.bat behavior).
+    With arguments, runs non-interactively.
 
 .PARAMETER Portable
     Static-linked portable build (no MinGW DLLs required).
 
-.PARAMETER ExZoom
-    Enable extra zoom (min zoom 0.5 instead of 5.0).
+.PARAMETER ZoomLevel
+    Min zoom-out level: Normal(10) Extra(5) Super(2.5) Ultra(1) Hyper(0.5) Extreme(0.25) Unimaginable(0.1).
+    Default: Ultra.
 
 .PARAMETER Generator
     CMake generator: "MinGW Makefiles" (default on Windows), "Ninja", "Visual Studio 17 2022".
@@ -21,13 +22,16 @@
     CMake build type. Default: Release.
 
 .EXAMPLE
-    ./build.ps1                          # interactive mode
-    ./build.ps1 -Portable -ExZoom        # CLI: static + extra zoom
+    ./build.ps1                                    # interactive mode
+    ./build.ps1 -Portable -ZoomLevel Hyper          # CLI: static + Hyper zoom
+    ./build.ps1 -P -Hyper                           # same, short form
 #>
 
 param(
     [switch]$Portable,
-    [switch]$ExZoom,
+    [Alias('P')][switch]$PortableShort,
+    [ValidateSet('Normal','Extra','Super','Ultra','Hyper','Extreme','Unimaginable')]
+    [string]$ZoomLevel = "Ultra",
     [string]$Generator,
     [string]$BuildType = "Release"
 )
@@ -35,6 +39,33 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
+
+# Support -P short form for Portable
+if ($PortableShort) { $Portable = $true }
+
+# Support -<Level> and -<Short> positional-style args to set ZoomLevel
+# Parse any remaining unbound arguments passed as switches
+$allArgs = $MyInvocation.Line -split '\s+' | Where-Object { $_ -match '^-' }
+foreach ($arg in $allArgs) {
+    $a = $arg.TrimStart('-')
+    switch ($a) {
+        'P'           { $Portable = $true }
+        'Normal'      { $ZoomLevel = 'Normal' }
+        'N'           { $ZoomLevel = 'Normal' }
+        'Extra'       { $ZoomLevel = 'Extra' }
+        'T'           { $ZoomLevel = 'Extra' }
+        'Super'       { $ZoomLevel = 'Super' }
+        'S'           { $ZoomLevel = 'Super' }
+        'Ultra'       { $ZoomLevel = 'Ultra' }
+        'U'           { $ZoomLevel = 'Ultra' }
+        'Hyper'       { $ZoomLevel = 'Hyper' }
+        'H'           { $ZoomLevel = 'Hyper' }
+        'Extreme'     { $ZoomLevel = 'Extreme' }
+        'X'           { $ZoomLevel = 'Extreme' }
+        'Unimaginable'{ $ZoomLevel = 'Unimaginable' }
+        'I'           { $ZoomLevel = 'Unimaginable' }
+    }
+}
 
 # ── Colour helpers ──────────────────────────────────────────────
 function Write-Cyan  { Write-Host $args -ForegroundColor Cyan }
@@ -85,7 +116,8 @@ Write-Host ""
 
 # ── Determine mode ──────────────────────────────────────────────
 $interactive = (-not ($PSBoundParameters.ContainsKey('Portable') -or
-                      $PSBoundParameters.ContainsKey('ExZoom')))
+                      $PSBoundParameters.ContainsKey('PortableShort') -or
+                      $PSBoundParameters.ContainsKey('ZoomLevel')))
 
 # ── Detect compiler ──────────────────────────────────────────────
 $compiler = Find-Compiler
@@ -104,7 +136,25 @@ if ($interactive) {
     Write-Host ""
     Write-Host "Build options (press Enter for default):" -ForegroundColor Yellow
     $Portable   = Prompt-Bool "  Static-linked portable build?"  "N"
-    $ExZoom     = Prompt-Bool "  Extra zoom (min 0.5x)?"         "N"
+    Write-Host "  Zoom level: Normal(10) Extra(5) Super(2.5) Ultra(1) Hyper(0.5) Extreme(0.25) Unimaginable(0.1)"
+    $zoomIn = Read-Host "  Level [Ultra]"
+    switch ($zoomIn) {
+        'Normal'        { $ZoomLevel = 'Normal' }
+        'N'             { $ZoomLevel = 'Normal' }
+        'Extra'         { $ZoomLevel = 'Extra' }
+        'T'             { $ZoomLevel = 'Extra' }
+        'Super'         { $ZoomLevel = 'Super' }
+        'S'             { $ZoomLevel = 'Super' }
+        'Ultra'         { $ZoomLevel = 'Ultra' }
+        'U'             { $ZoomLevel = 'Ultra' }
+        'Hyper'         { $ZoomLevel = 'Hyper' }
+        'H'             { $ZoomLevel = 'Hyper' }
+        'Extreme'       { $ZoomLevel = 'Extreme' }
+        'X'             { $ZoomLevel = 'Extreme' }
+        'Unimaginable'  { $ZoomLevel = 'Unimaginable' }
+        'I'             { $ZoomLevel = 'Unimaginable' }
+        # '' = default Ultra
+    }
 }
 
 # ── Generator selection ─────────────────────────────────────────
@@ -122,7 +172,7 @@ if (-not $Generator) {
 Write-Host ""
 Write-Host "Configuration:" -ForegroundColor Yellow
 Write-Host "  Portable:     " -NoNewline; if ($Portable) { Write-Green "ON" } else { Write-Dim "OFF" }
-Write-Host "  Extra Zoom:   " -NoNewline; if ($ExZoom)   { Write-Green "ON" } else { Write-Dim "OFF" }
+Write-Host "  Zoom Level:   " -NoNewline; Write-Green $ZoomLevel
 Write-Host "  Generator:    " -NoNewline; Write-Dim $Generator
 Write-Host "  Build type:   " -NoNewline; Write-Dim $BuildType
 Write-Host ""
@@ -132,7 +182,7 @@ $cmakeArgs = @(
     "-G", $Generator,
     "-DCMAKE_BUILD_TYPE=$BuildType",
     "-DADOCAO_PORTABLE=$(if ($Portable) { 'ON' } else { 'OFF' })",
-    "-DADOCAO_EXTRA_ZOOM=$(if ($ExZoom) { 'ON' } else { 'OFF' })"
+    "-DADOCAO_ZOOM_LEVEL=$ZoomLevel"
 )
 
 if ($compiler.Kind -notlike "*MSVC*") {

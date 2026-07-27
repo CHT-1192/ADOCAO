@@ -18,11 +18,33 @@ endif()
 project(ADOCAO VERSION 3.0.0 LANGUAGES CXX C)
 
 option(ADOCAO_PORTABLE "Build a static-linked portable executable" OFF)
-option(ADOCAO_EXTRA_ZOOM "Max zoom-out 0.5 (2x farther, default minZoom 5.0)" OFF)
 
-if(ADOCAO_EXTRA_ZOOM)
-    add_compile_definitions(ADOCAO_EXTRA_ZOOM)
+# ── Zoom level (min zoom-out distance) ─────────────────────────
+set(ADOCAO_ZOOM_LEVEL "Ultra" CACHE STRING
+    "Min zoom-out level: Normal(10) Extra(5) Super(2.5) Ultra(1) Hyper(0.5) Extreme(0.25) Unimaginable(0.1)")
+set_property(CACHE ADOCAO_ZOOM_LEVEL PROPERTY STRINGS
+    "Normal" "Extra" "Super" "Ultra" "Hyper" "Extreme" "Unimaginable")
+
+if(ADOCAO_ZOOM_LEVEL STREQUAL "Normal")
+    set(ADOCAO_MIN_ZOOM 10.0)
+elseif(ADOCAO_ZOOM_LEVEL STREQUAL "Extra")
+    set(ADOCAO_MIN_ZOOM 5.0)
+elseif(ADOCAO_ZOOM_LEVEL STREQUAL "Super")
+    set(ADOCAO_MIN_ZOOM 2.5)
+elseif(ADOCAO_ZOOM_LEVEL STREQUAL "Ultra")
+    set(ADOCAO_MIN_ZOOM 1.0)
+elseif(ADOCAO_ZOOM_LEVEL STREQUAL "Hyper")
+    set(ADOCAO_MIN_ZOOM 0.5)
+elseif(ADOCAO_ZOOM_LEVEL STREQUAL "Extreme")
+    set(ADOCAO_MIN_ZOOM 0.25)
+elseif(ADOCAO_ZOOM_LEVEL STREQUAL "Unimaginable")
+    set(ADOCAO_MIN_ZOOM 0.1)
+else()
+    message(WARNING "Unknown ADOCAO_ZOOM_LEVEL '${ADOCAO_ZOOM_LEVEL}', falling back to Ultra (1.0)")
+    set(ADOCAO_MIN_ZOOM 1.0)
 endif()
+add_compile_definitions(ADOCAO_MIN_ZOOM=${ADOCAO_MIN_ZOOM}f)
+message(STATUS "Zoom level: ${ADOCAO_ZOOM_LEVEL} (min ${ADOCAO_MIN_ZOOM}x)")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -58,14 +80,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-# nlohmann/json
+# RapidJSON (header-only, fast JSON parsing)
 FetchContent_Declare(
-    nlohmann_json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.11.3
+    rapidjson
+    GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
+    GIT_TAG master
     GIT_SHALLOW TRUE
 )
-FetchContent_MakeAvailable(nlohmann_json)
+FetchContent_GetProperties(rapidjson)
+if(NOT rapidjson_POPULATED)
+    FetchContent_Populate(rapidjson)
+endif()
 
 # Dear ImGui
 FetchContent_Declare(
@@ -219,12 +244,12 @@ target_include_directories(adocao PRIVATE
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
     ${miniaudio_SOURCE_DIR}
+    ${rapidjson_SOURCE_DIR}/include
 )
 
 target_link_libraries(adocao PRIVATE
     glfw
     glm::glm
-    nlohmann_json::nlohmann_json
     stb_vorbis
     tinyfiledialogs
     miniz

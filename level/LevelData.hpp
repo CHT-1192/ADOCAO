@@ -1,10 +1,12 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <functional>
-#include <nlohmann/json.hpp>
+#include <rapidjson/document.h>
 
 // Parsed .adofai level file
 struct LevelData {
@@ -38,7 +40,15 @@ struct LevelData {
     std::vector<double> angleData;
     std::string        pathData;       // raw pathData string (alternative to angleData)
     std::vector<Tile>  tiles;
-    nlohmann::json     actions;       // raw JSON array
+    // Lightweight action (avoids nlohmann DOM allocation for millions of actions)
+    struct FastAction {
+        int floor = 0;
+        enum Type : uint8_t { Twirl, SetSpeed, PositionTrack, SetHitsound, Bookmark, Pause, Other } type = Other;
+        float val1 = 0, val2 = 0;
+        bool flag = false;
+        std::string str;
+    };
+    std::vector<FastAction> actions;
 
     struct TilePositionOffset {
         float offsetX = 0.0f;
@@ -50,16 +60,17 @@ struct LevelData {
     std::vector<float> tileBPMs;      // BPM for each tile (after SetSpeed events)
     std::vector<bool>  tileHasTwirl;  // true if tile has a Twirl event
     std::vector<bool>  tileHasSetSpeed; // true if tile has a SetSpeed event
-    std::vector<std::string> tileHitsounds;  // per-tile hitsound type override
-    std::vector<TilePositionOffset> tilePositionOffsets;
+    std::unordered_map<int, std::string> tileHitsounds;      // per-tile hitsound override (sparse)
+    std::unordered_map<int, float> tileHitsoundVolumes;      // per-tile hitsound volume (sparse)
+    std::unordered_map<int, TilePositionOffset> tilePositionOffsets; // sparse
     std::vector<int> bookmarkFloors;  // Bookmark event floors
 
     void releaseMemory();  // free data no longer needed after loading
 
     using ProgressCb = std::function<void(float pct, const char* stage)>;
 
-    bool loadFromFile(const std::string& filepath, ProgressCb onProgress = nullptr);
-    bool loadFromString(const std::string& jsonStr, ProgressCb onProgress = nullptr);
+    bool loadFromFile(const std::string& filepath, ProgressCb onProgress = nullptr, bool exportOnly = false);
+    bool loadFromString(const std::string& jsonStr, ProgressCb onProgress = nullptr, bool exportOnly = false);
 
 private:
     void calculateTilePositions();

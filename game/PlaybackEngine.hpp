@@ -14,7 +14,7 @@ public:
     PlaybackEngine(const PlaybackEngine&) = delete;
     PlaybackEngine& operator=(const PlaybackEngine&) = delete;
 
-    void init(const LevelData& level, bool showTrail = true);
+    void init(const LevelData& level, bool showTrail = true, bool exportOnly = false);
 
     void start(double wallClockSec);
     void startAt(double wallClockSec, float audioPosSec, float offsetSec);
@@ -28,12 +28,12 @@ public:
 
     bool isPlaying() const { return m_isPlaying; }
     float elapsedTimeMs() const { return (float)m_elapsedTime; }
-    float timeInLevel() const;
+    double timeInLevel() const;
     int currentTileIndex() const { return m_currentTileIndex; }
 
     const std::vector<double>& tileStartTimes() const { return m_tileStartTimes; }
     const std::vector<float>& tileBPMPerTile() const { return m_tileBPM; }
-    float totalDuration() const;
+    double totalDuration() const;
     std::vector<double> getHitsoundTimestamps() const;
     std::vector<struct HitsoundTimestampGroup> getHitsoundTimestampGroups() const;
     float preRoll() const { return m_preRoll; }
@@ -44,8 +44,8 @@ public:
     void setTrailDuration(float d)  { m_trailDuration = d; }
     void setTrailSampleRate(float r){ m_trailSampleRate = r; }
     bool legacyCulling() const      { return m_legacyCulling; }
-    void computePositionsAtTime(float t, glm::dvec2& redOut, glm::dvec2& blueOut) const;
-    void computePositionsAtTimeTile(float t, int tileIdx, glm::dvec2& redOut, glm::dvec2& blueOut) const;
+    void computePositionsAtTime(double t, glm::dvec2& redOut, glm::dvec2& blueOut) const;
+    void computePositionsAtTimeTile(double t, int tileIdx, glm::dvec2& redOut, glm::dvec2& blueOut) const;
 
 private:
     const LevelData* m_level = nullptr;
@@ -53,6 +53,7 @@ private:
     std::unique_ptr<Planet> m_redPlanet;
     std::unique_ptr<Planet> m_bluePlanet;
     bool m_showTrail = true;
+    bool m_exportOnly = false;
 
     // Precalculated timing arrays (size = n tiles including extra)
     std::vector<double> m_tileStartTimes;  // double: prevents quantization at extreme BPM
@@ -77,6 +78,6 @@ private:
     float  m_audioStartOffset = 0;  // seconds before music starts (wall-clock)
 
     void precalculateTiming();
-    int  findTileIndex(float timeInLevel) const;
+    int  findTileIndex(double timeInLevel) const;
     void updatePlanetPositions();
 };

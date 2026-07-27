@@ -33,13 +33,19 @@ prompt_bool() {
 
 # ── Argument parsing ────────────────────────────────────────────
 INTERACTIVE=true
-PORTABLE=OFF; EXTRA_ZOOM=OFF
+PORTABLE=OFF; ZOOM_LEVEL="Ultra"
 
 for arg in "$@"; do
     INTERACTIVE=false
-    case "${arg,,}" in
-        portable)   PORTABLE=ON      ;;
-        exzoom)     EXTRA_ZOOM=ON  ;;
+    case "${arg}" in
+        -Portable|-P)   PORTABLE=ON ;;
+        -Normal|-N)         ZOOM_LEVEL="Normal" ;;
+        -Extra|-T)          ZOOM_LEVEL="Extra" ;;
+        -Super|-S)          ZOOM_LEVEL="Super" ;;
+        -Ultra|-U)          ZOOM_LEVEL="Ultra" ;;
+        -Hyper|-H)          ZOOM_LEVEL="Hyper" ;;
+        -Extreme|-X)        ZOOM_LEVEL="Extreme" ;;
+        -Unimaginable|-I)   ZOOM_LEVEL="Unimaginable" ;;
         *) echo "Unknown: $arg"; exit 1 ;;
     esac
 done
@@ -66,16 +72,28 @@ if $INTERACTIVE; then
     echo ""
     echo -e "${YELLOW}Build options (press Enter for default):${NC}"
     prompt_bool "  Static-linked portable build?"  "N" && PORTABLE=ON
-    prompt_bool "  Extra zoom (min 0.5x)?"         "N" && EXTRA_ZOOM=ON
+    echo "  Zoom level: Normal(10) Extra(5) Super(2.5) Ultra(1) Hyper(0.5) Extreme(0.25) Unimaginable(0.1)"
+    read -r -p "  Level [Ultra]: " zoom_in
+    case "${zoom_in}" in
+        Normal|N)           ZOOM_LEVEL="Normal" ;;
+        Extra|T)            ZOOM_LEVEL="Extra" ;;
+        Super|S)            ZOOM_LEVEL="Super" ;;
+        Ultra|U|"")         ZOOM_LEVEL="Ultra" ;;
+        Hyper|H)            ZOOM_LEVEL="Hyper" ;;
+        Extreme|X)          ZOOM_LEVEL="Extreme" ;;
+        Unimaginable|I)     ZOOM_LEVEL="Unimaginable" ;;
+    esac
 fi
 
 # ── Summary ─────────────────────────────────────────────────────
-bool_str() { [[ "$1" == "ON" ]] && echo -e "${GREEN}ON${NC}" || echo -e "${DIM}OFF${NC}"; }
+bool_str() {
+    [[ "$1" == "ON" ]] && echo -e "${GREEN}ON${NC}" || echo -e "${DIM}OFF${NC}"
+}
 
 echo ""
 echo -e "${YELLOW}Configuration:${NC}"
 echo -ne "  Portable:     "; bool_str "$PORTABLE"
-echo -ne "  Extra Zoom:   "; bool_str "$EXTRA_ZOOM"
+echo -e  "  Zoom Level:   ${GREEN}${ZOOM_LEVEL}${NC}"
 echo ""
 
 # ── CMake configure ─────────────────────────────────────────────
@@ -88,7 +106,7 @@ cmake .. \
     -DCMAKE_C_COMPILER="$CC" \
     -DCMAKE_CXX_COMPILER="$CXX" \
     -DADOCAO_PORTABLE="$PORTABLE" \
-    -DADOCAO_EXTRA_ZOOM="$EXTRA_ZOOM"
+    -DADOCAO_ZOOM_LEVEL="$ZOOM_LEVEL"
 echo -e "${DIM}  OK${NC}"
 
 # ── CMake build ─────────────────────────────────────────────────

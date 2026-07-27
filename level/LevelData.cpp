@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <algorithm>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -48,6 +49,7 @@ static std::vector<double> parseAngleDataFast(const char* json, size_t len, size
     return result;
 }
 
+// Fast streaming parser for actions — avoids nlohmann DOM for huge action arrays.
 static std::string readFileUtf8(const std::string& filepath) {
 #ifdef _WIN32
     // Convert UTF-8 path to wide for Windows API
@@ -100,17 +102,17 @@ static std::string readFileUtf8(const std::string& filepath) {
 #endif
 }
 
-bool LevelData::loadFromFile(const std::string& filepath, ProgressCb onProgress) {
+bool LevelData::loadFromFile(const std::string& filepath, ProgressCb onProgress, bool exportOnly) {
     if (onProgress) onProgress(0.05f, "Reading file...");
     std::string content = readFileUtf8(filepath);
     if (content.empty()) {
         LOG_E("Cannot open level file: %s", filepath.c_str());
         return false;
     }
-    return loadFromString(cleanJson(content), onProgress);
+    return loadFromString(cleanJson(content), onProgress, exportOnly);
 }
 
-bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress) {
+bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress, bool exportOnly) {
     try {
         if (onProgress) onProgress(0.10f, "Parsing angleData...");
 
@@ -148,7 +150,8 @@ bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress
             return out;
         };
 
-        // Strip angleData + decorations so nlohmann only parses small objects
+        // RapidJSON: parse full JSON (angleData + decorations stripped)
+        // This handles both actions and settings in one DOM
         std::string stripped = jsonStr;
         if (angleDataEnd > 0) {
             stripped = stripArray(jsonStr, "\"angleData\"");
@@ -156,46 +159,94 @@ bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress
         stripped = stripArray(stripped, "\"decorations\"");
 
         if (onProgress) onProgress(0.12f, "Parsing JSON...");
-        auto root = nlohmann::json::parse(stripped);
-
-        if (onProgress) onProgress(0.15f, "Extracting level data...");
-        // angleData already parsed via fast path above; fallback to nlohmann if not found
-        if (angleData.empty() && root.contains("angleData") && root["angleData"].is_array()) {
-            angleData = root["angleData"].get<std::vector<double>>();
+        rapidjson::Document root;
+        root.Parse<rapidjson::kParseTrailingCommasFlag>(stripped.c_str());
+        if (root.HasParseError()) {
+            LOG_E("RapidJSON parse error at offset %zu, code %d",
+                  root.GetErrorOffset(), (int)root.GetParseError());
+            return false;
         }
 
-        // settings
-        if (root.contains("settings")) {
-            auto& s = root["settings"];
-            settings.bpm             = s.value("bpm", 100.0f);
-            settings.offset          = s.value("offset", 0.0f);
-            settings.countdownTicks  = s.value("countdownTicks", 4);
-            settings.zoom            = s.value("zoom", 100.0f);
-            settings.rotation        = s.value("rotation", 0.0f);
-            settings.relativeTo      = s.value("relativeTo", "Player");
-            settings.hitsound        = s.value("hitsound", "Kick");
-            settings.hitsoundVolume  = s.value("hitsoundVolume", 100.0f);
-            settings.trackColor      = s.value("trackColor", "debb7b");
-            settings.secondaryTrackColor = s.value("secondaryTrackColor", "ffffff");
-            settings.backgroundColor = s.value("backgroundColor", "000000");
-            settings.stickToFloors   = parseBool(s, "stickToFloors", true);
-            settings.planetEase      = s.value("planetEase", "Linear");
+        if (onProgress) onProgress(0.15f, "Extracting level data...");
 
-            if (s.contains("position") && s["position"].is_array() && s["position"].size() >= 2) {
-                settings.position = {s["position"][0].get<float>(), s["position"][1].get<float>()};
+        // Actions
+        if (root.HasMember("actions") && root["actions"].IsArray()) {
+            auto& arr = root["actions"];
+            for (rapidjson::SizeType i = 0; i < arr.Size(); i++) {
+                auto& a = arr[i];
+                if (!a.IsObject() || !a.HasMember("floor") || !a.HasMember("eventType")) continue;
+                FastAction act;
+                act.floor = a["floor"].GetInt();
+                std::string et = a["eventType"].GetString();
+                if (et == "Twirl") act.type = FastAction::Twirl;
+                else if (et == "SetSpeed") act.type = FastAction::SetSpeed;
+                else if (et == "PositionTrack") act.type = FastAction::PositionTrack;
+                else if (et == "SetHitsound") act.type = FastAction::SetHitsound;
+                else if (et == "Bookmark") act.type = FastAction::Bookmark;
+                else if (et == "Pause") act.type = FastAction::Pause;
+                else continue;
+                if (act.type == FastAction::SetSpeed) {
+                    if (a.HasMember("speedType") && std::string(a["speedType"].GetString()) == "Multiplier") {
+                        act.flag = true; act.val1 = a.HasMember("bpmMultiplier") ? a["bpmMultiplier"].GetFloat() : 1.0f;
+                    } else { act.val1 = a.HasMember("beatsPerMinute") ? a["beatsPerMinute"].GetFloat() : 0.0f; }
+                } else if (act.type == FastAction::Pause) {
+                    act.val1 = a.HasMember("duration") ? a["duration"].GetFloat() : 0.0f;
+                } else if (act.type == FastAction::PositionTrack) {
+                    if (a.HasMember("positionOffset") && a["positionOffset"].IsArray() && a["positionOffset"].Size() >= 2) {
+                        act.val1 = a["positionOffset"][0].GetFloat(); act.val2 = a["positionOffset"][1].GetFloat();
+                    }
+                    if (a.HasMember("justThisTile")) {
+                        if (a["justThisTile"].IsBool()) act.flag = a["justThisTile"].GetBool();
+                        else if (a["justThisTile"].IsInt()) act.flag = a["justThisTile"].GetInt() != 0;
+                        else if (a["justThisTile"].IsString()) {
+                            std::string v = a["justThisTile"].GetString();
+                            act.flag = (v == "Enabled" || v == "true" || v == "True");
+                        }
+                    }
+                } else if (act.type == FastAction::SetHitsound) {
+                    act.str = a.HasMember("hitsound") ? a["hitsound"].GetString() : "";
+                    act.val1 = a.HasMember("hitsoundVolume") ? a["hitsoundVolume"].GetFloat() : 0.0f;
+                }
+                actions.push_back(act);
             }
         }
 
-        // pathData (alternative to angleData)
-        if (root.contains("pathData") && root["pathData"].is_string()) {
-            pathData = root["pathData"].get<std::string>();
+        // Settings
+        if (root.HasMember("settings") && root["settings"].IsObject()) {
+            auto& s = root["settings"];
+            auto getF = [&](const char* k, float d) { return s.HasMember(k) ? s[k].GetFloat() : d; };
+            auto getI = [&](const char* k, int d) { return s.HasMember(k) ? s[k].GetInt() : d; };
+            auto getS = [&](const char* k, const char* d) -> std::string {
+                return (s.HasMember(k) && s[k].IsString()) ? s[k].GetString() : d;
+            };
+            settings.bpm             = getF("bpm", 100.0f);
+            settings.offset          = getF("offset", 0.0f);
+            settings.countdownTicks  = getI("countdownTicks", 4);
+            settings.zoom            = getF("zoom", 100.0f);
+            settings.rotation        = getF("rotation", 0.0f);
+            settings.relativeTo      = getS("relativeTo", "Player");
+            settings.hitsound        = getS("hitsound", "Kick");
+            settings.hitsoundVolume  = getF("hitsoundVolume", 100.0f);
+            settings.trackColor      = getS("trackColor", "debb7b");
+            settings.secondaryTrackColor = getS("secondaryTrackColor", "ffffff");
+            settings.backgroundColor = getS("backgroundColor", "000000");
+            settings.planetEase      = getS("planetEase", "Linear");
+            if (s.HasMember("stickToFloors")) {
+                if (s["stickToFloors"].IsBool()) settings.stickToFloors = s["stickToFloors"].GetBool();
+                else if (s["stickToFloors"].IsString()) {
+                    std::string v = s["stickToFloors"].GetString();
+                    settings.stickToFloors = (v == "Enabled" || v == "true" || v == "True");
+                }
+            }
+            if (s.HasMember("position") && s["position"].IsArray() && s["position"].Size() >= 2)
+                settings.position = {s["position"][0].GetFloat(), s["position"][1].GetFloat()};
         }
 
-        // actions
-        if (root.contains("actions")) {
-            actions = root["actions"];
-        }
+        // pathData
+        if (root.HasMember("pathData") && root["pathData"].IsString())
+            pathData = root["pathData"].GetString();
 
+        // actions already parsed via fast path above (with nlohmann fallback)
         // decorations: not used, skip parsing entirely
 
         if (onProgress) onProgress(0.20f, "Processing level data...");
@@ -205,11 +256,15 @@ bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress
             convertPathToAngles();
         }
 
-        if (onProgress) onProgress(0.30f, "Calculating tile positions...");
-        calculateTilePositions();
+        if (!exportOnly) {
+            if (onProgress) onProgress(0.30f, "Calculating tile positions...");
+            calculateTilePositions();
+        }
         if (onProgress) onProgress(0.40f, "Processing actions...");
         processActions();
-        applyPositionTrackOffsets();
+        if (!exportOnly) {
+            applyPositionTrackOffsets();
+        }
         return true;
     } catch (const std::exception& e) {
         LOG_E("JSON parse error: %s", e.what());
@@ -308,87 +363,60 @@ float LevelData::pathCharToAngle(char c) {
 }
 
 void LevelData::processActions() {
-    int n = (int)tiles.size();
+    int n = (int)angleData.size() + 1;  // +1 for tile 0 (tiles may be empty in export mode)
     tileBPMs.assign(n, settings.bpm);
     tileHasTwirl.assign(n, false);
     tileHasSetSpeed.assign(n, false);
-    tileHitsounds.assign(n, "");
-    tilePositionOffsets.assign(n, {});
+    bookmarkFloors.clear();
 
-    if (actions.is_null() || !actions.is_array()) return;
-
-    // Per-floor event data (populated in single pass, propagated in O(n) after)
     struct SS { float multiplier = 0.0f; float bpm = 0.0f; bool isMultiplier = false; };
     std::vector<SS> setSpeedByFloor(n);
 
-    // SetHitsound: collect floors+values, then forward-propagate in O(n+m)
-    struct HSChange { int floor; std::string type; };
+    struct HSChange { int floor; std::string type; float volume; };
     std::vector<HSChange> hsChanges;
-    for (size_t i = 0; i < actions.size(); i++) {
-        auto& a = actions[i];
-        if (!a.is_object() || !a.contains("floor") || !a.contains("eventType")) continue;
 
-        int floor = a["floor"].get<int>();
+    for (auto& a : actions) {
+        int floor = a.floor;
         if (floor < 0 || floor >= n) continue;
-
-        const std::string& etype = a["eventType"].get_ref<const std::string&>();
-
-        if (etype == "Twirl") {
-            tileHasTwirl[floor] = true;
-        } else if (etype == "SetSpeed") {
+        switch (a.type) {
+        case FastAction::Twirl:
+            tileHasTwirl[floor] = true; break;
+        case FastAction::SetSpeed:
             tileHasSetSpeed[floor] = true;
-            SS& ev = setSpeedByFloor[floor];
-            if (a.contains("speedType")) {
-                const std::string& st = a["speedType"].get_ref<const std::string&>();
-                ev.isMultiplier = (st == "Multiplier");
-            } else {
-                ev.isMultiplier = false;
-            }
-            if (ev.isMultiplier)
-                ev.multiplier = a.value("bpmMultiplier", 1.0f);
-            else
-                ev.bpm = a.value("beatsPerMinute", 0.0f);
-        } else if (etype == "PositionTrack") {
-            if (a.contains("positionOffset") && a["positionOffset"].is_array() && a["positionOffset"].size() >= 2) {
-                tilePositionOffsets[floor].offsetX = a["positionOffset"][0].get<float>();
-                tilePositionOffsets[floor].offsetY = a["positionOffset"][1].get<float>();
-                tilePositionOffsets[floor].justThisTile = parseBool(a, "justThisTile", false);
-            }
-        } else if (etype == "SetHitsound") {
-            std::string hs = a.value("hitsound", std::string());
-            if (!hs.empty())
-                hsChanges.push_back({floor, hs});
-        } else if (etype == "Bookmark") {
-            bookmarkFloors.push_back(floor);
+            { SS& ev = setSpeedByFloor[floor]; ev.isMultiplier = a.flag;
+              if (a.flag) ev.multiplier = a.val1; else ev.bpm = a.val1; }
+            break;
+        case FastAction::PositionTrack:
+            tilePositionOffsets[floor] = {a.val1, a.val2, a.flag}; break;
+        case FastAction::SetHitsound:
+            hsChanges.push_back({floor, a.str.empty() ? settings.hitsound : a.str,
+                                 a.val1 > 0 ? a.val1 : settings.hitsoundVolume}); break;
+        case FastAction::Bookmark:
+            bookmarkFloors.push_back(floor); break;
+        default: break;
         }
     }
 
-    // ---- Forward propagation (O(n+m) instead of O(n*m)) ----
-
-    // BPM
     float runningBPM = settings.bpm;
     for (int i = 0; i < n; i++) {
-        if (setSpeedByFloor[i].isMultiplier)
-            runningBPM *= setSpeedByFloor[i].multiplier;
-        else if (setSpeedByFloor[i].bpm > 0.0f)
-            runningBPM = setSpeedByFloor[i].bpm;
+        if (setSpeedByFloor[i].isMultiplier) runningBPM *= setSpeedByFloor[i].multiplier;
+        else if (setSpeedByFloor[i].bpm > 0.0f) runningBPM = setSpeedByFloor[i].bpm;
         tileBPMs[i] = runningBPM;
     }
 
-    // Hitsound types: forward-fill from sorted event floors
     if (!hsChanges.empty()) {
         std::string curHS = settings.hitsound;
+        float curVol = settings.hitsoundVolume;
         size_t ci = 0;
         for (int i = 0; i < n; i++) {
             while (ci < hsChanges.size() && hsChanges[ci].floor <= i) {
-                curHS = hsChanges[ci].type;
-                ci++;
+                curHS = hsChanges[ci].type; curVol = hsChanges[ci].volume; ci++;
             }
-            tileHitsounds[i] = curHS;
+            if (curHS != settings.hitsound) tileHitsounds[i] = curHS;
+            if (curVol != settings.hitsoundVolume) tileHitsoundVolumes[i] = curVol;
         }
     }
 
-    // Sort bookmarks for binary search navigation
     std::sort(bookmarkFloors.begin(), bookmarkFloors.end());
 }
 
@@ -398,15 +426,16 @@ void LevelData::applyPositionTrackOffsets() {
     double cumX = 0.0, cumY = 0.0;
     int n = (int)tiles.size();
 
-    // PositionTrack offsets permanently accumulate (matching ADOFAI-JS behavior).
-    // justThisTile is intentionally ignored for position calculation — resetting cum
-    // would cause track discontinuities when previous offsets were already applied.
-    for (int i = 0; i < n; i++) {
-        if (i < (int)tilePositionOffsets.size()) {
-            cumX += tilePositionOffsets[i].offsetX;
-            cumY += tilePositionOffsets[i].offsetY;
-        }
+    std::vector<std::pair<int, TilePositionOffset>> sorted(tilePositionOffsets.begin(), tilePositionOffsets.end());
+    std::sort(sorted.begin(), sorted.end(), [](auto& a, auto& b) { return a.first < b.first; });
+    size_t oi = 0;
 
+    for (int i = 0; i < n; i++) {
+        while (oi < sorted.size() && sorted[oi].first == i) {
+            cumX += sorted[oi].second.offsetX;
+            cumY += sorted[oi].second.offsetY;
+            oi++;
+        }
         tiles[i].position[0] += cumX;
         tiles[i].position[1] += cumY;
     }
@@ -414,9 +443,10 @@ void LevelData::applyPositionTrackOffsets() {
 
 void LevelData::releaseMemory() {
     // Free arrays no longer needed after loading completes
-    actions = nlohmann::json();
-    tilePositionOffsets.clear(); tilePositionOffsets.shrink_to_fit();
-    tileHitsounds.clear(); tileHitsounds.shrink_to_fit();
+    actions.clear(); actions.shrink_to_fit();
+    tilePositionOffsets.clear();
+    tileHitsounds.clear();
+    tileHitsoundVolumes.clear();
     std::string().swap(pathData);
     // angleData kept: needed by TileMesh::build() for midspin detection
     // tileBPMs kept: needed by buildIcons() for SetSpeed icon coloring

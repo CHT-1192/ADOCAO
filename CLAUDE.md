@@ -14,6 +14,7 @@ Reference implementations:
 - `../ADOFAN_PIXI/` — PixiJS web player
 - `../ADOFAI/A Dance of Fire and Ice/` — Original Unity game. Decompile `Assembly-CSharp.dll` with:
   `../ADOFAI/dnSpy/dnSpy.Console.exe -o ../ADOFAI/decomp_game "../ADOFAI/A Dance of Fire and Ice/A Dance of Fire and Ice_Data/Managed/Assembly-CSharp.dll"`
+- `../ADOFAI_HitSound/` — Maicy0609's C++ hitsound generator (RapidJSON, Nyquist filter, equal-power pre-scaling, double mixing). Reference for loading performance and hitsound synthesis.
 
 A WinUI 3 C# launcher is in a separate repo at `../ADOCAO_WinUI3_Launcher/`.
 

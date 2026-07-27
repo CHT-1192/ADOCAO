@@ -115,13 +115,13 @@ int runApplication(bool debugConsole) {
     // Export hitsounds to WAV and exit (no game window)
     if (cfg.exportHitsounds) {
         LevelData lvl;
-        if (!lvl.loadFromFile(cfg.levelPath)) {
+        if (!lvl.loadFromFile(cfg.levelPath, nullptr, true)) {
             LOG_E("Failed to load level for export");
             glfwTerminate();
             return 1;
         }
         PlaybackEngine pb;
-        pb.init(lvl, true);
+        pb.init(lvl, true, true);
         HitsoundManager hm;
         hm.init();
         if (!hm.preSynthesize(pb.getHitsoundTimestampGroups(), pb.totalDuration())) {
@@ -194,13 +194,13 @@ int runApplicationFromCLI(const LauncherConfig& cfg, bool debugConsole) {
 
     if (config.exportHitsounds) {
         LevelData lvl;
-        if (!lvl.loadFromFile(config.levelPath)) {
+        if (!lvl.loadFromFile(config.levelPath, nullptr, true)) {
             LOG_E("Failed to load level for export");
             glfwTerminate();
             return 1;
         }
         PlaybackEngine pb;
-        pb.init(lvl, true);
+        pb.init(lvl, true, true);
         HitsoundManager hm;
         hm.init();
         auto groups = pb.getHitsoundTimestampGroups();

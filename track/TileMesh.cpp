@@ -4,6 +4,7 @@
 #include "render/CullSIMD.hpp"
 #include "util/Logger.hpp"
 #include "util/ThreadPool.hpp"
+#include <algorithm>
 #include <cmath>
 #include <tuple>
 #include <unordered_map>
