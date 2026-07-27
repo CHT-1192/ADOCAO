@@ -11,6 +11,7 @@ jobs:
     strategy:
       matrix:
         portable: [false, true]
+        zoom: [Ultra, Unimaginable]  # test default + extreme
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +31,8 @@ jobs:
         shell: msys2 {0}
         run: |
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DADOCAO_PORTABLE=${{ matrix.portable == true && 'ON' || 'OFF' }}
+            -DADOCAO_PORTABLE=${{ matrix.portable == true && 'ON' || 'OFF' }} \
+            -DADOCAO_ZOOM_LEVEL=${{ matrix.zoom }}
 
       - name: Build
         shell: msys2 {0}
@@ -38,13 +40,10 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: windows${{ matrix.portable && '-portable' || '' }}
+          name: windows-${{ matrix.zoom }}${{ matrix.portable && '-portable' || '' }}
           path: build/ADOCAO*.exe
 
   linux:
-    strategy:
-      matrix:
-        portable: [false, true]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,13 +57,12 @@ jobs:
 
       - name: Configure
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DADOCAO_PORTABLE=${{ matrix.portable == true && 'ON' || 'OFF' }}
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build --parallel
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux${{ matrix.portable && '-portable' || '' }}
+          name: linux
           path: build/adocao*
