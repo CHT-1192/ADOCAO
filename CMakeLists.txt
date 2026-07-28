@@ -93,6 +93,7 @@ if(NOT rapidjson_POPULATED)
 endif()
 
 # Dear ImGui
+set(IMGUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -101,14 +102,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
-# stb (shared by stb_vorbis)
+# stb (header-only, just need the source for stb_vorbis)
 FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
     GIT_TAG master
     GIT_SHALLOW TRUE
 )
-FetchContent_MakeAvailable(stb)
+FetchContent_GetProperties(stb)
+if(NOT stb_POPULATED)
+    FetchContent_Populate(stb)
+endif()
 
 # miniaudio (single-header)
 FetchContent_Declare(
@@ -118,6 +122,7 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 # Suppress miniaudio optional dependency not-found messages
+set(MINIAUDIO_NO_EXTRA_NODES ON CACHE BOOL "" FORCE)
 set(MINIAUDIO_NO_LIBVORBIS ON CACHE BOOL "" FORCE)
 set(MINIAUDIO_NO_LIBOPUS ON CACHE BOOL "" FORCE)
 set(MINIAUDIO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -268,6 +273,15 @@ elseif(UNIX AND NOT APPLE)
     endif()
     if(WAYLAND_FOUND)
         message(STATUS "Wayland found — GLFW will support Wayland")
+    endif()
+endif()
+
+# Strip Release binaries
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+    if(MINGW)
+        target_link_options(adocao PRIVATE -Wl,-s)
+    elseif(MSVC)
+        target_link_options(adocao PRIVATE /OPT:REF /OPT:ICF)
     endif()
 endif()
 

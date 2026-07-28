@@ -69,12 +69,53 @@ TileMesh& TileMesh::operator=(TileMesh&& o) noexcept {
 void TileMesh::destroy() {
     for(auto& s:m_shapes){if(s.instVbo)glDeleteBuffers(1,&s.instVbo);if(s.colorVbo)glDeleteBuffers(1,&s.colorVbo);
     if(s.ebo)glDeleteBuffers(1,&s.ebo);if(s.vbo)glDeleteBuffers(1,&s.vbo);if(s.vao)glDeleteVertexArrays(1,&s.vao);freeSoA(s);}
-    m_shapes.clear();
+    m_shapes.clear(); m_sgTileIndices.clear();
     for(auto& s:m_iconGroups){if(s.instVbo)glDeleteBuffers(1,&s.instVbo);if(s.colorVbo)glDeleteBuffers(1,&s.colorVbo);
     if(s.ebo)glDeleteBuffers(1,&s.ebo);if(s.vbo)glDeleteBuffers(1,&s.vbo);if(s.vao)glDeleteVertexArrays(1,&s.vao);freeSoA(s);}
-    m_iconGroups.clear();
+    m_iconGroups.clear(); m_sgIconTileIndices.clear();
 }
 bool TileMesh::empty() const { return m_shapes.empty(); }
+
+void TileMesh::setVisibleThreshold(int lastVisible) {
+    if (lastVisible != m_visibleThreshold) {
+        m_visibleThreshold = lastVisible;
+        for (auto& c : m_visCaches) c.valid = false;
+        for (auto& c : m_iconVisCaches) c.valid = false;
+    }
+}
+
+void TileMesh::updateVisibleRange(int startTile, int endTile, bool visible) {
+    if (m_tileToShape.empty()) return;
+    // Lazy init per-instance visibility arrays to all-visible
+    if (m_sgVisible.size() != m_shapes.size()) {
+        m_sgVisible.resize(m_shapes.size());
+        for (size_t si = 0; si < m_shapes.size(); si++)
+            m_sgVisible[si].assign(m_shapes[si].instanceCount, 1);
+        m_sgIconVisible.resize(m_iconGroups.size());
+        for (size_t si = 0; si < m_iconGroups.size(); si++)
+            m_sgIconVisible[si].assign(m_iconGroups[si].instanceCount, 1);
+    }
+    int n = (int)m_tileToShape.size();
+    if (startTile < 0) startTile = 0;
+    if (endTile >= n) endTile = n - 1;
+    uint8_t v = visible ? 1 : 0;
+    for (int i = startTile; i <= endTile; i++) {
+        int sg = m_tileToShape[i], inst = m_tileToInstance[i];
+        if (sg < 0 || sg >= (int)m_sgVisible.size()) continue;
+        if (inst < 0 || inst >= (int)m_sgVisible[sg].size()) continue;
+        m_sgVisible[sg][inst] = v;
+    }
+    // Also update icon visibility
+    for (size_t si = 0; si < m_sgIconTileIndices.size(); si++) {
+        auto& ti = m_sgIconTileIndices[si];
+        auto& vi = m_sgIconVisible[si];
+        for (size_t k = 0; k < ti.size(); k++) {
+            if (ti[k] >= startTile && ti[k] <= endTile) vi[k] = v;
+        }
+    }
+    // Note: caller should call setVisibleThreshold(lastHidden) once after all
+    // updateVisibleRange calls to batch-invalidate caches.
+}
 
 void TileMesh::build(const LevelData& level, const std::string& fillColorHex, const std::string& strokeColorHex, bool legacyCulling) {
     destroy();
@@ -197,6 +238,7 @@ void TileMesh::build(const LevelData& level, const std::string& fillColorHex, co
             glEnableVertexAttribArray(3);glVertexAttribPointer(3,3,GL_FLOAT,GL_FALSE,cs,(void*)0);glVertexAttribDivisor(3,1);
             glEnableVertexAttribArray(4);glVertexAttribPointer(4,3,GL_FLOAT,GL_FALSE,cs,(void*)(3*sizeof(float)));glVertexAttribDivisor(4,1);
             glEnableVertexAttribArray(5);glVertexAttribPointer(5,1,GL_FLOAT,GL_FALSE,cs,(void*)(6*sizeof(float)));glVertexAttribDivisor(5,1);
+            { std::vector<int> ti; ti.reserve(cnt); for(size_t k=subStart;k<subEnd;k++) ti.push_back(tileIndices[k]); m_sgTileIndices.push_back(std::move(ti)); }
             glBindVertexArray(0);si++;
         }
     }
@@ -229,13 +271,16 @@ static void simdCullGroup(const ShapeGroup& sg, double vl, double vr, double vb,
 // Legacy culling: brute-force AoS path (used when legacyCulling=true)
 static void cullAndOffsetGroupsLegacy(const std::vector<ShapeGroup>& groups,
     std::vector<TileMesh::VisibilityCache>& caches, size_t start, size_t end,
-    double vl, double vr, double vb, double vt, double camX, double camY) {
+    double vl, double vr, double vb, double vt, double camX, double camY,
+    const std::vector<std::vector<uint8_t>>* visible = nullptr) {
     for (size_t si = start; si < end; si++) {
         const auto& sg = groups[si]; auto& ca = caches[si];
+        const uint8_t* vis = (visible && si < visible->size()) ? (*visible)[si].data() : nullptr;
         if (!ca.valid || TileMesh::frustumCheck(ca, (float)vl, (float)vr, (float)vb, (float)vt)) {
             ca.indices.clear(); ca.indices.reserve(sg.instances.size());
             for (int ii = (int)sg.instances.size()-1; ii >= 0; ii--) {
                 const auto& inst = sg.instances[ii];
+                if (vis && !vis[ii]) continue;
                 if (inst.maxX < vl || inst.minX > vr || inst.maxY < vb || inst.minY > vt) continue;
                 ca.indices.push_back(ii);
             }
@@ -255,12 +300,20 @@ static void cullAndOffsetGroupsLegacy(const std::vector<ShapeGroup>& groups,
 
 static void cullAndOffsetGroups(const std::vector<ShapeGroup>& groups,
     std::vector<TileMesh::VisibilityCache>& caches, size_t start, size_t end,
-    double vl, double vr, double vb, double vt, double camX, double camY) {
+    double vl, double vr, double vb, double vt, double camX, double camY,
+    const std::vector<std::vector<uint8_t>>* visible = nullptr) {
     for(size_t si=start;si<end;si++){
         const auto& sg=groups[si]; auto& ca=caches[si];
         if(sg.groupMaxX<vl||sg.groupMinX>vr||sg.groupMaxY<vb||sg.groupMinY>vt){ca.indices.clear();ca.offsets.clear();ca.valid=false;continue;}
         bool re=!ca.valid||TileMesh::frustumCheck(ca,(float)vl,(float)vr,(float)vb,(float)vt);
         if(re){ca.indices.clear();simdCullGroup(sg,vl,vr,vb,vt,ca.indices);ca.vl=vl;ca.vr=vr;ca.vb=vb;ca.vt=vt;ca.valid=true;ca.offsetsValid=false;}
+        if (visible && si < visible->size()) {
+            const auto& vis = (*visible)[si];
+            if (!vis.empty()) {
+                ca.indices.erase(std::remove_if(ca.indices.begin(), ca.indices.end(),
+                    [&vis](int idx) { return !vis[idx]; }), ca.indices.end());
+            }
+        }
         if(ca.indices.empty())continue;
         size_t vc=ca.indices.size();
         if(ca.offsetsValid){float dx=(float)(ca.prevCamX-camX),dy=(float)(ca.prevCamY-camY);
@@ -279,12 +332,12 @@ void TileMesh::draw(float vL, float vR, float vB, float vT, double cX, double cY
     size_t n=m_shapes.size(); if(!n)return;
     if (m_legacyCulling) {
         constexpr size_t PT=64;
-        if(n>=PT){auto& p=getPool();p.parallelFor(0,n,[&](size_t s,size_t e){cullAndOffsetGroupsLegacy(m_shapes,m_visCaches,s,e,vl,vr,vb,vt,cX,cY);},1);}
-        else cullAndOffsetGroupsLegacy(m_shapes,m_visCaches,0,n,vl,vr,vb,vt,cX,cY);
+        if(n>=PT){auto& p=getPool();p.parallelFor(0,n,[&](size_t s,size_t e){cullAndOffsetGroupsLegacy(m_shapes,m_visCaches,s,e,vl,vr,vb,vt,cX,cY,&m_sgVisible);},1);}
+        else cullAndOffsetGroupsLegacy(m_shapes,m_visCaches,0,n,vl,vr,vb,vt,cX,cY,&m_sgVisible);
     } else {
         constexpr size_t PT=64;
-        if(n>=PT){auto& p=getPool();p.parallelFor(0,n,[&](size_t s,size_t e){cullAndOffsetGroups(m_shapes,m_visCaches,s,e,vl,vr,vb,vt,cX,cY);},1);}
-        else cullAndOffsetGroups(m_shapes,m_visCaches,0,n,vl,vr,vb,vt,cX,cY);
+        if(n>=PT){auto& p=getPool();p.parallelFor(0,n,[&](size_t s,size_t e){cullAndOffsetGroups(m_shapes,m_visCaches,s,e,vl,vr,vb,vt,cX,cY,&m_sgVisible);},1);}
+        else cullAndOffsetGroups(m_shapes,m_visCaches,0,n,vl,vr,vb,vt,cX,cY,&m_sgVisible);
     }
     for(size_t si=0;si<n;si++){const auto& sg=m_shapes[si];auto& ca=m_visCaches[si];if(ca.indices.empty())continue;
         glBindVertexArray(sg.vao);glBindBuffer(GL_ARRAY_BUFFER,sg.instVbo);
@@ -349,6 +402,7 @@ void TileMesh::buildIcons(const LevelData& level) {
             glEnableVertexAttribArray(3);glVertexAttribPointer(3,3,GL_FLOAT,GL_FALSE,cst,(void*)0);glVertexAttribDivisor(3,1);
             glEnableVertexAttribArray(4);glVertexAttribPointer(4,3,GL_FLOAT,GL_FALSE,cst,(void*)(3*sizeof(float)));glVertexAttribDivisor(4,1);
             glEnableVertexAttribArray(5);glVertexAttribPointer(5,1,GL_FLOAT,GL_FALSE,cst,(void*)(6*sizeof(float)));glVertexAttribDivisor(5,1);
+            { std::vector<int> ti; ti.reserve(cnt); for(size_t k=subStart;k<subEnd;k++) ti.push_back(gr[k].ti); m_sgIconTileIndices.push_back(std::move(ti)); }
             glBindVertexArray(0);m_iconGroups.push_back(std::move(sg));
         }
     }
@@ -362,6 +416,13 @@ void TileMesh::drawIcons(float vL,float vR,float vB,float vT,double cX,double cY
         if(sg.groupMaxX<vl||sg.groupMinX>vr||sg.groupMaxY<vb||sg.groupMinY>vt){ca.indices.clear();ca.offsets.clear();ca.valid=false;continue;}
         bool re=!ca.valid||frustumCheck(ca,(float)vl,(float)vr,(float)vb,(float)vt);
         if(re){ca.indices.clear();simdCullGroup(sg,vl,vr,vb,vt,ca.indices);ca.vl=vl;ca.vr=vr;ca.vb=vb;ca.vt=vt;ca.valid=true;ca.offsetsValid=false;}
+        if (si < m_sgIconVisible.size()) {
+            const auto& vis = m_sgIconVisible[si];
+            if (!vis.empty()) {
+                ca.indices.erase(std::remove_if(ca.indices.begin(), ca.indices.end(),
+                    [&vis](int idx) { return !vis[idx]; }), ca.indices.end());
+            }
+        }
         if(ca.indices.empty())continue;
         size_t vc=ca.indices.size();
         if(ca.offsetsValid){float dx=(float)(ca.prevCamX-cX),dy=(float)(ca.prevCamY-cY);

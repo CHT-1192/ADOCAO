@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <future>
 #include <thread>
+#include <limits>
 
 void PlaybackEngine::init(const LevelData& level, bool showTrail, bool exportOnly) {
     m_level = &level;
@@ -150,9 +151,9 @@ void PlaybackEngine::precalculateTiming() {
 
         double rawAngleData = (i < (int)angleData.size()) ? angleData[i] : 180.0;
         if (rawAngleData == 999.0) {
-            double prevAbs = (i > 0) ? angleData[i - 1] : 0.0;
-            angleDir = (float)std::fmod(prevAbs, 360.0);
-            if (angleDir < 0) angleDir += 360.0f;
+            // Midspin: go straight, outgoing = incoming (use resolved value, not raw angleData[i-1])
+            // Reading angleData[i-1] breaks on consecutive 999s (would get 999→fmod→279°)
+            angleDir = preAngleDir[i];
         } else {
             angleDir = (float)std::fmod(rawAngleData + 180.0, 360.0);
             if (angleDir < 0) angleDir += 360.0f;
@@ -248,6 +249,40 @@ void PlaybackEngine::precalculateTiming() {
             m_tileStartDist[lastIdx] = d > 0.01f ? d : 1.0f;
         }
         m_tileEndDist[lastIdx] = m_tileStartDist[lastIdx];
+    }
+
+    // Phase 5: Per-tile visibility windows (trackDisappearAnimation)
+    // Uses C# ApplyEventsToFloors num5/num6/flag2 speed ratio system
+    {
+        m_tileDisappearTimes.assign(n, std::numeric_limits<double>::infinity());
+        m_tileAppearTimes.assign(n, -std::numeric_limits<double>::infinity());
+        std::string curDA = m_level->settings.trackDisappearAnimation;
+        std::string curAA = m_level->settings.trackAnimation;
+        float curBB = m_level->settings.beatsBehind, curBA = m_level->settings.beatsAhead;
+        float baseBPM = m_level->settings.bpm;
+        float num5 = baseBPM, num6 = baseBPM;
+        bool flag2 = false;
+        for (int i = 0; i < n - 1; i++) {
+            auto it = m_level->atStates.find(i);
+            if (it != m_level->atStates.end()) {
+                auto& st = it->second;
+                if (!st.da.empty()) { curDA = st.da; curBB = st.bb; }
+                if (st.hasAA) { curAA = st.aa; curBA = st.ba; }
+                num5 = num6;
+                num6 = m_tileBPM[i];
+                flag2 = st.hasAA;
+            }
+            float refBPM = flag2 ? num6 : num5;
+            // beatsBehind * 60 / refBPM  (tile BPM cancels out in reference formula)
+            if (curDA != "None")
+                m_tileDisappearTimes[i] = m_tileStartTimes[i + 1] + (double)(curBB * 60.0f / refBPM);
+            if (curAA != "None")
+                m_tileAppearTimes[i] = m_tileStartTimes[i] - (double)(curBA * 60.0f / refBPM);
+        }
+        // Debug: count tiles with finite disappear times
+        int dc = 0; for (int i = 0; i < n; i++) if (m_tileDisappearTimes[i] < 1e100) dc++;
+        LOG_D("TrackVis Phase5: %d/%d tiles have disappearTime, curDA=%s curBB=%.1f curBA=%.1f refBPM=%.1f",
+              dc, n, curDA.c_str(), curBB, curBA, flag2 ? num6 : num5);
     }
 
     auto [minBPM, maxBPM] = std::minmax_element(m_tileBPM.begin(), m_tileBPM.end());

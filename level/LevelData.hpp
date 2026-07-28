@@ -26,6 +26,10 @@ struct LevelData {
         std::string backgroundColor = "000000";
         bool   stickToFloors = true;
         std::string planetEase = "Linear";
+        std::string trackDisappearAnimation = "None";
+        std::string trackAnimation = "None";
+        float  beatsBehind = 4.0f;
+        float  beatsAhead  = 3.0f;
         // ... more fields as needed
     };
 
@@ -43,7 +47,7 @@ struct LevelData {
     // Lightweight action (avoids nlohmann DOM allocation for millions of actions)
     struct FastAction {
         int floor = 0;
-        enum Type : uint8_t { Twirl, SetSpeed, PositionTrack, SetHitsound, Bookmark, Pause, Other } type = Other;
+        enum Type : uint8_t { Twirl, SetSpeed, PositionTrack, SetHitsound, Bookmark, Pause, AnimateTrack, Other } type = Other;
         float val1 = 0, val2 = 0;
         bool flag = false;
         std::string str;
@@ -64,6 +68,10 @@ struct LevelData {
     std::unordered_map<int, float> tileHitsoundVolumes;      // per-tile hitsound volume (sparse)
     std::unordered_map<int, TilePositionOffset> tilePositionOffsets; // sparse
     std::vector<int> bookmarkFloors;  // Bookmark event floors
+
+    // AnimateTrack state overrides (sparse, floor → state)
+    struct ATState { std::string da, aa; float bb=4, ba=3; bool hasAA=false; };
+    std::unordered_map<int, ATState> atStates;
 
     void releaseMemory();  // free data no longer needed after loading
 

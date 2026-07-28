@@ -63,6 +63,13 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     m_audioEngine = &result.audio;
     m_targetAspect = (float)cfg.resolutionW / (float)cfg.resolutionH;
     LOG_D("GameWindow::init: %zu tiles, fullscreen=%d exclusive=%d", m_level->tiles.size(), cfg.fullscreen, cfg.exclusiveFullscreen);
+    m_tileVisEnabled = (m_level->settings.trackDisappearAnimation != "None" ||
+                        m_level->settings.trackAnimation != "None" ||
+                        !m_level->atStates.empty());
+    LOG_D("TrackVis: enabled=%d da=%s aa=%s atStates=%zu", m_tileVisEnabled,
+          m_level->settings.trackDisappearAnimation.c_str(),
+          m_level->settings.trackAnimation.c_str(),
+          m_level->atStates.size());
 
     // Create window
     m_exclusiveFullscreen = cfg.exclusiveFullscreen;
@@ -414,6 +421,40 @@ void GameWindow::render() {
     glDisable(GL_SCISSOR_TEST);
 
     m_camera.setAspect((float)vp.w, (float)vp.h);
+
+    // Track disappear animation: per-tile check in delta range
+    if (m_tileVisEnabled) {
+        const auto& dt = m_playback->tileDisappearTimes();
+        const auto& at = m_playback->tileAppearTimes();
+        int n = (int)dt.size();
+        if (n > 0) {
+            double t = m_playback->timeInLevel();
+            // Find approximate range: last tile with finite disappearTime <= t
+            int lo = 0, hi = n - 1, rangeEnd = -1;
+            while (lo <= hi) {
+                int m = (lo + hi) / 2;
+                if (dt[m] <= t) { rangeEnd = m; lo = m + 1; }
+                else hi = m - 1;
+            }
+            if (rangeEnd != m_lastHiddenEnd) {
+                int start = std::min(m_lastHiddenEnd, rangeEnd) + 1;
+                int end   = std::max(m_lastHiddenEnd, rangeEnd);
+                for (int i = start; i <= end; i++) {
+                    bool hide = (dt[i] <= t) || (at[i] > t);
+                    m_tileMesh->updateVisibleRange(i, i, !hide);
+                }
+                m_tileMesh->setVisibleThreshold(rangeEnd);
+                m_lastHiddenEnd = rangeEnd;
+            }
+            // On stop/seek-back: restore hidden tiles to visible
+            if (rangeEnd < 0 && m_sgVisibleLatch && m_lastHiddenEnd >= 0) {
+                m_tileMesh->updateVisibleRange(0, m_lastHiddenEnd, true);
+                m_tileMesh->setVisibleThreshold(-1);
+                m_sgVisibleLatch = false;
+            }
+            if (rangeEnd >= 0) m_sgVisibleLatch = true;
+        }
+    }
 
     // Tiles
     m_tileShader->use();

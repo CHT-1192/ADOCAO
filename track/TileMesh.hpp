@@ -50,6 +50,8 @@ public:
     void draw(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const;
     void drawIcons(float viewL, float viewR, float viewB, float viewT, double camX, double camY) const;
     void drawHighlightedTile(int tileIdx, double camX, double camY) const;
+    void setVisibleThreshold(int lastVisible);
+    void updateVisibleRange(int startTile, int endTile, bool visible);
     bool empty() const;
 
     struct VisibilityCache {
@@ -75,6 +77,11 @@ private:
     std::vector<int> m_tileToShape, m_tileToInstance;
 
     bool m_legacyCulling = false;
+    mutable int m_visibleThreshold = 0x7fffffff;
+    std::vector<std::vector<int>> m_sgTileIndices;   // per-group, per-instance → global tile index
+    std::vector<std::vector<int>> m_sgIconTileIndices; // same for icon groups
+    std::vector<std::vector<uint8_t>> m_sgVisible;    // per-group, per-instance visibility (1=vis)
+    std::vector<std::vector<uint8_t>> m_sgIconVisible; // same for icons
 
     void destroy();
     void buildIcons(const LevelData& level);

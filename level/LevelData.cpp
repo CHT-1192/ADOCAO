@@ -184,6 +184,7 @@ bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress
                 else if (et == "SetHitsound") act.type = FastAction::SetHitsound;
                 else if (et == "Bookmark") act.type = FastAction::Bookmark;
                 else if (et == "Pause") act.type = FastAction::Pause;
+                else if (et == "AnimateTrack") act.type = FastAction::AnimateTrack;
                 else continue;
                 if (act.type == FastAction::SetSpeed) {
                     if (a.HasMember("speedType") && std::string(a["speedType"].GetString()) == "Multiplier") {
@@ -206,6 +207,12 @@ bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress
                 } else if (act.type == FastAction::SetHitsound) {
                     act.str = a.HasMember("hitsound") ? a["hitsound"].GetString() : "";
                     act.val1 = a.HasMember("hitsoundVolume") ? a["hitsoundVolume"].GetFloat() : 0.0f;
+                } else if (act.type == FastAction::AnimateTrack) {
+                    act.val1 = -1.0f; act.val2 = -1.0f; // sentinel: not set
+                    if (a.HasMember("trackDisappearAnimation")) act.str = a["trackDisappearAnimation"].GetString();
+                    if (a.HasMember("trackAnimation"))  act.flag = true; // flag2: has trackAnimation
+                    if (a.HasMember("beatsBehind")) act.val1 = a["beatsBehind"].GetFloat();
+                    if (a.HasMember("beatsAhead"))  act.val2 = a["beatsAhead"].GetFloat();
                 }
                 actions.push_back(act);
             }
@@ -231,6 +238,10 @@ bool LevelData::loadFromString(const std::string& jsonStr, ProgressCb onProgress
             settings.secondaryTrackColor = getS("secondaryTrackColor", "ffffff");
             settings.backgroundColor = getS("backgroundColor", "000000");
             settings.planetEase      = getS("planetEase", "Linear");
+            settings.trackDisappearAnimation = getS("trackDisappearAnimation", "None");
+            settings.trackAnimation  = getS("trackAnimation", "None");
+            settings.beatsBehind     = getF("beatsBehind", 4.0f);
+            settings.beatsAhead      = getF("beatsAhead", 3.0f);
             if (s.HasMember("stickToFloors")) {
                 if (s["stickToFloors"].IsBool()) settings.stickToFloors = s["stickToFloors"].GetBool();
                 else if (s["stickToFloors"].IsString()) {
@@ -393,6 +404,13 @@ void LevelData::processActions() {
                                  a.val1 > 0 ? a.val1 : settings.hitsoundVolume}); break;
         case FastAction::Bookmark:
             bookmarkFloors.push_back(floor); break;
+        case FastAction::AnimateTrack:
+            atStates[floor] = {a.str.empty() ? settings.trackDisappearAnimation : a.str,
+                               settings.trackAnimation, // aa not parsed yet; use global
+                               a.val1 >= 0 ? a.val1 : settings.beatsBehind,
+                               a.val2 >= 0 ? a.val2 : settings.beatsAhead,
+                               a.flag};
+            break;
         default: break;
         }
     }

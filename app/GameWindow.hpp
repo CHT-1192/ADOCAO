@@ -40,6 +40,9 @@ private:
 
     TileMesh* m_tileMesh = nullptr;
     Camera m_camera;
+    bool m_tileVisEnabled = false;
+    int m_lastHiddenEnd = -1;
+    bool m_sgVisibleLatch = false;
     Input m_input;
     float m_targetAspect = 16.0f/9.0f;
     float m_bgR=0, m_bgG=0, m_bgB=0;

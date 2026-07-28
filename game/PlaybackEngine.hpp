@@ -33,6 +33,8 @@ public:
 
     const std::vector<double>& tileStartTimes() const { return m_tileStartTimes; }
     const std::vector<float>& tileBPMPerTile() const { return m_tileBPM; }
+    const std::vector<double>& tileDisappearTimes() const { return m_tileDisappearTimes; }
+    const std::vector<double>& tileAppearTimes() const { return m_tileAppearTimes; }
     double totalDuration() const;
     std::vector<double> getHitsoundTimestamps() const;
     std::vector<struct HitsoundTimestampGroup> getHitsoundTimestampGroups() const;
@@ -57,6 +59,8 @@ private:
 
     // Precalculated timing arrays (size = n tiles including extra)
     std::vector<double> m_tileStartTimes;  // double: prevents quantization at extreme BPM
+    std::vector<double> m_tileDisappearTimes;
+    std::vector<double> m_tileAppearTimes;
     std::vector<float> m_tileDurations;
     std::vector<float> m_tileTotalAngles;
     std::vector<float> m_tileStartAngles;
