@@ -427,7 +427,7 @@ void GameWindow::render() {
         const auto& dt = m_playback->tileDisappearTimes();
         const auto& at = m_playback->tileAppearTimes();
         int n = (int)dt.size();
-        if (n > 0) {
+        if (n > 0 && m_playback->isPlaying()) {
             double t = m_playback->timeInLevel();
             // Find approximate range: last tile with finite disappearTime <= t
             int lo = 0, hi = n - 1, rangeEnd = -1;
@@ -446,13 +446,14 @@ void GameWindow::render() {
                 m_tileMesh->setVisibleThreshold(rangeEnd);
                 m_lastHiddenEnd = rangeEnd;
             }
-            // On stop/seek-back: restore hidden tiles to visible
-            if (rangeEnd < 0 && m_sgVisibleLatch && m_lastHiddenEnd >= 0) {
-                m_tileMesh->updateVisibleRange(0, m_lastHiddenEnd, true);
-                m_tileMesh->setVisibleThreshold(-1);
-                m_sgVisibleLatch = false;
-            }
             if (rangeEnd >= 0) m_sgVisibleLatch = true;
+        }
+        // On pause/stop: restore all hidden tiles to visible
+        if (!m_playback->isPlaying() && m_sgVisibleLatch) {
+            m_tileMesh->updateVisibleRange(0, std::max(0, m_lastHiddenEnd), true);
+            m_tileMesh->setVisibleThreshold(-1);
+            m_lastHiddenEnd = -1;
+            m_sgVisibleLatch = false;
         }
     }
 

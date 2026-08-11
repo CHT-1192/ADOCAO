@@ -151,9 +151,15 @@ void PlaybackEngine::precalculateTiming() {
 
         double rawAngleData = (i < (int)angleData.size()) ? angleData[i] : 180.0;
         if (rawAngleData == 999.0) {
-            // Midspin: go straight, outgoing = incoming (use resolved value, not raw angleData[i-1])
-            // Reading angleData[i-1] breaks on consecutive 999s (would get 999→fmod→279°)
-            angleDir = preAngleDir[i];
+            // ADOFAI-JS _parseAngle: backtrack to last non-999 angle,
+            // then angleDir = normalize(realAngle + (minus-1)*180)
+            int minus = 1;
+            while (i - minus >= 0 && angleData[i - minus] == 999.0) {
+                minus++;
+            }
+            double realAngle = (i - minus >= 0) ? angleData[i - minus] : 0.0;
+            angleDir = (float)std::fmod(realAngle + (minus - 1) * 180.0, 360.0);
+            if (angleDir < 0) angleDir += 360.0f;
         } else {
             angleDir = (float)std::fmod(rawAngleData + 180.0, 360.0);
             if (angleDir < 0) angleDir += 360.0f;
@@ -259,18 +265,18 @@ void PlaybackEngine::precalculateTiming() {
         std::string curDA = m_level->settings.trackDisappearAnimation;
         std::string curAA = m_level->settings.trackAnimation;
         float curBB = m_level->settings.beatsBehind, curBA = m_level->settings.beatsAhead;
-        float baseBPM = m_level->settings.bpm;
-        float num5 = baseBPM, num6 = baseBPM;
+        float num5 = m_tileBPM[0], num6 = m_tileBPM[0];
         bool flag2 = false;
         for (int i = 0; i < n - 1; i++) {
+            // C# ApplyEventsToFloors: num5/num6 advance EVERY tile (i>0), independent of events
+            if (i > 0) { num5 = num6; num6 = m_tileBPM[i]; }
             auto it = m_level->atStates.find(i);
             if (it != m_level->atStates.end()) {
                 auto& st = it->second;
                 if (!st.da.empty()) { curDA = st.da; curBB = st.bb; }
                 if (st.hasAA) { curAA = st.aa; curBA = st.ba; }
-                num5 = num6;
-                num6 = m_tileBPM[i];
-                flag2 = st.hasAA;
+                // C# semantics: flag2 latches true once any floor has angleData, never resets
+                if (st.hasAA) flag2 = true;
             }
             float refBPM = flag2 ? num6 : num5;
             // beatsBehind * 60 / refBPM  (tile BPM cancels out in reference formula)
