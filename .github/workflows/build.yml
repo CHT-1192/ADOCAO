@@ -42,7 +42,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.zoom }}${{ matrix.portable && '-portable' || '' }}
-          path: build/ADOCAO*.exe
+          path: build/ADOCAO-Windows.exe
 
   linux:
     runs-on: ubuntu-latest
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: build/ADOCAO*
+          path: build/ADOCAO-Linux
 
   macOS:
     runs-on: macos-14
@@ -87,4 +87,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: build/ADOCAO
+          path: build/ADOCAO-macOS

@@ -242,7 +242,13 @@ target_include_directories(tinyfiledialogs PUBLIC ${tinyfiledialogs_SOURCE_DIR})
 
 # ---- Main executable ----
 add_executable(adocao ${SOURCES} ${IMGUI_SOURCES})
-set_target_properties(adocao PROPERTIES WIN32_EXECUTABLE TRUE OUTPUT_NAME "ADOCAO")
+if(WIN32)
+    set_target_properties(adocao PROPERTIES WIN32_EXECUTABLE TRUE OUTPUT_NAME "ADOCAO-Windows")
+elseif(APPLE)
+    set_target_properties(adocao PROPERTIES OUTPUT_NAME "ADOCAO-macOS")
+else()
+    set_target_properties(adocao PROPERTIES OUTPUT_NAME "ADOCAO-Linux")
+endif()
 
 target_include_directories(adocao PRIVATE
     ${CMAKE_SOURCE_DIR}

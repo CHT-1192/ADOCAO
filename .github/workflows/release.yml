@@ -45,7 +45,7 @@ jobs:
         with:
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
           files: |
-            build/ADOCAO.exe
+            build/ADOCAO-Windows.exe
             build/ADOCAO-data.zip
 
   linux:
@@ -76,7 +76,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/ADOCAO
+            build/ADOCAO-Linux
             build/ADOCAO-data.zip
 
   macOS:
@@ -104,5 +104,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/ADOCAO
+            build/ADOCAO-macOS
             build/ADOCAO-data.zip
