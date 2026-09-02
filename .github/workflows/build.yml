@@ -5,6 +5,7 @@ on:
     branches: [master, pre-synth-v1]
   pull_request:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
   windows:
