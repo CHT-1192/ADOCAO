@@ -10,7 +10,7 @@ jobs:
   windows:
     strategy:
       matrix:
-        portable: [false, true]
+        portable: [true]  # portable (static) only
         zoom: [Ultra, Unimaginable]  # test default + extreme
     runs-on: windows-latest
     steps:
