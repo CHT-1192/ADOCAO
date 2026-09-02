@@ -74,8 +74,29 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     // Create window
     m_exclusiveFullscreen = cfg.exclusiveFullscreen;
     m_isFullscreen = cfg.fullscreen;
-    m_windowedW = cfg.resolutionW;
-    m_windowedH = cfg.resolutionH;
+
+    GLFWmonitor* primary = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = primary ? glfwGetVideoMode(primary) : nullptr;
+
+    // GLFW window sizes are logical points; on Retina the framebuffer is
+    // content-scale × window, and glfwGetVideoMode() reports physical pixels.
+    // Convert requested resolutions to logical points so the framebuffer
+    // matches the requested physical resolution exactly. No-op on Windows/
+    // Linux where content scale is 1.0.
+    float csx = 1.0f, csy = 1.0f;
+    if (primary) {
+        glfwGetMonitorContentScale(primary, &csx, &csy);
+        if (csx <= 0.0f) csx = 1.0f;
+        if (csy <= 0.0f) csy = 1.0f;
+    }
+    int winW = (int)(cfg.resolutionW / csx); if (winW < 1) winW = 1;
+    int winH = (int)(cfg.resolutionH / csy); if (winH < 1) winH = 1;
+    int screenW = mode ? (int)(mode->width / csx) : winW; if (screenW < 1) screenW = 1;
+    int screenH = mode ? (int)(mode->height / csy) : winH; if (screenH < 1) screenH = 1;
+    int fsW = mode ? screenW : winW;
+    int fsH = mode ? screenH : winH;
+    m_windowedW = winW;
+    m_windowedH = winH;
 
     if (cfg.msaaSamples > 0) glfwWindowHint(GLFW_SAMPLES, cfg.msaaSamples);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -83,27 +104,24 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    GLFWmonitor* primary = glfwGetPrimaryMonitor();
-    const GLFWvidmode* mode = primary ? glfwGetVideoMode(primary) : nullptr;
-
     if (cfg.fullscreen) {
         if (cfg.exclusiveFullscreen) {
             // Exclusive fullscreen: GPU dedicated to this app, mode switch
             glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
-            m_window = glfwCreateWindow(mode->width, mode->height, "ADOCAO", primary, nullptr);
+            m_window = glfwCreateWindow(fsW, fsH, "ADOCAO", primary, nullptr);
         } else {
             // Borderless windowed fullscreen: compositor still active
             glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-            m_window = glfwCreateWindow(mode->width, mode->height, "ADOCAO", nullptr, nullptr);
+            m_window = glfwCreateWindow(fsW, fsH, "ADOCAO", nullptr, nullptr);
             glfwSetWindowPos(m_window, 0, 0);
         }
     } else {
         glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
-        m_window = glfwCreateWindow(cfg.resolutionW, cfg.resolutionH, "ADOCAO", nullptr, nullptr);
+        m_window = glfwCreateWindow(winW, winH, "ADOCAO", nullptr, nullptr);
         if (mode) {
-            glfwSetWindowPos(m_window, (mode->width-cfg.resolutionW)/2, (mode->height-cfg.resolutionH)/2);
-            m_windowedX = (mode->width-cfg.resolutionW)/2;
-            m_windowedY = (mode->height-cfg.resolutionH)/2;
+            glfwSetWindowPos(m_window, (screenW - winW) / 2, (screenH - winH) / 2);
+            m_windowedX = (screenW - winW) / 2;
+            m_windowedY = (screenH - winH) / 2;
         }
     }
     if (!m_window) { LOG_E("Failed to create game window"); return false; }
@@ -506,7 +524,13 @@ void GameWindow::toggleFullscreen() {
         const GLFWvidmode* mode = glfwGetVideoMode(primary);
         if (!mode) return;
 
-        glfwSetWindowMonitor(m_window, primary, 0, 0, mode->width, mode->height, GLFW_DONT_CARE);
+        // Convert physical pixel mode to logical points (Retina content scale)
+        float csx = 1.0f, csy = 1.0f;
+        glfwGetMonitorContentScale(primary, &csx, &csy);
+        int fsW = (int)(mode->width / (csx > 0.0f ? csx : 1.0f));
+        int fsH = (int)(mode->height / (csy > 0.0f ? csy : 1.0f));
+
+        glfwSetWindowMonitor(m_window, primary, 0, 0, fsW, fsH, GLFW_DONT_CARE);
         m_isFullscreen = true;
     }
 }

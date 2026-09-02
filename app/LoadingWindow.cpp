@@ -30,14 +30,16 @@ void showLoadingWindow(std::function<void(LoadingProgress&)> loader) {
         return;
     }
 
-    // Center on primary monitor
+    // Center on primary monitor (convert physical mode to logical points)
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
     if (monitor) {
         const GLFWvidmode* mode = glfwGetVideoMode(monitor);
         if (mode) {
-            glfwSetWindowPos(window,
-                (mode->width  - winW) / 2,
-                (mode->height - winH) / 2);
+            float csx = 1.0f, csy = 1.0f;
+            glfwGetMonitorContentScale(monitor, &csx, &csy);
+            int sw = (int)(mode->width / (csx > 0.0f ? csx : 1.0f));
+            int sh = (int)(mode->height / (csy > 0.0f ? csy : 1.0f));
+            glfwSetWindowPos(window, (sw - winW) / 2, (sh - winH) / 2);
         }
     }
 
