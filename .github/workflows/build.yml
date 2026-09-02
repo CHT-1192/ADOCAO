@@ -65,7 +65,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: build/adocao*
+          path: build/ADOCAO*
 
   macOS:
     runs-on: macos-14
