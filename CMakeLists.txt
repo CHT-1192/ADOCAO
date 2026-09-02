@@ -274,6 +274,16 @@ elseif(UNIX AND NOT APPLE)
     if(WAYLAND_FOUND)
         message(STATUS "Wayland found — GLFW will support Wayland")
     endif()
+elseif(APPLE)
+    # macOS caps OpenGL at 4.1 core — the renderer only needs 3.3.
+    # GLFW propagates Cocoa/IOKit/CoreFoundation; add the rest.
+    target_compile_definitions(adocao PRIVATE GL_SILENCE_DEPRECATION)
+    target_link_libraries(adocao PRIVATE
+        "-framework OpenGL"
+        "-framework AudioToolbox"
+        "-framework CoreAudio"
+        "-framework CoreFoundation"
+    )
 endif()
 
 # Strip Release binaries

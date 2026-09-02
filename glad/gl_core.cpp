@@ -84,6 +84,15 @@ void loadGL(T*& ptr, const char* name) {
     if (!ptr) { fprintf(stderr, "[GL] Failed to load: %s\n", name); failed = true; }
 }
 
+// Optional functions (compute shaders, indirect draw): loaded but NOT required.
+// These advanced features are not wired into the render loop yet, so their
+// absence (e.g. on macOS, which caps OpenGL at 4.1) must not fail startup.
+template<typename T>
+void loadGLOptional(T*& ptr, const char* name) {
+    ptr = reinterpret_cast<T*>(glfwGetProcAddress(name));
+    if (!ptr) { fprintf(stderr, "[GL] Optional function unavailable (harmless): %s\n", name); }
+}
+
 } // namespace
 
 bool loadGLCore() {
@@ -157,13 +166,13 @@ bool loadGLCore() {
     loadGL(glad_LineWidth,    "glLineWidth");
     loadGL(glad_DepthFunc,   "glDepthFunc");
 
-    // Compute shader (OpenGL 4.3+)
-    loadGL(glad_DispatchCompute,         "glDispatchCompute");
-    loadGL(glad_DispatchComputeIndirect, "glDispatchComputeIndirect");
-    loadGL(glad_BindBufferBase,          "glBindBufferBase");
-    loadGL(glad_MemoryBarrier,           "glMemoryBarrier");
-    // Indirect draw (OpenGL 4.0+)
-    loadGL(glad_DrawElementsIndirect,    "glDrawElementsIndirect");
+    // Compute shader (OpenGL 4.3+) — optional, not wired into the render loop
+    loadGLOptional(glad_DispatchCompute,         "glDispatchCompute");
+    loadGLOptional(glad_DispatchComputeIndirect, "glDispatchComputeIndirect");
+    loadGLOptional(glad_BindBufferBase,          "glBindBufferBase");
+    loadGLOptional(glad_MemoryBarrier,           "glMemoryBarrier");
+    // Indirect draw (OpenGL 4.0+) — optional, not wired into the render loop
+    loadGLOptional(glad_DrawElementsIndirect,    "glDrawElementsIndirect");
 
     // Misc
     loadGL(glad_GetString, "glGetString");

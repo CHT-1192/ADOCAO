@@ -3,7 +3,17 @@
 // Minimal OpenGL 3.3 Core loader using MinGW/mesa glcorearb.h types.
 // On Linux, GL/glcorearb.h is provided by mesa.
 // On Windows (MinGW), it comes with the MinGW-w64 distribution.
+// On macOS, the SDK provides OpenGL/gl3.h (covers core profile up to 4.1).
+#if defined(__APPLE__)
+#include <OpenGL/gl3.h>
+// Apple's gl3.h caps at OpenGL 4.1 — provide the 4.3 compute typedefs that the
+// optional (unused) loader entries reference.
+typedef void (APIENTRY *PFNGLDISPATCHCOMPUTEPROC)(GLuint, GLuint, GLuint);
+typedef void (APIENTRY *PFNGLDISPATCHCOMPUTEINDIRECTPROC)(GLenum);
+typedef void (APIENTRY *PFNGLMEMORYBARRIERPROC)(GLbitfield);
+#else
 #include <GL/glcorearb.h>
+#endif
 
 // Shader
 extern PFNGLCREATESHADERPROC  glad_CreateShader;
