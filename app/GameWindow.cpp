@@ -118,10 +118,13 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     } else {
         glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
         m_window = glfwCreateWindow(winW, winH, "ADOCAO", nullptr, nullptr);
-        if (mode) {
-            glfwSetWindowPos(m_window, (screenW - winW) / 2, (screenH - winH) / 2);
-            m_windowedX = (screenW - winW) / 2;
-            m_windowedY = (screenH - winH) / 2;
+        if (primary) {
+            // Center using the monitor work area in logical points
+            int wx, wy, ww, wh;
+            glfwGetMonitorWorkarea(primary, &wx, &wy, &ww, &wh);
+            glfwSetWindowPos(m_window, wx + (ww - winW) / 2, wy + (wh - winH) / 2);
+            m_windowedX = wx + (ww - winW) / 2;
+            m_windowedY = wy + (wh - winH) / 2;
         }
     }
     if (!m_window) { LOG_E("Failed to create game window"); return false; }
