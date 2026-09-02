@@ -12,6 +12,7 @@ jobs:
       matrix:
         portable: [true]  # portable (static) only
         zoom: [Ultra, Unimaginable]  # test default + extreme
+    name: windows-${{ matrix.zoom }}-portable
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
