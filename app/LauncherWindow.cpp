@@ -99,18 +99,11 @@ static constexpr int LAUNCHER_W = 520;
 static constexpr int LAUNCHER_H = 420;
 
 LauncherConfig showLauncher() {
-    // ---- DPI scale ----
-    float dpiScale = 1.0f;
-    {
-        GLFWmonitor* mon = glfwGetPrimaryMonitor();
-        if (mon) {
-            float sx, sy;
-            glfwGetMonitorContentScale(mon, &sx, &sy);
-            dpiScale = std::max(sx, sy);
-        }
-    }
-    int winW = (int)(LAUNCHER_W * dpiScale);
-    int winH = (int)(LAUNCHER_H * dpiScale);
+    // Window size in logical points. The GLFW + ImGui backends handle high-DPI
+    // (Retina) scaling automatically via DisplayFramebufferScale — manually
+    // multiplying by monitor content scale would double-scale and blur on macOS.
+    int winW = LAUNCHER_W;
+    int winH = LAUNCHER_H;
 
     // ---- Create window ----
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -146,9 +139,7 @@ LauncherConfig showLauncher() {
     ImGui::GetIO().IniFilename = nullptr;
     ImGui::StyleColorsDark();
 
-    // DPI-aware sizing: scale all UI elements, load fonts at native resolution
-    ImGui::GetStyle().ScaleAllSizes(dpiScale);
-    float fontSize = 16.0f * dpiScale;
+    float fontSize = 16.0f;
 
     // Load CJK font (try multiple system fonts)
     {
@@ -261,7 +252,7 @@ LauncherConfig showLauncher() {
             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
 
-        float S = dpiScale;  // scale factor for all hardcoded sizes
+        float S = 1.0f;  // hardcoded sizes are in logical pixels
 
         ImGui::Spacing();
         ImGui::SetCursorPosX(60 * S);

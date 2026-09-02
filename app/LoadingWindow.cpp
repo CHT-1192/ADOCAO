@@ -11,18 +11,11 @@ static constexpr int LOADING_W = 480;
 static constexpr int LOADING_H = 160;
 
 void showLoadingWindow(std::function<void(LoadingProgress&)> loader) {
-    // ---- DPI scale ----
-    float dpiScale = 1.0f;
-    {
-        GLFWmonitor* mon = glfwGetPrimaryMonitor();
-        if (mon) {
-            float sx, sy;
-            glfwGetMonitorContentScale(mon, &sx, &sy);
-            dpiScale = std::max(sx, sy);
-        }
-    }
-    int winW = (int)(LOADING_W * dpiScale);
-    int winH = (int)(LOADING_H * dpiScale);
+    // Window size in logical points. The GLFW + ImGui backends handle high-DPI
+    // (Retina) scaling automatically via DisplayFramebufferScale — manually
+    // multiplying by monitor content scale would double-scale and blur on macOS.
+    int winW = LOADING_W;
+    int winH = LOADING_H;
 
     // ---- Create window ----
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -58,8 +51,7 @@ void showLoadingWindow(std::function<void(LoadingProgress&)> loader) {
     ImGui::StyleColorsDark();
 
     // DPI-aware sizing: scale all UI elements, load fonts at native resolution
-    ImGui::GetStyle().ScaleAllSizes(dpiScale);
-    float fontSize = 16.0f * dpiScale;
+    float fontSize = 16.0f;
 
     // Load CJK font
     {
@@ -137,7 +129,7 @@ void showLoadingWindow(std::function<void(LoadingProgress&)> loader) {
             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
 
-        float S = dpiScale;
+        float S = 1.0f;  // hardcoded sizes are in logical pixels
 
         ImGui::Spacing();
         ImGui::Text("Loading...");
