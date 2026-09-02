@@ -98,7 +98,12 @@ static std::string readFileUtf8(const std::string& filepath) {
     if (!file.is_open()) return {};
     std::stringstream buffer;
     buffer << file.rdbuf();
-    return buffer.str();
+    std::string content = buffer.str();
+    // Skip UTF-8 BOM if present (RapidJSON rejects it at offset 0)
+    if (content.size() >= 3 && (unsigned char)content[0] == 0xEF
+        && (unsigned char)content[1] == 0xBB && (unsigned char)content[2] == 0xBF)
+        content.erase(0, 3);
+    return content;
 #endif
 }
 
