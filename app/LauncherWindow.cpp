@@ -139,7 +139,19 @@ LauncherConfig showLauncher() {
     ImGui::GetIO().IniFilename = nullptr;
     ImGui::StyleColorsDark();
 
-    float fontSize = 16.0f;
+    // High-DPI fonts: rasterize glyphs at physical resolution (Retina = 2x),
+    // then scale layout back to logical size via FontGlobalScale (ImGui DPI
+    // guidelines). Window size stays in logical points.
+    float dpiScale = 1.0f;
+    {
+        GLFWmonitor* mon = glfwGetPrimaryMonitor();
+        if (mon) {
+            float sx, sy;
+            glfwGetMonitorContentScale(mon, &sx, &sy);
+            dpiScale = std::max(sx, sy);
+        }
+    }
+    float fontSize = 14.0f * dpiScale;
 
     // Load CJK font (try multiple system fonts)
     {
@@ -153,6 +165,11 @@ LauncherConfig showLauncher() {
             "C:/Windows/Fonts/msyh.ttc",
             "C:/Windows/Fonts/msgothic.ttc",
             "C:/Windows/Fonts/simhei.ttf",
+#elif defined(__APPLE__)
+            "/System/Library/Fonts/PingFang.ttc",
+            "/System/Library/Fonts/STHeiti Light.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB.ttc",
+            "/System/Library/Fonts/Supplemental/Songti.ttc",
 #else
             "/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
@@ -179,6 +196,9 @@ LauncherConfig showLauncher() {
 #ifdef _WIN32
                 "C:/Windows/Fonts/segoeui.ttf",
                 "C:/Windows/Fonts/arial.ttf",
+#elif defined(__APPLE__)
+                "/System/Library/Fonts/Helvetica.ttc",
+                "/System/Library/Fonts/SFNS.ttf",
 #endif
             };
             bool latinLoaded = false;
@@ -198,6 +218,9 @@ LauncherConfig showLauncher() {
             if (f) { fclose(f); io.Fonts->AddFontFromFileTTF(path, fontSize, &cfg, cjkRanges); cjkLoaded = true; break; }
         }
     }
+
+    // Scale layout back to logical size; glyphs stay crisp at physical res.
+    ImGui::GetIO().FontGlobalScale = 1.0f / dpiScale;
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
