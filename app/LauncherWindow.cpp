@@ -1,6 +1,7 @@
 #include "LauncherWindow.hpp"
 #include "LevelLoader.hpp"
 #include "LoadingWindow.hpp"
+#include "glad/gl_core.hpp"
 #include "util/Logger.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -203,6 +204,14 @@ LauncherConfig showLauncher() {
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
+
+    // Load GL function pointers (glad). The wizard renders via ImGui/GL right
+    // away, before GameWindow::init would normally call loadGLCore().
+    if (!loadGLCore()) {
+        fprintf(stderr, "Failed to load OpenGL functions\n");
+        glfwDestroyWindow(window);
+        return {.cancelled = true};
+    }
 
     // ---- Init ImGui ----
     IMGUI_CHECKVERSION();
