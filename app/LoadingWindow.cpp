@@ -60,7 +60,7 @@ void showLoadingWindow(std::function<void(LoadingProgress&)> loader) {
             dpiScale = std::max(sx, sy);
         }
     }
-    float fontSize = 14.0f * dpiScale;
+    float fontSize = 12.0f * dpiScale;
 
     // Load CJK font
     {

@@ -1,7 +1,11 @@
 #pragma once
 
 #include <string>
+#include <memory>
 #include <functional>
+
+class LevelData;
+class PlaybackEngine;
 
 // User selections from the launcher
 struct LauncherConfig {
@@ -24,7 +28,13 @@ struct LauncherConfig {
     float trailDuration = 0.4f;    // seconds of trail history
     float trailSampleRate = 200.0f; // samples per second
     bool exportHitsounds = false;
+    std::string exportDir;         // hitsound export directory (defaults to level dir)
     bool cancelled = false;
+
+    // Wizard (5.0.0): result of the "Next" preload step (parse + timeline).
+    // Hitsound synthesis + audio are finished after Start in runLevelLoading.
+    std::shared_ptr<LevelData> preloadedLevel;
+    std::shared_ptr<PlaybackEngine> preloadedPlayback;
 };
 
 // Opens a centered ImGui launcher window. Returns config after user clicks Start or closes.

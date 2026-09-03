@@ -18,6 +18,27 @@ static void report(LoadingProgress& p, float pct, const char* text) {
     }
 }
 
+void runLevelPreload(const LauncherConfig& cfg, LoadingProgress& progress,
+                     std::shared_ptr<LevelData>& outLevel,
+                     std::shared_ptr<PlaybackEngine>& outPlayback) {
+    // Phase 1: parse level
+    outLevel = std::make_shared<LevelData>();
+    auto onParseProgress = [&](float pct, const char* stage) {
+        report(progress, 0.05f + pct * 0.60f, stage);
+    };
+    if (!outLevel->loadFromFile(cfg.levelPath, onParseProgress)) {
+        report(progress, 0.0f, "Error: Failed to parse level");
+        outLevel.reset();
+        return;
+    }
+
+    // Phase 2: precalculate timing (tile positions / timeline)
+    report(progress, 0.70f, "Precalculating timeline...");
+    outPlayback = std::make_shared<PlaybackEngine>();
+    outPlayback->init(*outLevel, true);  // trail final value applied after Start
+    report(progress, 1.0f, "Preload complete");
+}
+
 void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadResult& result) {
     report(progress, 0.02f, "Starting audio engine...");
 
@@ -32,24 +53,33 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
         result.audio.init();
     }
 
-    // ---- Phase 1: Parse level (2-45%) ----
-    result.level = std::make_unique<LevelData>();
-    auto onParseProgress = [&](float pct, const char* stage) {
-        report(progress, 0.02f + pct * 0.43f, stage);
-    };
-    if (!result.level->loadFromFile(cfg.levelPath, onParseProgress)) {
-        report(progress, 0.0f, "Error: Failed to parse level");
-        result.level.reset();
-        return;
+    if (!cfg.preloadedLevel || !cfg.preloadedPlayback) {
+        // Full path (CLI mode): parse level + precalculate timing
+        report(progress, 0.05f, "Parsing level...");
+        result.level = std::make_shared<LevelData>();
+        auto onParseProgress = [&](float pct, const char* stage) {
+            report(progress, 0.05f + pct * 0.40f, stage);
+        };
+        if (!result.level->loadFromFile(cfg.levelPath, onParseProgress)) {
+            report(progress, 0.0f, "Error: Failed to parse level");
+            result.level.reset();
+            return;
+        }
+        report(progress, 0.45f, "Precalculating timeline...");
+        result.playback = std::make_shared<PlaybackEngine>();
+        result.playback->init(*result.level, cfg.showTrail);
+    } else {
+        // Wizard preload already parsed level + computed timeline
+        result.level  = cfg.preloadedLevel;
+        result.playback = cfg.preloadedPlayback;
+        report(progress, 0.50f, "Applying final settings...");
     }
 
-    // ---- Phase 2: Precalculate timing (45-75%) ----
-    report(progress, 0.45f, "Precalculating timeline...");
-    result.playback.init(*result.level, cfg.showTrail);
-    result.playback.setForceHitsoundType(cfg.forceHitsoundType);
-    result.playback.setLagacyCulling(cfg.legacyCulling);
-    result.playback.setTrailDuration(cfg.trailDuration);
-    result.playback.setTrailSampleRate(cfg.trailSampleRate);
+    // Final settings (may have been changed in the wizard after the preload)
+    result.playback->setForceHitsoundType(cfg.forceHitsoundType);
+    result.playback->setLagacyCulling(cfg.legacyCulling);
+    result.playback->setTrailDuration(cfg.trailDuration);
+    result.playback->setTrailSampleRate(cfg.trailSampleRate);
 
     // Wait for background audio init to finish (if started)
     if (audioFuture.valid()) {
@@ -60,8 +90,8 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
     report(progress, 0.80f, "Synthesizing hitsounds...");
     if (cfg.enableHitsounds) {
         result.hitsounds.init();
-        result.hitsounds.preSynthesize(result.playback.getHitsoundTimestampGroups(),
-                                       result.playback.totalDuration());
+        result.hitsounds.preSynthesize(result.playback->getHitsoundTimestampGroups(),
+                                       result.playback->totalDuration());
     }
 
     // Release data no longer needed (angleData, actions, position offsets)

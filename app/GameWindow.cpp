@@ -58,7 +58,7 @@ static void navigateToTile(const LevelData& level, int floor,
 bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     m_cfg = &cfg;
     m_level = result.level.get();
-    m_playback = &result.playback;
+    m_playback = result.playback.get();
     m_hitsoundMgr = &result.hitsounds;
     m_audioEngine = &result.audio;
     m_targetAspect = (float)cfg.resolutionW / (float)cfg.resolutionH;
@@ -485,7 +485,7 @@ void GameWindow::render() {
     m_tileMesh->draw(vl, vr, vb, vt, m_camera.targetX(), m_camera.targetY());
 
     // Trails
-    if (m_playback->isPlaying() && m_playback->redPlanet() && m_playback->redPlanet()->trail) {
+    if (m_cfg->showTrail && m_playback->isPlaying() && m_playback->redPlanet() && m_playback->redPlanet()->trail) {
         m_playback->redPlanet()->trail->draw(*m_trailShader, m_camera, m_camera.targetX(), m_camera.targetY());
         m_playback->bluePlanet()->trail->draw(*m_trailShader, m_camera, m_camera.targetX(), m_camera.targetY());
     }
