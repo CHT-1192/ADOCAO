@@ -268,7 +268,7 @@ target_link_libraries(adocao PRIVATE
 
 # Platform-specific
 if(WIN32)
-    target_link_libraries(adocao PRIVATE opengl32 ole32)
+    target_link_libraries(adocao PRIVATE opengl32 ole32 shell32)
     target_compile_definitions(adocao PRIVATE NOMINMAX UNICODE _UNICODE)
 elseif(UNIX AND NOT APPLE)
     find_package(OpenGL REQUIRED)
