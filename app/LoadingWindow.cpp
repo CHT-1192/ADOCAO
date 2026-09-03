@@ -46,6 +46,16 @@ void showLoadingWindow(std::function<void(LoadingProgress&)> loader) {
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
     ImGui::StyleColorsDark();
+    {   // Rounded corners (radius 4)
+        ImGuiStyle& st = ImGui::GetStyle();
+        st.WindowRounding    = 4.0f;
+        st.FrameRounding     = 4.0f;
+        st.PopupRounding     = 4.0f;
+        st.ChildRounding     = 4.0f;
+        st.ScrollbarRounding = 4.0f;
+        st.GrabRounding      = 4.0f;
+        st.TabRounding       = 4.0f;
+    }
 
     // DPI-aware sizing: scale all UI elements, load fonts at native resolution
     // High-DPI fonts: rasterize glyphs at physical resolution (Retina = 2x),

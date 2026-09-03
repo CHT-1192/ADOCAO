@@ -218,6 +218,16 @@ LauncherConfig showLauncher() {
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
     ImGui::StyleColorsDark();
+    {   // Rounded corners (radius 4)
+        ImGuiStyle& st = ImGui::GetStyle();
+        st.WindowRounding    = 4.0f;
+        st.FrameRounding     = 4.0f;
+        st.PopupRounding     = 4.0f;
+        st.ChildRounding     = 4.0f;
+        st.ScrollbarRounding = 4.0f;
+        st.GrabRounding      = 4.0f;
+        st.TabRounding       = 4.0f;
+    }
 
     // High-DPI fonts: rasterize glyphs at physical resolution (Retina = 2x),
     // then scale layout back to logical size via FontGlobalScale.
