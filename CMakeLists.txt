@@ -58,6 +58,13 @@ endif()
 # ---- Dependencies via FetchContent ----
 include(FetchContent)
 
+# rapidjson & stb are header-only with no usable CMake build (rapidjson's
+# bundled CMake adds nested projects that fail as a subdirectory). Keep
+# FetchContent_Populate for them; silence CMP0169 deprecation warning.
+if(POLICY CMP0169)
+    cmake_policy(SET CMP0169 OLD)
+endif()
+
 # GLFW
 FetchContent_Declare(
     glfw
