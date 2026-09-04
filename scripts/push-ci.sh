@@ -101,7 +101,7 @@ show_stats() {
     echo ""
     echo "── 各平台 job 耗时 ──"
     gh api "repos/$OWNER_REPO/actions/runs/$rid/jobs" \
-        -q '.jobs[] | "\(.name) [\(.labels | join("/"))]\t\(.startedAt)\t\(.completedAt)"' 2>/dev/null \
+        -q '.jobs[] | "\(.name) [\(.labels | join("/"))]\t\(.started_at)\t\(.completed_at)"' 2>/dev/null \
         | while IFS=$'\t' read -r name start end; do
               s="$(iso_epoch "$start" 2>/dev/null || echo 0)"
               e="$(iso_epoch "$end"   2>/dev/null || echo 0)"
@@ -120,7 +120,16 @@ show_stats() {
 }
 
 # ── watch 并处理结果 ───────────────────────────────────────────
-if gh run watch --exit-status "$rid"; then
+# 交互终端：显示 gh 的实时进度；非交互（日志/脚本环境）：静默等待，避免刷屏
+WATCH_RC=0
+if [ -t 1 ]; then
+    gh run watch --exit-status "$rid" || WATCH_RC=$?
+else
+    echo "▸ 非交互模式：静默等待 run #${rid} 结束…"
+    gh run watch --exit-status "$rid" >/dev/null 2>&1 || WATCH_RC=$?
+fi
+
+if [ "$WATCH_RC" -eq 0 ]; then
     echo ""
     echo "✅ CI 全部成功（run #${rid}）"
     [ "$STATS" = true ] && show_stats

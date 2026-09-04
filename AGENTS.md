@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 导航（先读这里，省 token）
+
+- 目标结构蓝图 + 已拍板决策 1–10：`docs/project-structure.md`
+  ⚠ P1 目录搬迁尚未执行——代码仍是现状布局，蓝图 ≠ 当前代码
+- 待办（已筛选）：`TODO.md`（未完成 9 条 + 遥远的未来：MoveTrack）
+- 已彻底删除：GPU compute culling（2.0.0 起不需要，勿再引入）
+- 脚本：`scripts/push-ci.sh`（push → gh run watch；`--watch` 默认输出平台耗时/产物）
+  `scripts/run.sh --debugger` | `scripts/release.sh`（支持 x.y.z-AlphaN/-BetaN/-RcN）
+  `build.sh`（已有 build/ 缓存且不带参数 = 增量构建，不提问）
+
 ## Project
 
 A native C++ / OpenGL "A Dance of Fire and Ice" (冰与火之舞) level viewer. Plays `.adofai` custom levels on Windows, Linux (Wayland) and macOS.
