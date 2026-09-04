@@ -2,20 +2,87 @@
 #include "glad/gl_core.hpp"
 #include "render/Shader.hpp"
 #include "render/Shaders.hpp"
-#include "camera/Camera.hpp"
-#include "track/TileMesh.hpp"
-#include "game/Planet.hpp"
+#include "render/Camera.hpp"
+#include "render/TileMesh.hpp"
+#include "render/Planet.hpp"
 #include "render/PlanetTrail.hpp"
-#include "util/Logger.hpp"
+#include "core/timeline/Timeline.hpp"
+#include "core/timeline/PlaybackClock.hpp"
+#include "core/timeline/PositionSolver.hpp"
+#include "core/util/Logger.hpp"
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <chrono>
+#include <cmath>
+#include <fstream>
 #include <thread>
+#include <vector>
+
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
+#ifdef __linux__
+#include <unistd.h>
+#include <limits.h>
+#endif
 
 namespace {
 
 struct Viewport { int x=0, y=0, w=0, h=0; };
+
+static std::string executableDirectory() {
+#ifdef __APPLE__
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::vector<char> buf(size > 0 ? size : 1);
+    if (_NSGetExecutablePath(buf.data(), &size) != 0) return {};
+    std::string dir(buf.data());
+    auto pos = dir.find_last_of('/');
+    if (pos != std::string::npos) dir = dir.substr(0, pos);
+    return dir;
+#elif defined(__linux__)
+    char buf[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len <= 0) return {};
+    buf[len] = '\0';
+    std::string dir(buf);
+    auto pos = dir.find_last_of('/');
+    if (pos != std::string::npos) dir = dir.substr(0, pos);
+    return dir;
+#else
+    return {};
+#endif
+}
+
+static bool fileExists(const std::string& path) {
+    std::ifstream f(path);
+    return f.good();
+}
+
+static std::string assetPath(const std::string& relative) {
+    std::vector<std::string> candidates;
+    candidates.push_back(relative);
+
+    const std::string exeDir = executableDirectory();
+    if (!exeDir.empty()) {
+        candidates.push_back(exeDir + "/" + relative);
+        auto dir = exeDir;
+        for (int i = 0; i < 3 && !dir.empty(); i++) {
+            const auto slash = dir.find_last_of("/\\");
+            if (slash == std::string::npos) { dir.clear(); break; }
+            dir = dir.substr(0, slash);
+        }
+        if (!dir.empty())
+            candidates.push_back(dir + "/" + relative);
+    }
+
+    for (const auto& c : candidates) {
+        if (fileExists(c)) return c;
+    }
+    return relative;
+}
 
 Viewport computeLetterbox(int fbW, int fbH, float targetAspect) {
     float fbAspect = (float)fbW / (float)fbH;
@@ -28,14 +95,14 @@ Viewport computeLetterbox(int fbW, int fbH, float targetAspect) {
     return vp;
 }
 
-static void jumpToTile(PlaybackEngine& pb, AudioEngine& audio, HitsoundManager& hs,
+static void jumpToTile(Timeline& timeline, PlaybackClock& clock, AudioEngine& audio, HitsoundManager& hs,
                         const LevelData& level, int floor) {
     if (floor < 0 || floor >= (int)level.tiles.size()) return;
-    double targetTime = pb.tileStartTimes()[floor];
+    double targetTime = timeline.tileStartTimes()[floor];
     float offsetSec = level.settings.offset / 1000.0f;
     float audioPos = (float)(targetTime + offsetSec);
     if (audioPos < 0) audioPos = 0;
-    pb.startAt(glfwGetTime(), audioPos, offsetSec);
+    clock.startAt(glfwGetTime(), audioPos, offsetSec);
     hs.resetAt(audioPos);
     if (audio.hasMusic()) { audio.seek(audioPos); audio.play(); }
     else audio.play();
@@ -58,6 +125,7 @@ static void navigateToTile(const LevelData& level, int floor,
 bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
     m_cfg = &cfg;
     m_level = result.level.get();
+    m_timeline = result.timeline.get();
     m_playback = result.playback.get();
     m_hitsoundMgr = &result.hitsounds;
     m_audioEngine = &result.audio;
@@ -164,15 +232,20 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
         LOG_W("Shader file loading failed, using inline fallback");
         return s.compile(vs, fs);
     };
-    if (!compileShader(*m_tileShader, "shaders/tile.vert","shaders/tile.frag",Shaders::kTileVertSrc,Shaders::kTileFragSrc)
-     || !compileShader(*m_planetShader,"shaders/planet.vert","shaders/planet.frag",Shaders::kPlanetVertSrc,Shaders::kPlanetFragSrc)
-     || !compileShader(*m_trailShader,"shaders/trail.vert","shaders/trail.frag",Shaders::kTrailVertSrc,Shaders::kTrailFragSrc)
-     || !compileShader(*m_highlightShader,"shaders/highlight.vert","shaders/highlight.frag",Shaders::kHighlightVertSrc,Shaders::kHighlightFragSrc)) {
+    if (!compileShader(*m_tileShader, assetPath("shaders/tile.vert").c_str(), assetPath("shaders/tile.frag").c_str(), Shaders::kTileVertSrc, Shaders::kTileFragSrc)
+     || !compileShader(*m_planetShader, assetPath("shaders/planet.vert").c_str(), assetPath("shaders/planet.frag").c_str(), Shaders::kPlanetVertSrc, Shaders::kPlanetFragSrc)
+     || !compileShader(*m_trailShader, assetPath("shaders/trail.vert").c_str(), assetPath("shaders/trail.frag").c_str(), Shaders::kTrailVertSrc, Shaders::kTrailFragSrc)
+     || !compileShader(*m_highlightShader, assetPath("shaders/highlight.vert").c_str(), assetPath("shaders/highlight.frag").c_str(), Shaders::kHighlightVertSrc, Shaders::kHighlightFragSrc)) {
         LOG_E("Shader compilation failed"); glfwDestroyWindow(m_window); return false;
     }
 
     // Track
     m_tileMesh = new TileMesh();
+
+    // Render-layer planets. The core timeline/clock only produce pure frame
+    // data; GameWindow owns the actual GL drawable Planet objects.
+    m_redPlanet = std::make_unique<Planet>(glm::vec3(1.0f, 0.0f, 0.0f), cfg.showTrail);
+    m_bluePlanet = std::make_unique<Planet>(glm::vec3(0.0f, 0.0f, 1.0f), cfg.showTrail);
 
     if (m_useAsyncBuild) {
         // Async: build on shared GL context in background thread
@@ -185,9 +258,9 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
             m_buildFuture = std::async(std::launch::async, [this, &cfg]() {
                 glfwMakeContextCurrent(m_sharedWindow);
                 m_tileMesh->build(*m_level, cfg.trackFillColor, cfg.trackStrokeColor, cfg.legacyCulling);
-                if (m_playback->redPlanet()) {
-                    m_playback->redPlanet()->buildGPU();
-                    m_playback->bluePlanet()->buildGPU();
+                if (m_redPlanet) {
+                    m_redPlanet->buildGPU();
+                    m_bluePlanet->buildGPU();
                 }
                 glfwMakeContextCurrent(nullptr);
             });
@@ -204,7 +277,7 @@ bool GameWindow::init(const LauncherConfig& cfg, LoadResult& result) {
         m_level->tileBPMs.clear(); m_level->tileBPMs.shrink_to_fit();
         m_level->tileHasTwirl.clear(); m_level->tileHasTwirl.shrink_to_fit();
         m_level->tileHasSetSpeed.clear(); m_level->tileHasSetSpeed.shrink_to_fit();
-        if (m_playback->redPlanet()) { m_playback->redPlanet()->buildGPU(); m_playback->bluePlanet()->buildGPU(); }
+        if (m_redPlanet) { m_redPlanet->buildGPU(); m_bluePlanet->buildGPU(); }
         m_meshReady = true;
     }
     // Camera + background
@@ -280,7 +353,7 @@ void GameWindow::handleInput() {
         if (!m_playback->isPlaying()) {
             float offsetSec = m_level->settings.offset / 1000.0f;
             if (m_input.selectedTile >= 0) {
-                double targetTime = m_playback->tileStartTimes()[m_input.selectedTile];
+                double targetTime = m_timeline->tileStartTimes()[m_input.selectedTile];
                 float audioPos = (float)(targetTime + offsetSec);
                 if (audioPos < 0) audioPos = 0;
                 m_playback->startAt(glfwGetTime(), audioPos, offsetSec);
@@ -394,6 +467,10 @@ void GameWindow::update(float) {
         }
     }
 
+    if (m_playback->isPlaying()) {
+        applyPlaybackFrame();
+    }
+
     // Camera follow during playback
     if (m_playback->isPlaying()) {
         int tileIdx = m_playback->currentTileIndex();
@@ -425,6 +502,34 @@ void GameWindow::update(float) {
     }
 }
 
+void GameWindow::applyPlaybackFrame() {
+    if (!m_redPlanet || !m_bluePlanet || !m_playback) return;
+
+    const auto& frame = m_playback->frame();
+    m_redPlanet->position = glm::vec3((float)frame.redPosition.x, (float)frame.redPosition.y, 9.5f);
+    m_bluePlanet->position = glm::vec3((float)frame.bluePosition.x, (float)frame.bluePosition.y, 9.5f);
+
+    if (!m_cfg->showTrail || !m_redPlanet->trail || !m_bluePlanet->trail) return;
+
+    std::vector<glm::dvec2> redPts, bluePts;
+    PositionSolver::sampleTrail(*m_timeline, frame.timeInLevel,
+                                m_cfg->trailDuration, m_cfg->trailSampleRate,
+                                frame.redPosition, frame.bluePosition,
+                                redPts, bluePts);
+    if (redPts.empty() || bluePts.empty()) return;
+
+    const int maxPoints = (int)std::ceil(m_cfg->trailDuration * m_cfg->trailSampleRate) + 1;
+    std::vector<double> redXY(redPts.size() * 2), blueXY(bluePts.size() * 2);
+    for (size_t i = 0; i < redPts.size(); i++) {
+        redXY[i*2] = redPts[i].x;
+        redXY[i*2+1] = redPts[i].y;
+        blueXY[i*2] = bluePts[i].x;
+        blueXY[i*2+1] = bluePts[i].y;
+    }
+    m_redPlanet->setTrailPoints(redXY.data(), (int)redPts.size(), maxPoints);
+    m_bluePlanet->setTrailPoints(blueXY.data(), (int)bluePts.size(), maxPoints);
+}
+
 void GameWindow::render() {
     int fbW, fbH, winW, winH;
     glfwGetFramebufferSize(m_window, &fbW, &fbH);
@@ -445,8 +550,8 @@ void GameWindow::render() {
 
     // Track disappear animation: per-tile check in delta range
     if (m_tileVisEnabled) {
-        const auto& dt = m_playback->tileDisappearTimes();
-        const auto& at = m_playback->tileAppearTimes();
+        const auto& dt = m_timeline->tileDisappearTimes();
+        const auto& at = m_timeline->tileAppearTimes();
         int n = (int)dt.size();
         if (n > 0 && m_playback->isPlaying()) {
             double t = m_playback->timeInLevel();
@@ -485,15 +590,15 @@ void GameWindow::render() {
     m_tileMesh->draw(vl, vr, vb, vt, m_camera.targetX(), m_camera.targetY());
 
     // Trails
-    if (m_cfg->showTrail && m_playback->isPlaying() && m_playback->redPlanet() && m_playback->redPlanet()->trail) {
-        m_playback->redPlanet()->trail->draw(*m_trailShader, m_camera, m_camera.targetX(), m_camera.targetY());
-        m_playback->bluePlanet()->trail->draw(*m_trailShader, m_camera, m_camera.targetX(), m_camera.targetY());
+    if (m_cfg->showTrail && m_playback->isPlaying() && m_redPlanet && m_redPlanet->trail) {
+        m_redPlanet->trail->draw(*m_trailShader, m_camera, m_camera.targetX(), m_camera.targetY());
+        m_bluePlanet->trail->draw(*m_trailShader, m_camera, m_camera.targetX(), m_camera.targetY());
     }
 
     // Planets
-    if (m_playback->isPlaying() && m_playback->redPlanet() && m_playback->redPlanet()->gpuBuilt()) {
-        m_playback->redPlanet()->draw(*m_planetShader, m_camera, m_camera.targetX(), m_camera.targetY());
-        m_playback->bluePlanet()->draw(*m_planetShader, m_camera, m_camera.targetX(), m_camera.targetY());
+    if (m_playback->isPlaying() && m_redPlanet && m_redPlanet->gpuBuilt()) {
+        m_redPlanet->draw(*m_planetShader, m_camera, m_camera.targetX(), m_camera.targetY());
+        m_bluePlanet->draw(*m_planetShader, m_camera, m_camera.targetX(), m_camera.targetY());
     }
 
     // Icons

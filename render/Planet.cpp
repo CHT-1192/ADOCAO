@@ -1,7 +1,7 @@
 #include "Planet.hpp"
 #include "render/PlanetTrail.hpp"
 #include "render/Shader.hpp"
-#include "camera/Camera.hpp"
+#include "render/Camera.hpp"
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>

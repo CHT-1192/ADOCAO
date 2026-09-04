@@ -2,12 +2,14 @@
 
 #include "LauncherWindow.hpp"
 #include "LevelLoader.hpp"
-#include "camera/Camera.hpp"
+#include "render/Camera.hpp"
 #include <future>
+#include <memory>
 
 struct GLFWwindow;
 class TileMesh;
 class Shader;
+class Planet;
 
 void showGameWindow(const LauncherConfig& cfg, LoadResult& loadResult);
 
@@ -25,7 +27,8 @@ private:
     bool m_useAsyncBuild = false;
     const LauncherConfig* m_cfg = nullptr;
     LevelData* m_level = nullptr;
-    PlaybackEngine* m_playback = nullptr;
+    Timeline* m_timeline = nullptr;
+    PlaybackClock* m_playback = nullptr;
     HitsoundManager* m_hitsoundMgr = nullptr;
     AudioEngine* m_audioEngine = nullptr;
 
@@ -40,6 +43,8 @@ private:
 
     TileMesh* m_tileMesh = nullptr;
     Camera m_camera;
+    std::unique_ptr<Planet> m_redPlanet;
+    std::unique_ptr<Planet> m_bluePlanet;
     bool m_tileVisEnabled = false;
     int m_lastHiddenEnd = -1;
     bool m_sgVisibleLatch = false;
@@ -65,5 +70,6 @@ private:
     void handleInput();
     void update(float deltaMs);
     void render();
+    void applyPlaybackFrame();
     void toggleFullscreen();
 };

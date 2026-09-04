@@ -1,6 +1,6 @@
 #include "Shader.hpp"
-#include "util/Logger.hpp"
-#include "util/DataFile.hpp"
+#include "core/util/Logger.hpp"
+#include "core/util/DataFile.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <vector>

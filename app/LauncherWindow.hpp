@@ -5,7 +5,7 @@
 #include <functional>
 
 class LevelData;
-class PlaybackEngine;
+class Timeline;
 
 // User selections from the launcher
 struct LauncherConfig {
@@ -34,7 +34,7 @@ struct LauncherConfig {
     // Wizard (5.0.0): result of the "Next" preload step (parse + timeline).
     // Hitsound synthesis + audio are finished after Start in runLevelLoading.
     std::shared_ptr<LevelData> preloadedLevel;
-    std::shared_ptr<PlaybackEngine> preloadedPlayback;
+    std::shared_ptr<Timeline> preloadedTimeline;
 };
 
 // Opens a centered ImGui launcher window. Returns config after user clicks Start or closes.

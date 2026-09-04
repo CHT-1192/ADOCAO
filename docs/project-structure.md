@@ -2,7 +2,7 @@
 
 > 状态：**定稿 v4**——§9 全部决策已拍板并回填正文。本版修订（决策 10）：Easing 与 Camera 同目录、
 > TileGeometry CPU 版废弃改 GLSL、`core/geometry` 取消。
-> 本文件不包含任何代码改动；下一步执行 P1（目录搬迁 + CMake 拆库，合一个 commit）。
+> 代码进度：P1+P2 已完成（目录搬迁 + CMake 拆库）；P3 已完成（PlaybackEngine → core/timeline）。下一步 P4（app 拆分）。
 > 目标读者：ADOCAO 维护者。
 > 
 > 背景需求（来自维护者）：
@@ -158,7 +158,7 @@ ADOCAO/
         ┌───────▼───────────▼─────┐
         │ adocao_core             │  ← 唯一的纯逻辑层，禁止 include：
         │ level / timeline /      │    glad、GLFW、imgui、miniaudio、
-        │ util                   │    任何平台头；只许 std/glm/rapidjson/miniz
+        │ util                    │    任何平台头；只许 std/glm/rapidjson/miniz
         └─────────────────────────┘
 ```
 
@@ -185,7 +185,7 @@ ADOCAO/
 | `game/PlaybackEngine.*`     | **拆** → `core/timeline/Timeline.*`、`PositionSolver.*`、`PlaybackClock.*` | 行为保持，见 §4                     |
 | `game/Planet.*`             | `render/Planet.*`                                                       | git mv（GL 对象归 render）         |
 | `camera/Camera.*`           | `render/Camera.*`                                                       | git mv                        |
-| `track/TileGeometry.*`      | `render/TileGeometry.*`（过渡）                                             | git mv；几何 GLSL 化后删除（见决策 10）  |
+| `track/TileGeometry.*`      | `render/TileGeometry.*`（过渡）                                             | git mv；几何 GLSL 化后删除（见决策 10）   |
 | `track/TileMesh.*`          | `render/TileMesh.*`                                                     | git mv（GL 网格入 render）         |
 | `render/Shader.*`           | `render/Shader.*`                                                       | 保留                            |
 | `render/Shaders.hpp`        | `render/Shaders.hpp`                                                    | 保留                            |
@@ -197,8 +197,8 @@ ADOCAO/
 | `util/Logger.*`             | `core/util/Logger.*`                                                    | git mv                        |
 | `util/ThreadPool.*`         | `core/util/ThreadPool.*`                                                | git mv                        |
 | `util/DataFile.*`           | `core/util/DataFile.*`                                                  | git mv（含 miniz 依赖，随库走）        |
-| `util/Easing.hpp`           | `render/Easing.hpp`（与 `Camera.*` 同目录）                                  | git mv（Camera 是唯一使用方）         |
-| `hitsounds/` `shaders/`     | `assets/hitsounds/`、`assets/shaders/`                                    | P5 执行并入（同步 §1.2-7 四处路径）     |
+| `util/Easing.hpp`           | `render/Easing.hpp`（与 `Camera.*` 同目录）                                   | git mv（Camera 是唯一使用方）         |
+| `hitsounds/` `shaders/`     | `assets/hitsounds/`、`assets/shaders/`                                   | P5 执行并入（同步 §1.2-7 四处路径）       |
 
 include 约定：以仓库根为 include 根（与现状一致），新路径为
 `#include "core/level/LevelData.hpp"`、`#include "render/TileMesh.hpp"`、`#include "core/timeline/Timeline.hpp"`。
@@ -281,16 +281,18 @@ adofai::PositionSolver::positionAt(tl, 12.34, rx, ry, bx, by);  // 任意时刻�
 ```
 
 - **不导出**：`render/` 全部（Planet/TileMesh/Shader/Camera 的 GL 部分）、`audio/` 的引擎与合成、`app/` 全部。
+
 - 打拍音不在 core（维护者明确"和打拍音无关"），但时间戳是纯数据，天然在 core——合成器想复用时只需链接 `adocao_audio`。
+
 - 未来新功能落点（对照 TODO.md，保证结构可扩展）：
   
-  | 功能                                           | 落点                                     |
-  | -------------------------------------------- | -------------------------------------- |
-  | PositionTrack / AnimateTrack 时间线             | `core/timeline` 扩展 + `render` 消费       |
-  | MoveTrack（**遥远的未来**，仅记录）                   | 届时 `core/timeline` 扩展 + `render` 消费；现不排期 |
-  | ColorTrack / RecolorTrack（**只做静态**，见决策 8/9） | `core/level` 只解析事件数据；事件→每-tile 颜色由 render/TrackColor 承担（默认 CPU 静态；几十万事件走 GPU/GLSL 求值） |
-  | 中旋渲染（curvaturePoints）                        | render：GLSL 程序化形状 + TileMesh 实例化（CPU TileGeometry 已废弃） |
-  | 轨道几何生成（替代 CPU TileGeometry）                  | render/GLSL：每实例带角度属性，VS 程序化生成弧/圆/五边形（无 CPU 顶点汤，见决策 10） |
+  | 功能                                          | 落点                                                                                                                                    |
+  | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+  | PositionTrack / AnimateTrack 时间线            | `core/timeline` 扩展 + `render` 消费                                                                                                      |
+  | MoveTrack（**遥远的未来**，仅记录）                    | 届时 `core/timeline` 扩展 + `render` 消费；现不排期                                                                                              |
+  | ColorTrack / RecolorTrack（**只做静态**，见决策 8/9） | `core/level` 只解析事件数据；事件→每-tile 颜色由 render/TrackColor 承担（默认 CPU 静态；几十万事件走 GPU/GLSL 求值）                                                 |
+  | 中旋渲染（curvaturePoints）                       | render：GLSL 程序化形状 + TileMesh 实例化（CPU TileGeometry 已废弃）                                                                                |
+  | 轨道几何生成（替代 CPU TileGeometry）                 | render/GLSL：每实例带角度属性，VS 程序化生成弧/圆/五边形（无 CPU 顶点汤，见决策 10）；事件图标并入 tile 实例属性/本地子几何，随 tile 变换（AnimateTrack/PositionTrack 自动带上，省独立 icon 实例集） |
 
 ---
 
@@ -336,13 +338,13 @@ target_link_libraries(adocao PRIVATE adocao_core adocao_render adocao_audio adoc
 
 ## 7. 迁移阶段（每阶段必须能编译、CI 绿、行为不变）
 
-| 阶段              | 内容                                                                                                                  | 验收                                                          |
-| --------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **P0（本次）**      | 基线确认 + 本蓝图文档入库                                                                                                      | `docs/project-structure.md` 评审通过                            |
-| **P1 目录搬迁**     | 按 §3 映射逐层 `git mv`；批量修正 include 前缀与根 CMakeLists 的 SOURCES 路径；**先不拆文件、不拆库**                                          | `build.sh`/CI 三平台绿；CLI 与向导冒烟                                |
-| **P2 CMake 拆库** | core/render/audio/glad/app 各自 STATIC 目标 + `target_link_libraries`；根 CMakeLists 瘦身                                   | 同上；故意去掉一条链接应编译失败（验证边界生效）                                    |
-| **P3 core 化**   | `PlaybackEngine` 按 §4.1 拆为 `core/timeline/*`；Planet 移 `render/`；GameWindow 改为消费纯数据帧；**消灭 core→GL 的一切引用**            | `grep -r "glad\|GLFW\|imgui" core/` 为空；播放/跳转/书签/轨迹/导出行为逐项一致 |
-| **P4 app 拆分**   | GameWindow 拆 CameraController 等（§4.2）；LauncherWindow 向导分页（§4.3）；头文件 include 卫生（前置声明，重 include 移 .cpp）               | 同上 + 向导逐页可用                                                 |
+| 阶段              | 内容                                                                                                               | 验收                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **P0（本次）**      | 基线确认 + 本蓝图文档入库                                                                                                   | `docs/project-structure.md` 评审通过                            |
+| **P1 目录搬迁**     | 按 §3 映射逐层 `git mv`；批量修正 include 前缀与根 CMakeLists 的 SOURCES 路径；**先不拆文件、不拆库**                                       | `build.sh`/CI 三平台绿；CLI 与向导冒烟                                |
+| **P2 CMake 拆库** | core/render/audio/glad/app 各自 STATIC 目标 + `target_link_libraries`；根 CMakeLists 瘦身                                | 同上；故意去掉一条链接应编译失败（验证边界生效）                                    |
+| **P3 core 化**   | `PlaybackEngine` 按 §4.1 拆为 `core/timeline/*`；Planet 移 `render/`；GameWindow 改为消费纯数据帧；**消灭 core→GL 的一切引用**         | `grep -r "glad\|GLFW\|imgui" core/` 为空；播放/跳转/书签/轨迹/导出行为逐项一致 |
+| **P4 app 拆分**   | GameWindow 拆 CameraController 等（§4.2）；LauncherWindow 向导分页（§4.3）；头文件 include 卫生（前置声明，重 include 移 .cpp）            | 同上 + 向导逐页可用                                                 |
 | **P5 资产与收尾**    | 资产并入 `assets/`（已决策；§1.2-7 四处同步改）；`g_sc` 清理项评估；TODO.md/AGENTS.md/README 与结构同步；可加一条 CI job 或脚本检查"core 无违规 include" | 文档与代码一致                                                     |
 
 提交节奏（决策 5）：**P1 + P2 合并为一个 commit**（同为机械重构，互相验证），P3、P4、P5 各自独立 commit，便于 bisect / 回滚。
@@ -362,18 +364,18 @@ target_link_libraries(adocao PRIVATE adocao_core adocao_render adocao_audio adoc
 
 ## 9. 决策记录与待定项
 
-| # | 决策 | 结论 |
-| --- | --- | --- |
-| 1 | include 风格 | ✅ 仓库根 + `core/` 前缀（推荐方案） |
-| 2 | 核心目录命名 | ✅ `core/` |
-| 3 | 资产目录 | ✅ 并入 `assets/`（`assets/shaders/`、`assets/hitsounds/`），P5 执行 |
-| 4 | glad 位置 | ✅ 保留顶层，独立 STATIC 目标 |
-| 5 | 拆分节奏（P1/P2 与 P3/P4 是否分开） | ✅ P1+P2 合并一 commit，P3、P4、P5 各一（理由见 §9.1） |
-| 6 | GameWindow / LauncherWindow 拆分粒度 | ✅ 按 §4：GameWindow 拆 `CameraController` + `LevelScene`；LauncherWindow 按向导 6 页拆文件 |
-| 7 | 文档语言 | ✅ 中文为主，无需英文版 |
-| 8 | ColorTrack 动态动画（pulse / animDuration / RecolorTrack 渐变扫动） | ✅ 不做动态：后续自定策略转为静态每-tile 颜色（策略 TBD，收在 render 内，core 无感） |
-| 9 | 颜色逻辑归属与大批量事件处理 | ✅ 解析归 core（只产出事件数据）；事件→颜色归 render；几十万 RecolorTrack 事件 + 大关卡用 GPU/GLSL 求值（compute bake 或可见实例 VS 求值），仍不做动态动画 |
-| 10 | 几何生成与 Easing 归属 | ✅ TileGeometry CPU 版废弃 → 几何改 GLSL（render，实例角度属性 VS 程序化）；`core/geometry` 取消；Easing 与 Camera 同目录（`render/Easing.hpp`，Camera 唯一使用方） |
+| #   | 决策                                                        | 结论                                                                                                                               |
+| --- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | include 风格                                                | ✅ 仓库根 + `core/` 前缀（推荐方案）                                                                                                         |
+| 2   | 核心目录命名                                                    | ✅ `core/`                                                                                                                        |
+| 3   | 资产目录                                                      | ✅ 并入 `assets/`（`assets/shaders/`、`assets/hitsounds/`），P5 执行                                                                      |
+| 4   | glad 位置                                                   | ✅ 保留顶层，独立 STATIC 目标                                                                                                              |
+| 5   | 拆分节奏（P1/P2 与 P3/P4 是否分开）                                  | ✅ P1+P2 合并一 commit，P3、P4、P5 各一（理由见 §9.1）                                                                                         |
+| 6   | GameWindow / LauncherWindow 拆分粒度                          | ✅ 按 §4：GameWindow 拆 `CameraController` + `LevelScene`；LauncherWindow 按向导 6 页拆文件                                                  |
+| 7   | 文档语言                                                      | ✅ 中文为主，无需英文版                                                                                                                     |
+| 8   | ColorTrack 动态动画（pulse / animDuration / RecolorTrack 渐变扫动） | ✅ 不做动态：后续自定策略转为静态每-tile 颜色（策略 TBD，收在 render 内，core 无感）                                                                           |
+| 9   | 颜色逻辑归属与大批量事件处理                                            | ✅ 解析归 core（只产出事件数据）；事件→颜色归 render；几十万 RecolorTrack 事件 + 大关卡用 GPU/GLSL 求值（compute bake 或可见实例 VS 求值），仍不做动态动画                       |
+| 10  | 几何生成与 Easing 归属                                           | ✅ TileGeometry CPU 版废弃 → 几何改 GLSL（render，实例角度属性 VS 程序化）；`core/geometry` 取消；Easing 与 Camera 同目录（`render/Easing.hpp`，Camera 唯一使用方） |
 
 ### 9.1 决策 5 详细说明：为什么 P1/P2 先走、P3/P4 单独提交
 
@@ -387,6 +389,7 @@ target_link_libraries(adocao PRIVATE adocao_core adocao_render adocao_audio adoc
 - **P4（GameWindow / LauncherWindow 拆分）**：只动 app/，风险低但 UI 密集、人工冒烟点多，值得单独一个 commit 单独评审。
 
 **额外理由：**
+
 - git 历史质量：搬迁 commit 里文件会被识别为 rename，之后的逻辑改动拥有干净的 blame 起点；先改逻辑再搬，历史就乱了。
 - 可并行性：P1/P2 合入后，任何新功能分支（如 TODO 的 ColorTrack / PositionTrack）都基于新结构开发。拆分拖得越久，新代码越会继续长在旧 PlaybackEngine 上，届时再拆更痛。
 - 折中选项：P1 与 P2 可**合并为一个 commit**（同属机械重构且互相验证：先立库边界再搬文件），但 P3、P4 各自独立是不变的原则。

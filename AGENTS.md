@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 导航（先读这里，省 token）
 
 - 目标结构蓝图 + 已拍板决策 1–10：`docs/project-structure.md`
-  ⚠ P1 目录搬迁尚未执行——代码仍是现状布局，蓝图 ≠ 当前代码
+  ✅ P1+P2 已执行（目录搬迁 + CMake 拆库）；P3 已执行（PlaybackEngine → core/timeline）；P4/P5 待做
 - 待办（已筛选）：`TODO.md`（未完成 9 条 + 遥远的未来：MoveTrack）
 - 已彻底删除：GPU compute culling（2.0.0 起不需要，勿再引入）
 - 脚本：`scripts/push-ci.sh`（push → gh run watch；`--watch` 默认输出平台耗时/产物）

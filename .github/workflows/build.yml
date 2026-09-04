@@ -48,7 +48,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.zoom }}${{ matrix.portable && '-portable' || '' }}
-          path: build/ADOCAO-Windows.exe
+          path: build/ADOCAO.exe
 
   linux:
     runs-on: ubuntu-latest
@@ -78,7 +78,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: build/ADOCAO-Linux
+          path: build/ADOCAO
 
   macOS:
     runs-on: macos-14
@@ -102,7 +102,39 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
+      - name: Package thin .app
+        run: |
+          mkdir -p build/ADOCAO.app/Contents/MacOS
+          cp build/ADOCAO build/ADOCAO.app/Contents/MacOS/ADOCAO
+          chmod +x build/ADOCAO.app/Contents/MacOS/ADOCAO
+          cat > build/ADOCAO.app/Contents/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>ADOCAO</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.adocao.ADOCAO</string>
+              <key>CFBundleName</key>
+              <string>ADOCAO</string>
+              <key>CFBundleDisplayName</key>
+              <string>ADOCAO</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>6.0.0</string>
+              <key>CFBundleVersion</key>
+              <string>6.0.0</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>12.0</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
       - uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: build/ADOCAO-macOS
+          path: build/ADOCAO.app

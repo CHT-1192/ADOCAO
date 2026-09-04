@@ -20,7 +20,7 @@ static void report(LoadingProgress& p, float pct, const char* text) {
 
 void runLevelPreload(const LauncherConfig& cfg, LoadingProgress& progress,
                      std::shared_ptr<LevelData>& outLevel,
-                     std::shared_ptr<PlaybackEngine>& outPlayback) {
+                     std::shared_ptr<Timeline>& outTimeline) {
     // Phase 1: parse level
     outLevel = std::make_shared<LevelData>();
     auto onParseProgress = [&](float pct, const char* stage) {
@@ -34,8 +34,8 @@ void runLevelPreload(const LauncherConfig& cfg, LoadingProgress& progress,
 
     // Phase 2: precalculate timing (tile positions / timeline)
     report(progress, 0.70f, "Precalculating timeline...");
-    outPlayback = std::make_shared<PlaybackEngine>();
-    outPlayback->init(*outLevel, true);  // trail final value applied after Start
+    outTimeline = std::make_shared<Timeline>();
+    outTimeline->build(*outLevel, false);
     report(progress, 1.0f, "Preload complete");
 }
 
@@ -53,7 +53,7 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
         result.audio.init();
     }
 
-    if (!cfg.preloadedLevel || !cfg.preloadedPlayback) {
+    if (!cfg.preloadedLevel || !cfg.preloadedTimeline) {
         // Full path (CLI mode): parse level + precalculate timing
         report(progress, 0.05f, "Parsing level...");
         result.level = std::make_shared<LevelData>();
@@ -66,20 +66,21 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
             return;
         }
         report(progress, 0.45f, "Precalculating timeline...");
-        result.playback = std::make_shared<PlaybackEngine>();
-        result.playback->init(*result.level, cfg.showTrail);
+        result.timeline = std::make_shared<Timeline>();
+        result.timeline->build(*result.level, false);
     } else {
         // Wizard preload already parsed level + computed timeline
-        result.level  = cfg.preloadedLevel;
-        result.playback = cfg.preloadedPlayback;
+        result.level    = cfg.preloadedLevel;
+        result.timeline = cfg.preloadedTimeline;
         report(progress, 0.50f, "Applying final settings...");
     }
 
+    // PlaybackClock is created after final Timeline settings are known.
+    result.playback = std::make_shared<PlaybackClock>();
+    result.playback->attachTimeline(result.timeline.get());
+
     // Final settings (may have been changed in the wizard after the preload)
-    result.playback->setForceHitsoundType(cfg.forceHitsoundType);
-    result.playback->setLagacyCulling(cfg.legacyCulling);
-    result.playback->setTrailDuration(cfg.trailDuration);
-    result.playback->setTrailSampleRate(cfg.trailSampleRate);
+    result.timeline->setForceHitsoundType(cfg.forceHitsoundType);
 
     // Wait for background audio init to finish (if started)
     if (audioFuture.valid()) {
@@ -90,8 +91,8 @@ void runLevelLoading(const LauncherConfig& cfg, LoadingProgress& progress, LoadR
     report(progress, 0.80f, "Synthesizing hitsounds...");
     if (cfg.enableHitsounds) {
         result.hitsounds.init();
-        result.hitsounds.preSynthesize(result.playback->getHitsoundTimestampGroups(),
-                                       result.playback->totalDuration());
+        result.hitsounds.preSynthesize(result.timeline->getHitsoundTimestampGroups(),
+                                       result.timeline->totalDuration());
     }
 
     // Release data no longer needed (angleData, actions, position offsets)

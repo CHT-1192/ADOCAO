@@ -1,13 +1,14 @@
 #include "HitsoundManager.hpp"
 #include "AudioEngine.hpp"
-#include "util/Logger.hpp"
-#include "util/DataFile.hpp"
+#include "core/util/Logger.hpp"
+#include "core/util/DataFile.hpp"
 
 #include <cmath>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <fstream>
 #include <unordered_map>
 
 static std::unordered_map<std::string, std::vector<float>> s_wavCache;
@@ -15,6 +16,17 @@ static std::unordered_map<std::string, std::vector<int16_t>> s_wavRawCache;
 
 #ifdef _WIN32
 #include <windows.h>
+#endif
+
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <vector>
+#endif
+
+#ifdef __linux__
+#include <unistd.h>
+#include <limits.h>
+#include <vector>
 #endif
 
 static bool iequals(const std::string& a, const std::string& b) {
@@ -58,7 +70,7 @@ static const char* hitsoundKey(const std::string& type) {
     return nullptr;
 }
 
-static std::string findAssetsDir() {
+static std::string executableDirectory() {
 #ifdef _WIN32
     char exePath[MAX_PATH];
     DWORD len = GetModuleFileNameA(nullptr, exePath, MAX_PATH);
@@ -66,10 +78,68 @@ static std::string findAssetsDir() {
         std::string dir(exePath, len);
         auto pos = dir.find_last_of("\\/");
         if (pos != std::string::npos) dir = dir.substr(0, pos);
-        return dir + "/hitsounds/";
+        return dir;
+    }
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::vector<char> buf(size > 0 ? size : 1);
+    if (_NSGetExecutablePath(buf.data(), &size) != 0) return {};
+    std::string dir(buf.data());
+    auto pos = dir.find_last_of('/');
+    if (pos != std::string::npos) dir = dir.substr(0, pos);
+    return dir;
+#elif defined(__linux__)
+    char buf[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len <= 0) return {};
+    buf[len] = '\0';
+    std::string dir(buf);
+    auto pos = dir.find_last_of('/');
+    if (pos != std::string::npos) dir = dir.substr(0, pos);
+    return dir;
+#endif
+    return {};
+}
+
+static bool fileExists(const std::string& path) {
+    std::ifstream f(path);
+    return f.good();
+}
+
+static std::string findAssetsDir() {
+    const std::string exeDir = executableDirectory();
+
+    // Prefer CWD-relative hitsounds for command-line usage from the repo/build
+    // root, then fall back to the executable directory (Finder / desktop launches).
+    std::vector<std::string> candidates;
+#ifdef _WIN32
+    if (!exeDir.empty()) candidates.push_back(exeDir + "/hitsounds/");
+#else
+    candidates.push_back("hitsounds/");
+    if (!exeDir.empty()) {
+        candidates.push_back(exeDir + "/hitsounds/");
+
+        // If the binary is in a nested build subdirectory (e.g. build/app or
+        // build/ADOCAO.app/Contents/MacOS), also look above it for assets
+        // copied next to the executable / .app bundle.
+        auto dir = exeDir;
+        for (int i = 0; i < 3 && !dir.empty(); i++) {
+            const auto slash = dir.find_last_of("/\\");
+            if (slash == std::string::npos) { dir.clear(); break; }
+            dir = dir.substr(0, slash);
+        }
+        if (!dir.empty())
+            candidates.push_back(dir + "/hitsounds/");
     }
 #endif
-    return "hitsounds/";
+
+    for (const auto& dir : candidates) {
+        if (fileExists(dir + "Kick.wav"))
+            return dir;
+    }
+
+    return candidates.empty() ? "hitsounds/" : candidates.front();
 }
 
 HitsoundManager::HitsoundManager() = default;

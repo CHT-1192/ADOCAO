@@ -2,7 +2,7 @@
 #include "LevelLoader.hpp"
 #include "LoadingWindow.hpp"
 #include "glad/gl_core.hpp"
-#include "util/Logger.hpp"
+#include "core/util/Logger.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -387,7 +387,7 @@ LauncherConfig showLauncher() {
         if (preloadRunning && preloadFinished.load()) {
             if (preloadThread.joinable()) preloadThread.join();
             preloadRunning = false;
-            if (cfg.preloadedLevel && cfg.preloadedPlayback) {
+            if (cfg.preloadedLevel && cfg.preloadedTimeline) {
                 page = Page::Hitsounds;
                 // Auto-fill music from the parsed level (settings.musicFile)
                 if (musicBuf[0] == '\0') {
@@ -487,10 +487,10 @@ LauncherConfig showLauncher() {
                         preloadFinished.store(false);
                         preloadRunning = true;
                         cfg.preloadedLevel.reset();
-                        cfg.preloadedPlayback.reset();
+                        cfg.preloadedTimeline.reset();
                         preloadThread = std::thread([&]() {
                             runLevelPreload(cfg, preloadProgress,
-                                            cfg.preloadedLevel, cfg.preloadedPlayback);
+                                            cfg.preloadedLevel, cfg.preloadedTimeline);
                             preloadFinished.store(true);
                         });
                         page = Page::Preload;

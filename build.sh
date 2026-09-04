@@ -144,7 +144,7 @@ done; then
 fi
 
 # ── Done ─────────────────────────────────────────────────────────
-OUT="$(ls ADOCAO-* 2>/dev/null | head -1)"
+OUT="$(ls ADOCAO ADOCAO.exe 2>/dev/null | head -1)"
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════╗"
 echo -e "${GREEN}║            Build successful!             ║"

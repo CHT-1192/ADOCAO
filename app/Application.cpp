@@ -3,7 +3,8 @@
 #include "LoadingWindow.hpp"
 #include "LevelLoader.hpp"
 #include "GameWindow.hpp"
-#include "util/Logger.hpp"
+#include "core/timeline/Timeline.hpp"
+#include "core/util/Logger.hpp"
 #include <GLFW/glfw3.h>
 
 #ifdef _WIN32
@@ -120,11 +121,11 @@ int runApplication(bool debugConsole) {
             glfwTerminate();
             return 1;
         }
-        PlaybackEngine pb;
-        pb.init(lvl, true, true);
+        Timeline timeline;
+        timeline.build(lvl, true);
         HitsoundManager hm;
         hm.init();
-        if (!hm.preSynthesize(pb.getHitsoundTimestampGroups(), pb.totalDuration())) {
+        if (!hm.preSynthesize(timeline.getHitsoundTimestampGroups(), timeline.totalDuration())) {
             LOG_E("Export: pre-synthesis failed");
             glfwTerminate();
             return 1;
@@ -208,12 +209,12 @@ int runApplicationFromCLI(const LauncherConfig& cfg, bool debugConsole) {
             glfwTerminate();
             return 1;
         }
-        PlaybackEngine pb;
-        pb.init(lvl, true, true);
+        Timeline timeline;
+        timeline.build(lvl, true);
         HitsoundManager hm;
         hm.init();
-        auto groups = pb.getHitsoundTimestampGroups();
-        if (!hm.preSynthesize(groups, pb.totalDuration())) {
+        auto groups = timeline.getHitsoundTimestampGroups();
+        if (!hm.preSynthesize(groups, timeline.totalDuration())) {
             LOG_E("Export: pre-synthesis failed");
             glfwTerminate();
             return 1;

@@ -1,6 +1,6 @@
 #include "Application.hpp"
 #include "LauncherWindow.hpp"
-#include "util/Logger.hpp"
+#include "core/util/Logger.hpp"
 #include <cstring>
 
 int main(int argc, char* argv[]) {

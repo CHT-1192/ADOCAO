@@ -4,13 +4,9 @@
 #include <vector>
 #include <functional>
 
-using HitsoundProgressCb = std::function<void(float percent)>;
+#include "core/timeline/HitsoundTimestampGroup.hpp"
 
-struct HitsoundTimestampGroup {
-    std::string type;               // "Kick", "Snare", etc.
-    float volume = 100.0f;          // 0-100
-    std::vector<double> timestamps; // seconds
-};
+using HitsoundProgressCb = std::function<void(float percent)>;
 
 class HitsoundManager {
 public:

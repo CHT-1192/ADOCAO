@@ -40,18 +40,12 @@ jobs:
         shell: msys2 {0}
         run: cmake --build build --parallel
 
-      - name: Package data
-        shell: pwsh
-        run: |
-          Compress-Archive -Path hitsounds,shaders -DestinationPath build/ADOCAO-data.zip
-
       - name: Upload assets
         uses: softprops/action-gh-release@v2
         with:
           prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
           files: |
-            build/ADOCAO-Windows.exe
-            build/ADOCAO-data.zip
+            build/ADOCAO.exe
 
   linux:
     runs-on: ubuntu-latest
@@ -87,7 +81,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/ADOCAO-Linux
+            build/ADOCAO
             build/ADOCAO-data.zip
 
   macOS:
@@ -113,13 +107,40 @@ jobs:
       - name: Build
         run: cmake --build build --parallel $(sysctl -n hw.ncpu)
 
-      - name: Package data
+      - name: Package thin .app
         run: |
-          cd build && zip -r ADOCAO-data.zip ../hitsounds ../shaders
+          mkdir -p build/ADOCAO.app/Contents/MacOS
+          cp build/ADOCAO build/ADOCAO.app/Contents/MacOS/ADOCAO
+          chmod +x build/ADOCAO.app/Contents/MacOS/ADOCAO
+          cat > build/ADOCAO.app/Contents/Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>ADOCAO</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.adocao.ADOCAO</string>
+              <key>CFBundleName</key>
+              <string>ADOCAO</string>
+              <key>CFBundleDisplayName</key>
+              <string>ADOCAO</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>6.0.0</string>
+              <key>CFBundleVersion</key>
+              <string>6.0.0</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>12.0</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
 
       - name: Upload assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/ADOCAO-macOS
-            build/ADOCAO-data.zip
+            build/ADOCAO.app

@@ -2,8 +2,8 @@
 #include "TileGeometry.hpp"
 #include "glad/gl_core.hpp"
 #include "render/CullSIMD.hpp"
-#include "util/Logger.hpp"
-#include "util/ThreadPool.hpp"
+#include "core/util/Logger.hpp"
+#include "core/util/ThreadPool.hpp"
 #include <algorithm>
 #include <cmath>
 #include <tuple>
