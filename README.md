@@ -4,7 +4,7 @@ A native high-performance viewer for [A Dance of Fire and Ice](https://store.ste
 
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue)
 ![OpenGL](https://img.shields.io/badge/OpenGL-4.3-red)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 
 A [Vulkan 1.2 port](https://github.com/CHT-1192/ADOCAV) is also available.
 
@@ -20,11 +20,10 @@ A [Vulkan 1.2 port](https://github.com/CHT-1192/ADOCAV) is also available.
 - Z-depth rendering (far-to-near tile ordering, supports 7M-tile levels)
 - Bookmark navigation (Ctrl+Left/Right) + track selection (click to play from tile)
 - DPI-aware launcher with auto-stroke color, background color, and resolution selection
-- OpenGL 4.3 compute shaders ready (GPU frustum culling)
 - `SetSpeed`, `Twirl`, `Pause`, `Midspin` event support
 - `--auto-play` for automatic playback
 - `--force-hitsound` to override level hitsound type
-- `--legacy-culling` to disable GPU culling experiments
+- `--legacy-culling` for legacy per-instance culling (vs SoA SIMD culling)
 
 ## Quick Start
 
@@ -94,10 +93,11 @@ All dependencies are fetched automatically via CMake `FetchContent`:
 |---------|---------|---------|
 | GLFW | 3.4 | Window + input |
 | glm | 1.0.1 | Math |
-| nlohmann/json | 3.11.3 | .adofai parsing |
+| RapidJSON | master | .adofai parsing |
 | Dear ImGui | 1.91.9 | Launcher UI |
 | miniaudio | 0.11.22 | Audio playback |
 | stb_vorbis | latest | OGG decoding |
+| miniz | 3.0.2 | Zip archive reading (DataFile) |
 | tinyfiledialogs | 2.9.3 | File open dialogs |
 
 ## CLI Usage
@@ -106,7 +106,9 @@ All dependencies are fetched automatically via CMake `FetchContent`:
 adocao.exe --level <file> --music <file> [--width N] [--height N]
            [--fullscreen] [--fill HEX] [--stroke HEX] [--bg HEX]
            [--no-auto-stroke] [--no-hitsound] [--no-trail] [--debug]
-           [--force-hitsound] [--auto-play] [--export] [--legacy-culling]
+           [--force-hitsound [TYPE]] [--auto-play] [--export] [--legacy-culling]
+           [--msaa N] [--exclusive | --no-exclusive]
+           [--trail-duration SEC] [--trail-sample-rate N]
 ```
 
 Without `--level`, falls through to the ImGui launcher.
@@ -121,7 +123,7 @@ game/        Planet rendering + playback engine
 glad/        OpenGL 4.3 Core loader (custom minimal loader)
 level/       .adofai parser + JSON cleaner
 render/      Shader programs + planet trail rendering
-shaders/     GLSL shader source files (.vert / .frag / .comp)
+shaders/     GLSL shader source files (.vert / .frag)
 track/       Tile mesh generation + instanced rendering
 util/        Logger + easing functions
 hitsounds/   27 hit sound .wav files

@@ -39,7 +39,7 @@ GLuint Shader::compileShader(GLenum type, const char* src) {
         glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
         const char* name = type == GL_VERTEX_SHADER ? "Vertex"
                          : type == GL_FRAGMENT_SHADER ? "Fragment"
-                         : "Compute";
+                         : "Other";
         LOG_E("[Shader] %s compile error:\n%s", name, log);
         glDeleteShader(shader);
         return 0;

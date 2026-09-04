@@ -1,12 +1,12 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project
 
-A native C++ / OpenGL "A Dance of Fire and Ice" (冰与火之舞) level viewer. Plays `.adofai` custom levels on Windows and Linux (Wayland).
+A native C++ / OpenGL "A Dance of Fire and Ice" (冰与火之舞) level viewer. Plays `.adofai` custom levels on Windows, Linux (Wayland) and macOS.
 
-A Vulkan port exists at `../ADOCAV/` (same game logic, Vulkan 1.2 backend with GPU compute culling).
+A Vulkan port exists at `../ADOCAV/` (same game logic, Vulkan 1.2 backend).
 
 Reference implementations:
 - `../ADOFAI-JS/` — Core angle parsing
@@ -20,7 +20,7 @@ A WinUI 3 C# launcher is in a separate repo at `../ADOCAO_WinUI3_Launcher/`.
 
 ## Branches
 
-- `master` — Current development branch (OpenGL 4.3, compute shaders ready)
+- `master` — Current development branch (OpenGL 4.3)
 
 ## Floating-Point Precision Rules
 
@@ -35,7 +35,7 @@ A WinUI 3 C# launcher is in a separate repo at `../ADOCAO_WinUI3_Launcher/`.
 **Linux:** `chmod +x build.sh && ./build.sh`
 **Manual:** `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . --parallel`
 
-Minimum CMake 3.20. C++20. OpenGL 4.3+ required. Dependencies via FetchContent (GLFW, glm, nlohmann/json, Dear ImGui, miniaudio, stb, tinyfiledialogs).
+Minimum CMake 3.20. C++20. OpenGL 4.3+ required. Dependencies via FetchContent (GLFW, glm, RapidJSON, Dear ImGui, miniaudio, stb, miniz, tinyfiledialogs).
 
 `--debug` flag enables debug console, disables hitsounds by default.
 
@@ -45,7 +45,9 @@ Minimum CMake 3.20. C++20. OpenGL 4.3+ required. Dependencies via FetchContent (
 adocao.exe --level <file> --music <file> [--width N] [--height N]
            [--fullscreen] [--fill HEX] [--stroke HEX] [--bg HEX]
            [--no-auto-stroke] [--no-hitsound] [--no-trail] [--debug]
-           [--force-hitsound] [--auto-play] [--export] [--cpu-culling]
+           [--force-hitsound [TYPE]] [--auto-play] [--export] [--legacy-culling]
+           [--msaa N] [--exclusive | --no-exclusive]
+           [--trail-duration SEC] [--trail-sample-rate N]
 ```
 
 Without `--level`, falls through to the ImGui launcher.
@@ -80,9 +82,6 @@ Direction-based angle algorithm matching ADOFAI-JS `_parseAngle`. BPM propagatio
 OpenGL world space: X right, Y up. View matrix always at origin — camera-relative offsets computed in double, converted to float for GPU.
 
 ## Rendering
-
-### OpenGL 4.3 Core Profile
-Compute shader ready: GPU frustum culling (`shaders/tile_cull.comp`) and offset computation (`shaders/tile_offset.comp`) available. SSBO + indirect draw functions loaded. Not yet wired into the draw loop.
 
 ### Shader files
 GLSL source in `shaders/` directory — loaded from files at runtime via `Shader::compileFile()`. Embedded fallback strings remain in `render/Shaders.hpp`.

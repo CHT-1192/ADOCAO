@@ -6,11 +6,6 @@
 // On macOS, the SDK provides OpenGL/gl3.h (covers core profile up to 4.1).
 #if defined(__APPLE__)
 #include <OpenGL/gl3.h>
-// Apple's gl3.h caps at OpenGL 4.1 — provide the 4.3 compute typedefs that the
-// optional (unused) loader entries reference.
-typedef void (APIENTRY *PFNGLDISPATCHCOMPUTEPROC)(GLuint, GLuint, GLuint);
-typedef void (APIENTRY *PFNGLDISPATCHCOMPUTEINDIRECTPROC)(GLenum);
-typedef void (APIENTRY *PFNGLMEMORYBARRIERPROC)(GLbitfield);
 #else
 #include <GL/glcorearb.h>
 #endif
@@ -84,14 +79,6 @@ extern PFNGLLINEWIDTHPROC    glad_LineWidth;
 extern PFNGLDEPTHFUNCPROC    glad_DepthFunc;
 
 // Misc
-// Compute shader (OpenGL 4.3+)
-extern PFNGLDISPATCHCOMPUTEPROC         glad_DispatchCompute;
-extern PFNGLDISPATCHCOMPUTEINDIRECTPROC glad_DispatchComputeIndirect;
-extern PFNGLBINDBUFFERBASEPROC          glad_BindBufferBase;
-extern PFNGLMEMORYBARRIERPROC           glad_MemoryBarrier;
-// Indirect draw (OpenGL 4.0+)
-extern PFNGLDRAWELEMENTSINDIRECTPROC glad_DrawElementsIndirect;
-
 extern PFNGLGETSTRINGPROC glad_GetString;
 extern PFNGLGETERRORPROC  glad_GetError;
 
