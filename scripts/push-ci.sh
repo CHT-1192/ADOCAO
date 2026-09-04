@@ -59,10 +59,18 @@ fi
 BRANCH="$(git branch --show-current 2>/dev/null || echo master)"
 OWNER_REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
 
-# ── 取当前分支最新 run（刚 push 时注册可能滞后，最多等 ~50s）──
+# ── 取本次 push 对应的 run ────────────────────────────────────
+# push 后新 run 注册可能滞后（旧 run 仍在"最新"位置）：push 模式按 headSha 匹配刚推的 commit；
+# watch 模式（无 push）取当前分支最新 run。最多等 ~90s。
+HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
 rid=""
-for _ in $(seq 1 10); do
-    rid="$(gh run list --branch "$BRANCH" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)"
+for _ in $(seq 1 18); do
+    if [ "$WATCH" = true ] || [ -z "$HEAD_SHA" ]; then
+        rid="$(gh run list --branch "$BRANCH" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)"
+    else
+        rid="$(gh run list --branch "$BRANCH" --limit 10 --json databaseId,headSha \
+            -q ".[] | select(.headSha == \"$HEAD_SHA\") | .databaseId" 2>/dev/null | head -1 || true)"
+    fi
     [ -n "$rid" ] && break
     sleep 5
 done
