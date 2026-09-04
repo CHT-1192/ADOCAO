@@ -36,4 +36,4 @@ fi
 git tag "v$V"
 git push origin "v$V"
 
-echo "✅ v$V 已推送（CMakeLists 版本: $CORE），Release workflow 自动构建三平台。跟踪: scripts/push-ci.sh --watch"
+echo "✅ v$V 已推送（CMakeLists 版本: ${CORE}），Release workflow 自动构建三平台。跟踪: scripts/push-ci.sh --watch"
