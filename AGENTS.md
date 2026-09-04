@@ -32,7 +32,7 @@ A WinUI 3 C# launcher is in a separate repo at `../ADOCAO_WinUI3_Launcher/`.
 ## Build & Run
 
 **Windows:** `build.bat` (`build.bat portable` for static, `build.bat exzoom` for min zoom 0.5)
-**Linux:** `chmod +x build.sh && ./build.sh`
+**Linux / macOS:** `chmod +x build.sh && ./build.sh` — 首次运行提问；已有 `build/` 缓存后不带参数运行即增量构建（不提问、不重新 configure；改选项需带参数如 `-U -Portable`）
 **Manual:** `mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build . --parallel`
 
 Minimum CMake 3.20. C++20. OpenGL 4.3+ required. Dependencies via FetchContent (GLFW, glm, RapidJSON, Dear ImGui, miniaudio, stb, miniz, tinyfiledialogs).

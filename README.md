@@ -36,13 +36,14 @@ build.bat -P -H               # short form: portable + Hyper
 ```
 All arguments skip interactive mode. Run without arguments for prompts.
 
-### Linux
+### Linux / macOS
 ```bash
 chmod +x build.sh
 ./build.sh                    # default: Ultra zoom (min 1x)
 ./build.sh -Hyper             # Hyper zoom (min 0.5x)
 ./build.sh -Extreme -Portable # Extreme zoom + portable
 ```
+Re-running `./build.sh` without arguments when `build/` already has a cache: rebuilds **incrementally** — no prompts, no re-configure. Pass options (e.g. `-U -Portable`) to reconfigure.
 
 ### Zoom Levels
 
